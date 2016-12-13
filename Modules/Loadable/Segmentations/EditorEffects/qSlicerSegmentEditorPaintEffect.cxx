@@ -24,6 +24,8 @@
 #include "vtkMRMLSegmentationNode.h"
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkOrientedImageData.h"
+#include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
+#include <vtkFractionalOperations.h>
 
 // Qt includes
 #include <QDebug>
@@ -69,6 +71,12 @@
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
 #include <vtkWorldPointPicker.h>
+#include <vtkFieldData.h>
+#include <vtkIntArray.h>
+#include <vtkDoubleArray.h>
+#include <vtkImageThreshold.h>
+#include <vtkStringArray.h>
+
 // CTK includes
 #include "ctkDoubleSlider.h"
 
@@ -350,6 +358,20 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
   QList<int> updateExtentList;
 
+  bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+  double scalarRange[2] = {0.0, 1.0};
+  double thresholdValue = 0.5;
+  vtkIdType interpolationType = VTK_NEAREST_INTERPOLATION;
+  vtkIdType scalarType = VTK_UNSIGNED_CHAR;
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkFractionalOperations::GetScalarRange(segmentationNode->GetSegmentation(), scalarRange);
+    thresholdValue = vtkFractionalOperations::GetThreshold(segmentationNode->GetSegmentation());
+    interpolationType = vtkFractionalOperations::GetInterpolationType(segmentationNode->GetSegmentation());
+    scalarType = vtkFractionalOperations::GetScalarType(segmentationNode->GetSegmentation());
+    }
+
   if (q->integerParameter("BrushPixelMode"))
     {
     this->paintPixels(viewWidget, this->PaintCoordinates_World);
@@ -358,10 +380,36 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
     {
     this->updateBrushStencil(viewWidget);
 
-    this->BrushPolyDataToStencil->Update();
-    vtkImageStencilData* stencilData = this->BrushPolyDataToStencil->GetOutput();
-    int stencilExtent[6]={0,-1,0,-1,0,-1};
-    stencilData->GetExtent(stencilExtent);
+    int originalBrushExtent[6] = {-1, 0, -1, 0, -1, 0}; // TODO name is the same as variable farther down
+    this->BrushPolyDataToStencil->GetOutputWholeExtent(originalBrushExtent);
+
+    double originalBrushSpacing[3] = {0,0,0};
+    this->BrushPolyDataToStencil->GetOutputSpacing(originalBrushSpacing);
+
+    double originalBrushOrigin[3] = {0,0,0};
+    this->BrushPolyDataToStencil->GetOutputOrigin(originalBrushOrigin);
+
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      int oversamplingFactor = 6;
+
+      vtkSmartPointer<vtkOrientedImageData> originalGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
+      originalGeometry->SetExtent(originalBrushExtent);
+      originalGeometry->SetOrigin(originalBrushOrigin);
+      originalGeometry->SetSpacing(originalBrushSpacing);
+      vtkSmartPointer<vtkOrientedImageData> oversampledGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
+
+      vtkFractionalOperations::CalculateOversampledGeometry(originalGeometry, oversampledGeometry, oversamplingFactor);
+
+      this->BrushPolyDataToStencil->SetOutputWholeExtent(oversampledGeometry->GetExtent());
+      this->BrushPolyDataToStencil->SetOutputSpacing(oversampledGeometry->GetSpacing());
+      this->BrushPolyDataToStencil->SetOutputOrigin(oversampledGeometry->GetOrigin());
+      }
+
+    if (modifierLabelmap->GetScalarType() != scalarType)
+      {
+      modifierLabelmap->AllocateScalars(scalarType, 1);
+      }
 
     vtkNew<vtkTransform> worldToModifierLabelmapIjkTransform;
 
@@ -389,17 +437,54 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
     brushPositioner->SetOutputSpacing(modifierLabelmap->GetSpacing());
     brushPositioner->SetOutputOrigin(modifierLabelmap->GetOrigin());
 
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      vtkNew<vtkImageThreshold> imageThreshold;
+      imageThreshold->SetInputData(modifierLabelmap);
+      imageThreshold->SetInValue(scalarRange[0]);
+      imageThreshold->SetOutValue(scalarRange[0]);
+      imageThreshold->ThresholdBetween(0,0);
+      imageThreshold->Update();
+      modifierLabelmap->DeepCopy(imageThreshold->GetOutput());
+
+      stencilToImage->Update();
+
+      vtkSmartPointer<vtkOrientedImageData> stencilToImageOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
+      stencilToImageOrientedImageData->ShallowCopy(stencilToImage->GetOutput());
+      vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryToFractional;
+      resampleBinaryToFractional->SetInputData(stencilToImageOrientedImageData);
+      resampleBinaryToFractional->SetOutputScalarType(scalarType);
+      resampleBinaryToFractional->SetOutputMinimumValue(scalarRange[0]);
+      brushPositioner->SetInputConnection(resampleBinaryToFractional->GetOutputPort());
+      }
+
     vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
     int updateExtent[6] = { 0, -1, 0, -1, 0, -1 };
     for (int pointIndex = 0; pointIndex < numberOfPoints; pointIndex++)
       {
       double* shiftDouble = paintCoordinates_Ijk->GetPoint(pointIndex);
       int shift[3] = {int(shiftDouble[0]+0.5), int(shiftDouble[1]+0.5), int(shiftDouble[2]+0.5)};
+
       brushPositioner->SetExtentTranslation(shift);
       brushPositioner->Update();
       vtkNew<vtkOrientedImageData> orientedBrushPositionerOutput;
       orientedBrushPositionerOutput->ShallowCopy(brushPositioner->GetOutput());
       orientedBrushPositionerOutput->CopyDirections(modifierLabelmap);
+
+      if (masterRepresentationIsFractionalLabelmap)
+        {
+
+        vtkNew<vtkMatrix4x4> imageToWorldMatrix;
+        orientedBrushPositionerOutput->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
+        double shiftDifference[4] = {shiftDouble[0]-shift[0], shiftDouble[1]-shift[1], shiftDouble[2]-shift[2], 0};
+
+        double shiftedOrigin[3] = {0,0,0};
+        orientedBrushPositionerOutput->GetOrigin(shiftedOrigin);
+        vtkMath::Add(imageToWorldMatrix->MultiplyDoublePoint(shiftDifference), shiftedOrigin, shiftedOrigin);
+        orientedBrushPositionerOutput->SetOrigin(shiftedOrigin);
+
+        }
+
       if (pointIndex == 0)
         {
         orientedBrushPositionerOutput->GetExtent(updateExtent);
@@ -419,19 +504,48 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
             }
           }
         }
+
+      if (masterRepresentationIsFractionalLabelmap)
+        {
+        vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(orientedBrushPositionerOutput.GetPointer(), modifierLabelmap, orientedBrushPositionerOutput.GetPointer(), true, false, NULL, scalarRange[0]);
+        }
       vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput.GetPointer(), vtkOrientedImageDataResample::OPERATION_MAXIMUM);
+
       }
     modifierLabelmap->Modified();
     for (int i = 0; i < 6; i++)
       {
       updateExtentList << updateExtent[i];
       }
+
+    // Reset brush dimensions to default
+    this->BrushPolyDataToStencil->SetOutputSpacing(originalBrushSpacing);
+    this->BrushPolyDataToStencil->SetOutputWholeExtent(originalBrushExtent);
+    this->BrushPolyDataToStencil->SetOutputOrigin(originalBrushOrigin);
+
     }
   this->PaintCoordinates_World->Reset();
+  vtkFractionalOperations::Write(modifierLabelmap, "E:\\test\\brush.nrrd");
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    // Specify the scalar range of values in the labelmap
+    vtkFractionalOperations::SetScalarRange(modifierLabelmap, scalarRange);
+
+    // Specify the surface threshold value for visualization
+    vtkFractionalOperations::SetThreshold(modifierLabelmap, thresholdValue);
+
+    // Specify the interpolation type for visualization
+    vtkFractionalOperations::SetInterpolationType(modifierLabelmap, interpolationType);
+    }
 
   // Notify editor about changes
   qSlicerSegmentEditorAbstractEffect::ModificationMode modificationMode = (q->m_Erase ? qSlicerSegmentEditorAbstractEffect::ModificationModeRemove : qSlicerSegmentEditorAbstractEffect::ModificationModeAdd);
   q->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, updateExtentList);
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+      vtkFractionalOperations::ClearFractionalParameters(modifierLabelmap);
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -484,6 +598,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrushStencil(qMRMLWidget* vie
   double* boundsIjk = brushModel_ModifierLabelmapIjk->GetBounds();
   this->BrushPolyDataToStencil->SetOutputWholeExtent(floor(boundsIjk[0])-1, ceil(boundsIjk[1])+1,
     floor(boundsIjk[2])-1, ceil(boundsIjk[3])+1, floor(boundsIjk[4])-1, ceil(boundsIjk[5])+1);
+  this->BrushPolyDataToStencil->SetOutputSpacing(1.0, 1.0, 1.0);
 }
 
 //-----------------------------------------------------------------------------

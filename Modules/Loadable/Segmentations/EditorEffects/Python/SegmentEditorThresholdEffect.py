@@ -1,5 +1,5 @@
 import os
-import vtk, qt, ctk, slicer
+import vtk, qt, ctk, slicer, math
 import logging
 from SegmentEditorEffects import *
 
@@ -158,27 +158,136 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
       originalImageToWorldMatrix = vtk.vtkMatrix4x4()
       modifierLabelmap.GetImageToWorldMatrix(originalImageToWorldMatrix)
+      originalScalarType = modifierLabelmap.GetScalarType()
+      originalExtent = modifierLabelmap.GetExtent()
       # Get parameters
-      min = self.scriptedEffect.doubleParameter("MinimumThreshold")
-      max = self.scriptedEffect.doubleParameter("MaximumThreshold")
+      minThreshold = self.scriptedEffect.doubleParameter("MinimumThreshold")
+      maxThreshold = self.scriptedEffect.doubleParameter("MaximumThreshold")
 
       self.scriptedEffect.saveStateForUndo()
+
+      segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
 
       # Perform thresholding
       thresh = vtk.vtkImageThreshold()
       thresh.SetInputData(masterImageData)
-      thresh.ThresholdBetween(min, max)
+      thresh.ThresholdBetween(minThreshold, maxThreshold)
       thresh.SetInValue(1)
       thresh.SetOutValue(0)
       thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
-      thresh.Update()
-      modifierLabelmap.DeepCopy(thresh.GetOutput())
+
+      masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+      if (masterRepresentationIsFractionalLabelmap):
+        scalarRange = [-108.0, 108.0]
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentation, scalarRange)
+        thresholdValue = vtkSegmentationCore.vtkFractionalOperations.GetThreshold(segmentation)
+        interpolationType = vtkSegmentationCore.vtkFractionalOperations.GetInterpolationType(segmentation)
+        scalarType = vtkSegmentationCore.vtkFractionalOperations.GetScalarType(segmentation)
+
+        masterImageToWorldMatrix = vtk.vtkMatrix4x4()
+        masterImageData.GetImageToWorldMatrix(masterImageToWorldMatrix)
+
+        identityMatrix = vtk.vtkMatrix4x4()
+        identityMatrix.Identity()
+        masterImageData.SetImageToWorldMatrix(identityMatrix)
+
+        origin = masterImageData.GetOrigin()
+        spacing = masterImageData.GetSpacing()
+        extent = masterImageData.GetExtent()
+        dimensions = masterImageData.GetDimensions()
+
+        oversamplingFactor = 6
+        shift = -(oversamplingFactor-1.0)/(2.0*oversamplingFactor)
+        originIJK = [shift, shift, shift, 1]
+        originRAS = identityMatrix.MultiplyDoublePoint(originIJK)
+
+        oversampledImageDataGeometry = vtkSegmentationCore.vtkOrientedImageData()
+        vtkSegmentationCore.vtkFractionalOperations.CalculateOversampledGeometry(masterImageData, oversampledImageDataGeometry, oversamplingFactor)
+        oversampledExtent = oversampledImageDataGeometry.GetExtent()
+
+        oversampledImageToWorldMatrix = vtk.vtkMatrix4x4()
+        oversampledImageDataGeometry.GetImageToWorldMatrix(oversampledImageToWorldMatrix)
+
+        modifierLabelmap.SetImageToWorldMatrix(masterImageToWorldMatrix)
+        modifierLabelmap.SetExtent(extent)
+        modifierLabelmap.AllocateScalars(scalarType, 1)
+
+        fill = vtk.vtkImageThreshold()
+        fill.SetInputData(modifierLabelmap)
+        fill.ThresholdBetween(0,0)
+        fill.SetInValue(scalarRange[0])
+        fill.SetOutValue(scalarRange[0])
+        fill.SetOutputScalarType(scalarType)
+        fill.Update()
+        modifierLabelmap.DeepCopy(fill.GetOutput())
+
+        reslice = vtk.vtkImageReslice()
+        reslice.SetInputData(masterImageData)
+        reslice.SetInterpolationModeToLinear()
+        reslice.SetOutputOrigin(originRAS[0:3])
+        reslice.SetOutputSpacing(oversampledImageDataGeometry.GetSpacing())
+
+        thresh.SetInputData(None)
+        thresh.SetInputConnection(reslice.GetOutputPort())
+
+        stepSize = [oversamplingFactor*int(math.ceil(dimensions[0]/oversamplingFactor)),
+                    oversamplingFactor*int(math.ceil(dimensions[1]/oversamplingFactor)),
+                    oversamplingFactor*int(math.ceil(dimensions[2]/oversamplingFactor))]
+
+        for k in range(oversampledExtent[4], oversampledExtent[5], stepSize[2]):
+          for j in range(oversampledExtent[2], oversampledExtent[3], stepSize[1]):
+            for i in range(oversampledExtent[0], oversampledExtent[1], stepSize[0]):
+
+              offsetExtent = [i, min(i+stepSize[0]-1, oversampledExtent[1]),
+                              j, min(j+stepSize[1]-1, oversampledExtent[3]),
+                              k, min(k+stepSize[2]-1, oversampledExtent[5])]
+
+              reslice.SetOutputExtent(offsetExtent)
+              thresh.Update()
+
+              binaryLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+              binaryLabelmap.ShallowCopy(thresh.GetOutput())
+              binaryLabelmap.SetImageToWorldMatrix(oversampledImageToWorldMatrix)
+
+              resampleBinaryToFractionalFilter = vtkSegmentationCore.vtkResampleBinaryLabelmapToFractionalLabelmap()
+              resampleBinaryToFractionalFilter.SetInputData(binaryLabelmap)
+              resampleBinaryToFractionalFilter.SetOutputScalarType(scalarType)
+              resampleBinaryToFractionalFilter.SetOutputMinimumValue(scalarRange[0])
+              resampleBinaryToFractionalFilter.Update()
+
+              fractionalLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+              fractionalLabelmap.ShallowCopy(resampleBinaryToFractionalFilter.GetOutput())
+              fractionalLabelmap.SetImageToWorldMatrix(masterImageToWorldMatrix)
+              vtkSegmentationCore.vtkOrientedImageDataResample.MergeImage(modifierLabelmap, fractionalLabelmap, modifierLabelmap, vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
+
+        # Specify the scalar range of values in the labelmap
+        vtkSegmentationCore.vtkFractionalOperations.SetScalarRange(modifierLabelmap, scalarRange)
+
+        # Specify the surface threshold value for visualization
+        vtkSegmentationCore.vtkFractionalOperations.SetThreshold(modifierLabelmap, thresholdValue)
+
+        # Specify the interpolation type for visualization
+        vtkSegmentationCore.vtkFractionalOperations.SetInterpolationType(modifierLabelmap, interpolationType)
+
+        masterImageData.SetImageToWorldMatrix(masterImageToWorldMatrix)
+
+      else:
+        thresh.Update()
+        modifierLabelmap.DeepCopy(thresh.GetOutput())
     except IndexError:
       logging.error('apply: Failed to threshold master volume!')
       pass
 
     # Apply changes
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
+
+    # TODO: should the modifier labelmap just be copied at the start instead of resetting it?
+    # Reset modifier labelmap
+    modifierLabelmap.SetImageToWorldMatrix(originalImageToWorldMatrix)
+    modifierLabelmap.SetExtent(originalExtent)
+    if (not modifierLabelmap.GetScalarType() == originalScalarType):
+      modifierLabelmap.AllocateScalars(originalScalarType, 1)
 
     # De-select effect
     self.scriptedEffect.selectEffect("")

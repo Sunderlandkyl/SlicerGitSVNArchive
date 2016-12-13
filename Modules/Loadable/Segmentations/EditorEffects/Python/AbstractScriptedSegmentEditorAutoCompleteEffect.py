@@ -232,6 +232,7 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     segmentationNode.GetDisplayNode().SetOpacity(1.0)
     self.mergedLabelmapGeometryImage = None
+    self.mergedOversampledLabelmapGeometryImage = None
     self.selectedSegmentIds = None
     self.selectedSegmentModifiedTimes = {}
     self.clippedMasterImageData = None
@@ -250,14 +251,20 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
 
     self.scriptedEffect.saveStateForUndo()
 
+    masterRepresentationIsFractionalLabelmap = segmentationNode.GetSegmentation().GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
     # Move segments from preview into current segmentation
     segmentIDs = vtk.vtkStringArray()
     previewNode.GetSegmentation().GetSegmentIDs(segmentIDs)
     for index in xrange(segmentIDs.GetNumberOfValues()):
       segmentID = segmentIDs.GetValue(index)
       previewSegment = previewNode.GetSegmentation().GetSegment(segmentID)
-      previewSegmentLabelmap = previewSegment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
-      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(previewSegmentLabelmap, segmentationNode, segmentID)
+      if masterRepresentationIsFractionalLabelmap:
+        previewSegmentLabelmap = previewSegment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+        slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(previewSegmentLabelmap, segmentationNode, segmentID)
+      else:
+        previewSegmentLabelmap = previewSegment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
+        slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(previewSegmentLabelmap, segmentationNode, segmentID)
       previewNode.GetSegmentation().RemoveSegment(segmentID) # delete now to limit memory usage
 
     self.reset()
@@ -285,6 +292,11 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
 
     # Get segmentation
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+
+    masterRepresentationIsFractionalLabelmap = segmentationNode.GetSegmentation().GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+    oversamplingFactor = 3
+    stepSize = 216.0 / (oversamplingFactor*oversamplingFactor*oversamplingFactor)
+    shiftMagnitude = -(oversamplingFactor-1.0)/(2.0*oversamplingFactor)
 
     previewNode = self.getPreviewNode()
     if not previewNode or not self.mergedLabelmapGeometryImage \
@@ -317,6 +329,12 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
         min(masterImageExtent[5], labelsEffectiveExtent[5]+margin[2]) ]
       self.mergedLabelmapGeometryImage.SetExtent(labelsExpandedExtent)
 
+      if masterRepresentationIsFractionalLabelmap and not self.mergedOversampledLabelmapGeometryImage:
+        self.mergedOversampledLabelmapGeometryImage = vtkSegmentationCore.vtkOrientedImageData()
+
+      if (masterRepresentationIsFractionalLabelmap):
+        vtkSegmentationCore.vtkFractionalOperations.CalculateOversampledGeometry(self.mergedLabelmapGeometryImage, self.mergedOversampledLabelmapGeometryImage, oversamplingFactor)
+
       previewNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLSegmentationNode')
       previewNode.UnRegister(None)
       previewNode = slicer.mrmlScene.AddNode(previewNode)
@@ -328,20 +346,62 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
       self.scriptedEffect.setCommonParameter("SegmentationResultPreviewOwnerEffect", self.scriptedEffect.name)
       self.setPreviewOpacity(0.6)
 
+      if masterRepresentationIsFractionalLabelmap:
+        previewNode.GetSegmentation().SetMasterRepresentationName(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
       if self.clippedMasterImageDataRequired:
         self.clippedMasterImageData = vtkSegmentationCore.vtkOrientedImageData()
-        masterImageClipper = vtk.vtkImageConstantPad()
-        masterImageClipper.SetInputData(masterImageData)
-        masterImageClipper.SetOutputWholeExtent(self.mergedLabelmapGeometryImage.GetExtent())
-        masterImageClipper.Update()
-        self.clippedMasterImageData.ShallowCopy(masterImageClipper.GetOutput())
-        self.clippedMasterImageData.CopyDirections(self.mergedLabelmapGeometryImage)
+        if masterRepresentationIsFractionalLabelmap:
+          vtkSegmentationCore.vtkOrientedImageDataResample.ResampleOrientedImageToReferenceOrientedImage(
+            masterImageData, self.mergedOversampledLabelmapGeometryImage, self.clippedMasterImageData, True)
+        else:
+          masterImageClipper = vtk.vtkImageConstantPad()
+          masterImageClipper.SetInputData(masterImageData)
+          masterImageClipper.SetOutputWholeExtent(self.mergedLabelmapGeometryImage.GetExtent())
+          masterImageClipper.Update()
+          self.clippedMasterImageData.ShallowCopy(masterImageClipper.GetOutput())
+          self.clippedMasterImageData.CopyDirections(self.mergedLabelmapGeometryImage)
 
     previewNode.SetName(segmentationNode.GetName()+" preview")
 
     mergedImage = vtkSegmentationCore.vtkOrientedImageData()
-    segmentationNode.GenerateMergedLabelmapForAllSegments(mergedImage,
-      vtkSegmentationCore.vtkSegmentation.EXTENT_UNION_OF_EFFECTIVE_SEGMENTS, self.mergedLabelmapGeometryImage, self.selectedSegmentIds)
+    if masterRepresentationIsFractionalLabelmap:
+      resliceSegmentationNode = slicer.vtkMRMLSegmentationNode()
+
+      for index in xrange(self.selectedSegmentIds.GetNumberOfValues()):
+
+        segmentID = self.selectedSegmentIds.GetValue(index)
+        segmentLabelmap = segmentationNode.GetSegmentation().GetSegmentRepresentation(segmentID,
+          vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
+        reslicedSegment = vtkSegmentationCore.vtkOrientedImageData()
+        vtkSegmentationCore.vtkOrientedImageDataResample.ResampleOrientedImageToReferenceOrientedImage(
+          segmentLabelmap, self.mergedOversampledLabelmapGeometryImage, reslicedSegment, True, False, None, -108)
+           #TODO
+
+        segmentThreshold = vtk.vtkImageThreshold()
+        segmentThreshold.SetInputData(reslicedSegment)
+        segmentThreshold.ThresholdByUpper(0)
+        segmentThreshold.SetInValue(1)
+        segmentThreshold.SetOutValue(0)
+        segmentThreshold.Update()
+
+        segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
+        newSegment = vtkSegmentationCore.vtkSegment()
+        newSegment.SetName(segment.GetName()+"_resliced")
+        color = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+        newSegment.SetColor(color)
+        resliceSegmentationNode.GetSegmentation().AddSegment(newSegment, segmentID)
+        resliceSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+        resliceSegmentLabelmap.ShallowCopy(segmentThreshold.GetOutput())
+        resliceSegmentLabelmap.CopyDirections(self.mergedOversampledLabelmapGeometryImage)
+        slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(resliceSegmentLabelmap, resliceSegmentationNode, segmentID)
+
+      resliceSegmentationNode.GenerateMergedLabelmapForAllSegments(mergedImage,
+        vtkSegmentationCore.vtkSegmentation.EXTENT_UNION_OF_EFFECTIVE_SEGMENTS, self.mergedOversampledLabelmapGeometryImage, self.selectedSegmentIds)
+    else:
+      segmentationNode.GenerateMergedLabelmapForAllSegments(mergedImage,
+        vtkSegmentationCore.vtkSegmentation.EXTENT_UNION_OF_EFFECTIVE_SEGMENTS, self.mergedLabelmapGeometryImage, self.selectedSegmentIds)
 
     outputLabelmap = vtkSegmentationCore.vtkOrientedImageData()
 
@@ -367,8 +427,40 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
 
       # Write label to segment
       newSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
-      newSegmentLabelmap.ShallowCopy(thresh.GetOutput())
-      newSegmentLabelmap.CopyDirections(mergedImage)
+      if masterRepresentationIsFractionalLabelmap:
+        scalarRange = [-108, 108]
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentationNode.GetSegmentation(), scalarRange)
+
+        resampleBinaryToFractionalFilter = vtkSegmentationCore.vtkResampleBinaryLabelmapToFractionalLabelmap()
+        oversampledBinaryLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+        oversampledBinaryLabelmap.ShallowCopy(thresh.GetOutput())
+        oversampledImageToWorldMatrix = vtk.vtkMatrix4x4()
+        self.mergedOversampledLabelmapGeometryImage.GetImageToWorldMatrix(oversampledImageToWorldMatrix)
+        oversampledBinaryLabelmap.SetImageToWorldMatrix(oversampledImageToWorldMatrix)
+        resampleBinaryToFractionalFilter.SetInputData(oversampledBinaryLabelmap)
+
+        resampleBinaryToFractionalFilter.SetStepSize(stepSize)
+        resampleBinaryToFractionalFilter.SetOversamplingFactor(oversamplingFactor)
+        resampleBinaryToFractionalFilter.SetOutputScalarType(vtkSegmentationCore.vtkFractionalOperations.GetScalarType(segmentationNode.GetSegmentation()))
+        resampleBinaryToFractionalFilter.SetOutputMinimumValue(scalarRange[0])
+        resampleBinaryToFractionalFilter.Update()
+
+        newSegmentLabelmap.DeepCopy(resampleBinaryToFractionalFilter.GetOutput())
+
+        # Specify the scalar range of values in the labelmap
+        vtkSegmentationCore.vtkFractionalOperations.SetScalarRange(newSegmentLabelmap, scalarRange)
+
+        # Specify the surface threshold value for visualization
+        vtkSegmentationCore.vtkFractionalOperations.SetThreshold(newSegmentLabelmap,
+          vtkSegmentationCore.vtkFractionalOperations.GetThreshold(segmentationNode.GetSegmentation()))
+
+        # Specify the interpolation type for visualization
+        vtkSegmentationCore.vtkFractionalOperations.SetInterpolationType(newSegmentLabelmap,
+          vtkSegmentationCore.vtkFractionalOperations.GetInterpolationType(segmentationNode.GetSegmentation()))
+      else:
+        newSegmentLabelmap.ShallowCopy(thresh.GetOutput())
+        newSegmentLabelmap.CopyDirections(mergedImage)
+
       newSegment = previewNode.GetSegmentation().GetSegment(segmentID)
       if not newSegment:
         newSegment = vtkSegmentationCore.vtkSegment()
@@ -376,7 +468,10 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
         color = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
         newSegment.SetColor(color)
         previewNode.GetSegmentation().AddSegment(newSegment, segmentID)
-      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, previewNode, segmentID)
+      if masterRepresentationIsFractionalLabelmap:
+        slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(newSegmentLabelmap, previewNode, segmentID)
+      else:
+        slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, previewNode, segmentID)
 
     self.updateGUIFromMRML()
 

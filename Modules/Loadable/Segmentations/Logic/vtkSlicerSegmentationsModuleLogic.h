@@ -170,7 +170,7 @@ public:
   /// (parent transform of the segmentation node is not used during import).
   /// \param baseSegmentName Prefix for the names of the new segments. Empty by default, in which case the prefix will be "Label"
   static bool ImportLabelmapToSegmentationNode(vtkOrientedImageData* labelmapImage, vtkMRMLSegmentationNode* segmentationNode,
-    std::string baseSegmentName = "", std::string insertBeforeSegmentId = "");
+    std::string baseSegmentName = "", std::string insertBeforeSegmentId = "", bool isFractional=false, vtkOrientedImageData* fractionalImage=NULL);
 
   /// Update segmentation from segments in a labelmap node.
   /// \param updatedSegmentIDs Defines how label values 1..N are mapped to segment IDs (0..N-1).
@@ -245,6 +245,7 @@ public:
     MODE_MERGE_MIN
     };
   static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=0);
+  static bool SetFractionalLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=0);
 
 protected:
   virtual void SetMRMLSceneInternal(vtkMRMLScene * newScene);
