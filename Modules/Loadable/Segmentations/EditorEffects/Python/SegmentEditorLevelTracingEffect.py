@@ -183,5 +183,30 @@ class LevelTracingPipeline:
     if lines.GetNumberOfCells() == 0:
       return
 
+    import vtkSegmentationCorePython as vtkSegmentationCore
+
+    segmentation = self.effect.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+    masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+    if (masterRepresentationIsFractionalLabelmap):
+      vtkSegmentationCore.vtkFractionalLogicalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
+      modifierLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
+
+      scalarRange = [0.0,1.0]
+      scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
+        modifierLabelmap.GetFieldData().GetAbstractArray(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
+      if ( scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
+        scalarRange[0] = scalarRangeArray.GetValue(0)
+        scalarRange[1] = scalarRangeArray.GetValue(1)
+
+      thresh = vtk.vtkImageThreshold()
+      thresh.SetInputData(modifierLabelmap)
+      thresh.ThresholdBetween(0,0)
+      thresh.SetInValue(scalarRange[0])
+      thresh.SetOutValue(scalarRange[0])
+      thresh.Update()
+      modifierLabelmap.DeepCopy(thresh.GetOutput())
+    slicer.testing = self
     # Apply poly data on modifier labelmap
     self.effect.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget)
+    self.effect.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)

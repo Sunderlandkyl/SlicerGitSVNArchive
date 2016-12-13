@@ -193,32 +193,39 @@ If segments overlap, segment higher in the segments table will have priority. <b
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
       selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
 
+      import vtkSegmentationCorePython as vtkSegmentationCore
+      segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+      masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
       smoothingMethod = self.scriptedEffect.parameter("SmoothingMethod")
 
       if smoothingMethod == GAUSSIAN:
-        maxValue = 255
-
-        thresh = vtk.vtkImageThreshold()
-        thresh.SetInputData(selectedSegmentLabelmap)
-        thresh.ThresholdByLower(0)
-        thresh.SetInValue(0)
-        thresh.SetOutValue(maxValue)
-        thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_CHAR)
-
         standardDeviationMm = self.scriptedEffect.doubleParameter("GaussianStandardDeviationMm")
         gaussianFilter = vtk.vtkImageGaussianSmooth()
-        gaussianFilter.SetInputConnection(thresh.GetOutputPort())
         gaussianFilter.SetStandardDeviation(standardDeviationMm)
         gaussianFilter.SetRadiusFactor(4)
 
-        thresh2 = vtk.vtkImageThreshold()
-        thresh2.SetInputConnection(gaussianFilter.GetOutputPort())
-        thresh2.ThresholdByUpper(maxValue/2)
-        thresh2.SetInValue(1)
-        thresh2.SetOutValue(0)
-        thresh2.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
-        thresh2.Update()
-        modifierLabelmap.DeepCopy(thresh2.GetOutput())
+        if (masterRepresentationIsFractionalLabelmap):
+          gaussianFilter.SetInputData(selectedSegmentLabelmap)
+          gaussianFilter.Update()
+          modifierLabelmap.DeepCopy(gaussianFilter.GetOutput())
+        else:
+          maxValue = 255
+          thresh = vtk.vtkImageThreshold()
+          thresh.SetInputData(selectedSegmentLabelmap)
+          thresh.ThresholdByLower(0)
+          thresh.SetInValue(0)
+          thresh.SetOutValue(maxValue)
+          thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_CHAR)
+          gaussianFilter.SetInputConnection(thresh.GetOutputPort())
+          thresh2 = vtk.vtkImageThreshold()
+          thresh2.SetInputConnection(gaussianFilter.GetOutputPort())
+          thresh2.ThresholdByUpper(maxValue/2)
+          thresh2.SetInValue(1)
+          thresh2.SetOutValue(0)
+          thresh2.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+          thresh2.Update()
+          modifierLabelmap.DeepCopy(thresh2.GetOutput())
 
       else:
         # size rounded to nearest odd number. If kernel size is even then image gets shifted.
@@ -230,24 +237,37 @@ If segments overlap, segment higher in the segments table will have priority. <b
           smoothingFilter.SetInputData(selectedSegmentLabelmap)
 
         else:
-          # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
-          labelValue = 1
-          backgroundValue = 0
-          thresh = vtk.vtkImageThreshold()
-          thresh.SetInputData(selectedSegmentLabelmap)
-          thresh.ThresholdByLower(0)
-          thresh.SetInValue(backgroundValue)
-          thresh.SetOutValue(labelValue)
-          thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+          if (masterRepresentationIsFractionalLabelmap):
+            if (smoothingMethod == MORPHOLOGICAL_OPENING):
+              presmoothingFilter = vtk.vtkImageContinuousErode3D()
+              smoothingFilter = vtk.vtkImageContinuousDilate3D()
+            else:
+              presmoothingFilter = vtk.vtkImageContinuousDilate3D()
+              smoothingFilter = vtk.vtkImageContinuousErode3D()
+            presmoothingFilter.SetInputData(selectedSegmentLabelmap)
+            presmoothingFilter.SetKernelSize(kernelSizePixel[0], kernelSizePixel[1], kernelSizePixel[2])
+            smoothingFilter.SetInputConnection(presmoothingFilter.GetOutputPort())
+            smoothingFilter.SetKernelSize(kernelSizePixel[0], kernelSizePixel[1], kernelSizePixel[2])
 
-          smoothingFilter = vtk.vtkImageOpenClose3D()
-          smoothingFilter.SetInputConnection(thresh.GetOutputPort())
-          if smoothingMethod == MORPHOLOGICAL_OPENING:
-            smoothingFilter.SetOpenValue(labelValue)
-            smoothingFilter.SetCloseValue(backgroundValue)
-          else: # must be smoothingMethod == MORPHOLOGICAL_CLOSING:
-            smoothingFilter.SetOpenValue(backgroundValue)
-            smoothingFilter.SetCloseValue(labelValue)
+          else:
+            # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
+            labelValue = 1
+            backgroundValue = 0
+            thresh = vtk.vtkImageThreshold()
+            thresh.SetInputData(selectedSegmentLabelmap)
+            thresh.ThresholdByLower(0)
+            thresh.SetInValue(backgroundValue)
+            thresh.SetOutValue(labelValue)
+            thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+
+            smoothingFilter = vtk.vtkImageOpenClose3D()
+            smoothingFilter.SetInputConnection(thresh.GetOutputPort())
+            if smoothingMethod == MORPHOLOGICAL_OPENING:
+              smoothingFilter.SetOpenValue(labelValue)
+              smoothingFilter.SetCloseValue(backgroundValue)
+            else: # must be smoothingMethod == MORPHOLOGICAL_CLOSING:
+              smoothingFilter.SetOpenValue(backgroundValue)
+              smoothingFilter.SetCloseValue(labelValue)
 
         smoothingFilter.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
         smoothingFilter.Update()
@@ -261,6 +281,13 @@ If segments overlap, segment higher in the segments table will have priority. <b
 
   def smoothMultipleSegments(self):
     import vtkSegmentationCorePython as vtkSegmentationCore
+
+    segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+    masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+    if (masterRepresentationIsFractionalLabelmap):
+      logging.error('This smoothing is currently not supported for fractional labelmaps')
+      return
 
     # Generate merged labelmap of all visible segments
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()

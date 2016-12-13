@@ -81,7 +81,7 @@ public:
   /// Extent can be specified to restrict imageToAppend's extent to a smaller region.
   /// inputImage and imageToAppend must have the same geometry, but they may have different extents.
   static bool MergeImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* imageToAppend, vtkOrientedImageData* outputImage, int operation,
-    const int extent[6] = 0, int maskThreshold = 0, double fillValue = 1, bool *outputModified=NULL);
+    const int extent[6] = 0, int maskThreshold = 0, double fillValue = 1, bool *outputModified=NULL, double backgroundValue=0);
 
   /// Modifies inputImage in-place by combining with modifierImage using max/min operation.
   /// The extent will remain unchanged.
@@ -91,7 +91,7 @@ public:
     const int extent[6] = 0, int maskThreshold = 0, double fillValue = 1);
 
   /// Copy image with clipping to the specified extent
-  static bool CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]=0);
+  static bool CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]=0, const double backgroundValue=0);
 
   /// Prints image information. Does not print lots of irrelevant information that default PrintSelf would print.
   static void PrintImageInformation(vtkImageData* imageData, ostream& os, vtkIndent indent);
@@ -102,7 +102,7 @@ public:
 
 public:
   /// Calculate effective extent of an image: the IJK extent where non-zero voxels are located
-  static bool CalculateEffectiveExtent(vtkOrientedImageData* image, int effectiveExtent[6]);
+  static bool CalculateEffectiveExtent(vtkOrientedImageData* image, int effectiveExtent[6], double threshold=0);
 
   /// Determine if geometries of two oriented image data objects match.
   /// Origin, spacing and direction are considered, extent is not.
@@ -138,9 +138,9 @@ public:
   static bool GetTransformBetweenOrientedImages(vtkOrientedImageData* image1, vtkOrientedImageData* image2, vtkTransform* image1ToImage2Transform);
 
   /// Pad an image to entirely contain another image using custom extent to contain
-  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage, const int extent[6]);
+  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage, const int extent[6], double backgroundValue=0);
   /// Pad an image to entirely contain another image
-  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage);
+  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage, double backgroundValue=0);
 
   /// Determine if a transform is linear and return it if it is. A simple downcast is not enough, as the transform may be
   /// a general transform, which can be linear if the concatenation it contains consist of all linear transforms.

@@ -29,6 +29,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkSegmentationConverterFactory.h"
+#include "vtkFractionalLogicalOperations.h"
 
 // Subject Hierarchy includes
 #include <vtkMRMLSubjectHierarchyNode.h>
@@ -52,6 +53,7 @@
 #include <vtkTransformPolyDataFilter.h>
 #include <vtkTrivialProducer.h>
 #include <vtksys/SystemTools.hxx>
+#include <vtkDoubleArray.h>
 
 // MRML includes
 #include <vtkEventBroker.h>
@@ -1615,6 +1617,170 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(vtkOrientedIm
     {
     std::string targetRepresentationName = (*reprIt);
     if (targetRepresentationName.compare(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()))
+      {
+      conversionHappened |= segmentationNode->GetSegmentation()->ConvertSingleSegment(
+        segmentID, targetRepresentationName );
+      }
+    }
+
+  // Re-enable master representation modified event
+  segmentationNode->GetSegmentation()->SetMasterRepresentationModifiedEnabled(wasMasterRepresentationModifiedEnabled);
+  const char* segmentIdChar = segmentID.c_str();
+  segmentationNode->GetSegmentation()->InvokeEvent(vtkSegmentation::MasterRepresentationModified, (void*)segmentIdChar);
+  segmentationNode->GetSegmentation()->InvokeEvent(vtkSegmentation::RepresentationModified, (void*)segmentIdChar);
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode/*=MODE_REPLACE*/, const int extent[6]/*=0*/)
+{
+  if (!segmentationNode || segmentID.empty() || !labelmap)
+    {
+    vtkGenericWarningMacro("vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Invalid inputs");
+    return false;
+    }
+  if (labelmap->GetPointData()->GetScalars() == NULL)
+    {
+    vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Invalid input labelmap");
+    return false;
+    }
+
+  // Get fractional labelmap representation of selected segment
+  vtkSegment* selectedSegment = segmentationNode->GetSegmentation()->GetSegment(segmentID);
+  if (!selectedSegment)
+    {
+    vtkGenericWarningMacro("vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Invalid selected segment");
+    return false;
+    }
+  vtkOrientedImageData* segmentLabelmap = vtkOrientedImageData::SafeDownCast(
+    selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()) );
+  if (!segmentLabelmap)
+    {
+    vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Failed to get fractional labelmap representation in segmentation " << segmentationNode->GetName());
+    return false;
+    }
+
+  //TODO: What if they have different ranges?
+  double minimumValue = -108.0;
+  vtkDoubleArray* scalarRange = vtkDoubleArray::SafeDownCast(
+    segmentLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+  if (scalarRange && scalarRange->GetNumberOfValues() == 2)
+    {
+    minimumValue = scalarRange->GetValue(0);
+    }
+  else
+    {
+    scalarRange = vtkDoubleArray::SafeDownCast(
+      labelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+    if (scalarRange && scalarRange->GetNumberOfValues() == 2)
+      {
+      minimumValue = scalarRange->GetValue(0);
+      }
+    }
+
+  // 1. Append input labelmap to the segment labelmap if requested
+  vtkSmartPointer<vtkOrientedImageData> newSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+  bool segmentLabelmapModified = true;
+
+  int* segmentLabelmapExtent = segmentLabelmap->GetExtent();
+  bool segmentLabelmapEmpty = (segmentLabelmapExtent[0] > segmentLabelmapExtent[1] ||
+    segmentLabelmapExtent[2] > segmentLabelmapExtent[3] ||
+    segmentLabelmapExtent[4] > segmentLabelmapExtent[5]);
+  if (segmentLabelmapEmpty)
+    {
+    if (mergeMode == MODE_MERGE_MIN)
+      {
+      // empty image is assumed to have minimum value everywhere, combining it with MAX operation
+      // results an empty image, so we don't need to do anything.
+      return true;
+      }
+    // Replace the empty image with the modifier image
+    mergeMode = MODE_REPLACE;
+    }
+
+  if (mergeMode == MODE_REPLACE)
+    {
+    if (!vtkOrientedImageDataResample::CopyImage(labelmap, newSegmentLabelmap, extent, minimumValue))
+      {
+      vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Failed to copy labelmap");
+      return false;
+      }
+    }
+  else
+    {
+    int operation = (mergeMode==MODE_MERGE_MAX ? vtkOrientedImageDataResample::OPERATION_MAXIMUM : vtkOrientedImageDataResample::OPERATION_MINIMUM);
+
+    if (!vtkOrientedImageDataResample::DoGeometriesMatch(segmentLabelmap, labelmap))
+      {
+
+      // Make sure appended image has the same lattice as the input image
+      vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
+        segmentLabelmap, labelmap, resampledSegmentLabelmap, true /*interpolate*/, false /*pad*/, NULL, minimumValue);
+      if (!vtkOrientedImageDataResample::MergeImage(resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified, minimumValue))
+        {
+        vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Failed to merge labelmap (max)");
+        return false;
+        }
+      }
+    else
+      {
+        if (!vtkOrientedImageDataResample::MergeImage(segmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified, minimumValue))
+        {
+        vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Failed to merge labelmap (max)");
+        return false;
+        }
+      }
+    }
+
+  if (!segmentLabelmapModified)
+    {
+    // segment labelmap not modified, there is no need to update representations
+    return true;
+    }
+
+  // 2. Copy the temporary padded modifier labelmap to the segment.
+  //    Disable modified event so that the consequently emitted MasterRepresentationModified event that causes
+  //    removal of all other representations in all segments does not get activated. Instead, explicitly create
+  //    representations for the edited segment that the other segments have.
+  bool wasMasterRepresentationModifiedEnabled = segmentationNode->GetSegmentation()->SetMasterRepresentationModifiedEnabled(false);
+  segmentLabelmap->ShallowCopy(newSegmentLabelmap);
+
+  // 3. Shrink the image data extent to only contain the effective data (extent of non-zero voxels)
+  int effectiveExtent[6] = {0,-1,0,-1,0,-1};
+  vtkOrientedImageDataResample::CalculateEffectiveExtent(segmentLabelmap, effectiveExtent, minimumValue); // TODO: use the update extent? maybe crop when changing segment?
+
+  // Pad the effective extent by 1 in each direction. This is required for functions such as visualization.
+  for (int i = 0; i < 3; ++i)
+    {
+    --effectiveExtent[2*i];
+    ++effectiveExtent[2*i+1];
+    }
+
+  if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
+    {
+    vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Effective extent of the labelmap to set is invalid!");
+    }
+  else
+    {
+    vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
+    padder->SetInputData(segmentLabelmap);
+    padder->SetConstant(minimumValue);
+    padder->SetOutputWholeExtent(effectiveExtent);
+    padder->Update();
+    segmentLabelmap->DeepCopy(padder->GetOutput());
+    }
+
+  // 4. Re-convert all other representations
+  std::vector<std::string> representationNames;
+  selectedSegment->GetContainedRepresentationNames(representationNames);
+  bool conversionHappened = false;
+  for (std::vector<std::string>::iterator reprIt = representationNames.begin();
+    reprIt != representationNames.end(); ++reprIt)
+    {
+    std::string targetRepresentationName = (*reprIt);
+    if (targetRepresentationName.compare(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()))
       {
       conversionHappened |= segmentationNode->GetSegmentation()->ConvertSingleSegment(
         segmentID, targetRepresentationName );

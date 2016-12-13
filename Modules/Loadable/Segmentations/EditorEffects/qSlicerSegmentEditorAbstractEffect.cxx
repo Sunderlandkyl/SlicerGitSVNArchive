@@ -27,6 +27,7 @@
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkOrientedImageData.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
+#include "vtkFractionalLogicalOperations.h"
 
 // Qt includes
 #include <QDebug>
@@ -280,7 +281,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       maskedModifierLabelmap->DeepCopy(modifierLabelmap);
       modifierLabelmap = maskedModifierLabelmap.GetPointer();
       }
-    this->applyImageMask(modifierLabelmap, maskImage, this->m_EraseValue, true);
+    this->applyImageMask(modifierLabelmap, maskImage, this->m_EraseValue, true); //TODO: when the mask is applied
     }
 
   // Apply threshold mask if paint threshold is turned on
@@ -373,20 +374,45 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   inverter->ThresholdByLower(0);
   inverter->SetOutputScalarType(VTK_UNSIGNED_CHAR);
 
+  bool masterRepresentationIsFractionalLabelmap =
+    segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
   if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeSet)
     {
-    if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-      modifierLabelmap, segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_REPLACE, extent))
+    if (masterRepresentationIsFractionalLabelmap)
       {
-      qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to selected segment";
+      if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+        modifierLabelmap, segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_REPLACE, extent))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to selected segment";
+        }
+      }
+    else
+      {
+      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+        modifierLabelmap, segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_REPLACE, extent))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to selected segment";
+        }
       }
     }
   else if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeAdd)
     {
-    if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-      modifierLabelmap, segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
+    if (masterRepresentationIsFractionalLabelmap)
       {
-      qCritical() << Q_FUNC_INFO << ": Failed to add modifier labelmap to selected segment";
+      if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+        modifierLabelmap, segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to add modifier labelmap to selected segment";
+        }
+      }
+    else
+      {
+      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+        modifierLabelmap, segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to add modifier labelmap to selected segment";
+        }
       }
     }
   else if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeRemove)
@@ -397,10 +423,24 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
     vtkNew<vtkMatrix4x4> imageToWorldMatrix;
     modifierLabelmap->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
     invertedModifierLabelmap->SetGeometryFromImageToWorldMatrix(imageToWorldMatrix.GetPointer());
-    if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-      invertedModifierLabelmap.GetPointer(), segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+
+    if (masterRepresentationIsFractionalLabelmap)
       {
-      qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from selected segment";
+      invertedModifierLabelmap->DeepCopy(modifierLabelmap);
+      vtkFractionalLogicalOperations::Invert(invertedModifierLabelmap.GetPointer());
+      if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+        invertedModifierLabelmap.GetPointer(), segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from selected segment";
+        }
+      }
+    else
+      {
+      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+        invertedModifierLabelmap.GetPointer(), segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from selected segment";
+        }
       }
     }
 
@@ -449,10 +489,23 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       invertedModifierLabelmap->SetGeometryFromImageToWorldMatrix(imageToWorldMatrix.GetPointer());
       for (std::vector<std::string>::iterator segmentIDIt = segmentIDsToOverwrite.begin(); segmentIDIt != segmentIDsToOverwrite.end(); ++segmentIDIt)
         {
-        if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-          invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+        if (masterRepresentationIsFractionalLabelmap)
           {
-          qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+          invertedModifierLabelmap->DeepCopy(modifierLabelmap);
+          vtkFractionalLogicalOperations::Invert(invertedModifierLabelmap.GetPointer());
+          if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+            invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+            {
+            qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+            }
+          }
+        else
+          {
+          if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+            invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+            {
+            qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+            }
           }
         }
       }
@@ -464,10 +517,21 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       if (this->parameterSetNode()->GetMaskMode() == vtkMRMLSegmentEditorNode::PaintAllowedInsideSingleSegment
         && this->parameterSetNode()->GetMaskSegmentID())
         {
-        if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-          modifierLabelmap, segmentationNode, this->parameterSetNode()->GetMaskSegmentID(), vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
+        if (masterRepresentationIsFractionalLabelmap)
           {
-          qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from segment " << this->parameterSetNode()->GetMaskSegmentID();
+          if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+            modifierLabelmap, segmentationNode, this->parameterSetNode()->GetMaskSegmentID(), vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
+            {
+            qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from segment " << this->parameterSetNode()->GetMaskSegmentID();
+            }
+          }
+        else
+          {
+          if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+            modifierLabelmap, segmentationNode, this->parameterSetNode()->GetMaskSegmentID(), vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
+            {
+            qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from segment " << this->parameterSetNode()->GetMaskSegmentID();
+            }
           }
         }
       }

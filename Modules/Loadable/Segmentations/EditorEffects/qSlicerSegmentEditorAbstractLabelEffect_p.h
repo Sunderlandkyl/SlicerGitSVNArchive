@@ -37,12 +37,20 @@
 
 #include "qSlicerSegmentEditorAbstractLabelEffect.h"
 
+// VTK includes
+#include <vtkSmartPointer.h>
+
 // Qt includes
 #include <QObject>
 
 class QCheckBox;
 class QLabel;
 class ctkRangeWidget;
+
+class vtkPolyDataToImageStencil;
+class vtkPolyDataNormals;
+class vtkTransformPolyDataFilter;
+class vtkTransform;
 
 /// \ingroup SlicerRt_QtModules_Segmentations
 /// \brief Private implementation of the segment editor abstract label effect
@@ -57,9 +65,10 @@ public:
   qSlicerSegmentEditorAbstractLabelEffectPrivate(qSlicerSegmentEditorAbstractLabelEffect& object);
   ~qSlicerSegmentEditorAbstractLabelEffectPrivate();
 
-protected slots:
-
 public:
+  /// Create a slice view screen space (2D) mask image for the given polydata
+  void createMaskImageFromPolyData(vtkPolyData* polyData, vtkOrientedImageData* outputMask);
+  void createMaskImageFromContour(vtkPolyData* contourPolyData, vtkOrientedImageData* outputMask, qMRMLSliceWidget* sliceWidget);
 };
 
 #endif

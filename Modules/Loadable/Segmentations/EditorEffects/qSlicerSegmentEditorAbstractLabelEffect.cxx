@@ -27,6 +27,7 @@
 #include "vtkMRMLSegmentationNode.h"
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
+#include <vtkFractionalLogicalOperations.h>
 
 // Qt includes
 #include <QDebug>
@@ -44,15 +45,47 @@
 #include <vtkImageThreshold.h>
 #include <vtkPolyData.h>
 #include <vtkImageMathematics.h>
+#include <vtkFieldData.h>
+#include <vtkDoubleArray.h>
+#include <vtkResampleBinaryLabelmapToFractionalLabelmap.h>
+#include <vtkPolyDataToImageStencil.h>
+#include <vtkNew.h>
+#include <vtkRibbonFilter.h>
+#include <vtkImageStencilToImage.h>
+#include <vtkSphereSource.h> //TODO
+#include <vtkPolyDataNormals.h>
+#include <vtkRuledSurfaceFilter.h>
+#include <vtkCleanPolyData.h>
+#include <vtkLinearExtrusionFilter.h>
+#include <vtkLassoStencilSource.h>
+#include <vtkFillHolesFilter.h>
+#include <vtkPolyDataWriter.h>
+#include <vtkContourTriangulator.h>
+#include <vtkTriangleFilter.h>
+#include <vtkAppendPolyData.h>
+#include <vtkPlaneSource.h>
+#include <vtkClipPolyData.h>
+#include <vtkClipClosedSurface.h>
+#include <vtkPlaneCollection.h>
+
+#include <vtkPlane.h>
+#include <vtkCutter.h>
+#include <vtkTransformPolyDataFilter.h>
+#include <vtkPolyDataMapper2D.h>
+#include <vtkProperty2D.h>
+#include <vtkActor2D.h>
 
 // Slicer includes
 #include "qMRMLSliceWidget.h"
-#include "vtkImageFillROI.h"
+#include "vtkMRMLSliceLogic.h"
+#include "vtkMRMLSliceLayerLogic.h"
+
 
 // MRML includes
 #include "vtkMRMLScalarVolumeNode.h"
 #include "vtkMRMLTransformNode.h"
 #include "vtkMRMLSliceNode.h"
+
 
 //-----------------------------------------------------------------------------
 // qSlicerSegmentEditorAbstractLabelEffectPrivate methods
@@ -126,114 +159,280 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
 {
   // Rasterize a poly data onto the input image into the slice view
   // - Points are specified in current XY space
-  vtkSmartPointer<vtkOrientedImageData> polyMaskImage = vtkSmartPointer<vtkOrientedImageData>::New();
-  qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(polyData, polyMaskImage, sliceWidget);
+  Q_D(qSlicerSegmentEditorAbstractLabelEffect);
 
-  // Append poly mask onto input image
-  qSlicerSegmentEditorAbstractLabelEffect::appendImage(input, polyMaskImage);
+  if (!input)
+    {
+
+    }
+
+  if (!polyData)
+    {
+
+    }
+
+  if (polyData->GetNumberOfPolys() < 1)
+    {
+    if (polyData->GetNumberOfLines() < 1)
+      {
+      //TODO: Error
+      return;
+      }
+    d->createMaskImageFromContour(polyData, input, sliceWidget);
+    }
+  else
+    {
+    d->createMaskImageFromPolyData(polyData, input);
+    }
 }
 
-//-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* appendedImage)
+class LabelPipeline
 {
-  if (!inputImage || !appendedImage)
+public:
+  LabelPipeline()
     {
-    qCritical() << Q_FUNC_INFO << ": Invalid inputs!";
+
+    };
+  ~LabelPipeline()
+    {
+    };
+};
+
+//-----------------------------------------------------------------------------
+void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(vtkPolyData* contourPolyData, vtkOrientedImageData* outputMask, qMRMLSliceWidget* sliceWidget)
+{
+
+  Q_Q(qSlicerSegmentEditorAbstractLabelEffect);
+
+  if (!outputMask)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentationNode";
     return;
     }
 
-  // Make sure appended image has the same lattice as the input image
-  vtkSmartPointer<vtkOrientedImageData> resampledAppendedImage = vtkSmartPointer<vtkOrientedImageData>::New();
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
-    appendedImage, inputImage, resampledAppendedImage);
+  if (!q->parameterSetNode())
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid segment editor parameter set node!";
+    return;
+    }
 
-  // Add image created from poly data to input image
-  vtkSmartPointer<vtkImageMathematics> imageMath = vtkSmartPointer<vtkImageMathematics>::New();
-  imageMath->SetInput1Data(inputImage);
-  imageMath->SetInput2Data(resampledAppendedImage);
-  imageMath->SetOperationToMax();
-  imageMath->Update();
-  inputImage->DeepCopy(imageMath->GetOutput());
+  vtkMRMLSegmentationNode* segmentationNode = q->parameterSetNode()->GetSegmentationNode();
+  if (!segmentationNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentationNode";
+    return;
+    }
+
+  //TODO: more checks
+
+  vtkNew<vtkMatrix4x4> imageToWorldMatrix;
+  outputMask->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
+
+  vtkNew<vtkMatrix4x4> inverseImageToWorldMatrix;
+  inverseImageToWorldMatrix->DeepCopy(imageToWorldMatrix.GetPointer());
+  inverseImageToWorldMatrix->Invert();
+
+  vtkCellArray* lines = contourPolyData->GetLines();
+
+  vtkNew<vtkIdList> line;
+  lines->GetCell(0, line.GetPointer());
+
+  if (line->GetId(0) != line->GetId(line->GetNumberOfIds()-1))
+    {
+    line->InsertNextId(line->GetId(0));
+    lines->Initialize();
+    lines->InsertNextCell(line.GetPointer());
+    contourPolyData->SetLines(lines);
+    }
+
+  bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
+  vtkNew<vtkCleanPolyData> cleanPolyData;
+  cleanPolyData->SetInputData(contourPolyData);
+  cleanPolyData->Update();
+
+  double* xyBounds = cleanPolyData->GetOutput()->GetBounds();
+
+  vtkNew<vtkLinearExtrusionFilter> linearExtrusionFilter;
+  linearExtrusionFilter->SetInputConnection(cleanPolyData->GetOutputPort());
+  linearExtrusionFilter->SetScaleFactor(1.0);
+
+  //vtkNew<vtkRibbonFilter> ribbonFilter;
+  //ribbonFilter->SetInputConnection(cleanPolyData->GetOutputPort());
+  //ribbonFilter->SetWidth(0.5);
+  //ribbonFilter->SetAngle(90.0);
+  //ribbonFilter->SetDefaultNormal(0,0,1);
+  //ribbonFilter->UseDefaultNormalOn();
+
+  vtkNew<vtkFillHolesFilter> fillHolesFilter;
+  fillHolesFilter->SetInputConnection(linearExtrusionFilter->GetOutputPort());
+  fillHolesFilter->SetHoleSize(VTK_DOUBLE_MAX);
+
+  //vtkNew<vtkPlaneSource> upperPlane;
+  //upperPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4] + 1.0);
+  //upperPlane->SetPoint1(xyBounds[0], xyBounds[3], xyBounds[4] + 1.0);
+  //upperPlane->SetPoint2(xyBounds[1], xyBounds[2], xyBounds[4] + 1.0);
+  //upperPlane->SetNormal(0.0, 0.0, -1.0);
+  //upperPlane->Update();
+
+  //vtkNew<vtkPlaneSource> lowerPlane;
+  //lowerPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4]);
+  //lowerPlane->SetPoint1(xyBounds[0], xyBounds[3], xyBounds[4]);
+  //lowerPlane->SetPoint2(xyBounds[1], xyBounds[2], xyBounds[4]);
+  //lowerPlane->SetNormal(0.0, 0.0, 1.0);
+  //lowerPlane->Update();
+
+  //vtkNew<vtkAppendPolyData> appendPolydata;
+  //appendPolydata->SetInputConnection(linearExtrusionFilter->GetOutputPort());
+  //appendPolydata->AddInputDataObject(upperPlane->GetOutput());
+  //appendPolydata->AddInputDataObject(lowerPlane->GetOutput());
+
+  //vtkNew<vtkPlane> upperPlane;
+  //upperPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4]+1.0);
+  //upperPlane->SetNormal(0, 0, -1);
+
+  //vtkNew<vtkPlane> lowerPlane;
+  //lowerPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4]);
+  //lowerPlane->SetNormal(0, 0, 1);
+
+  //vtkNew<vtkPlaneCollection> planeCollection;
+  //planeCollection->AddItem(upperPlane.GetPointer());
+  //planeCollection->AddItem(lowerPlane.GetPointer());
+
+  //vtkNew<vtkClipClosedSurface> clipClosedSurface;
+  //clipClosedSurface->SetInputConnection(linearExtrusionFilter->GetOutputPort());
+  //clipClosedSurface->SetClippingPlanes(planeCollection.GetPointer());
+
+  vtkMatrix4x4* sliceXyToRas = sliceWidget->sliceLogic()->GetSliceNode()->GetXYToRAS();
+  vtkNew<vtkTransform> sliceXyToIJKTransform;
+  sliceXyToIJKTransform->PostMultiply();
+  sliceXyToIJKTransform->Identity();
+  //sliceXyToIJKTransform->Translate(0.0,0.0,-0.5);
+  sliceXyToIJKTransform->Concatenate(sliceXyToRas);
+  sliceXyToIJKTransform->Concatenate(inverseImageToWorldMatrix.GetPointer());
+
+  vtkNew<vtkTransformPolyDataFilter> transformPolyDataFilter;
+  transformPolyDataFilter->SetInputConnection(fillHolesFilter->GetOutputPort());
+  //transformPolyDataFilter->SetInputData(polyData);
+  transformPolyDataFilter->SetTransform(sliceXyToIJKTransform.GetPointer());
+  transformPolyDataFilter->Update();
+
+  //double xyNormal[4] = {0,0,1,0};
+  //double ijkNormal[4] = {0,0,0,0};
+  //sliceXyToIJKTransform->MultiplyPoint(xyNormal, ijkNormal);
+  //ribbonFilter->SetDefaultNormal(ijkNormal);
+  //ribbonFilter->UseDefaultNormalOn();
+
+  //vtkNew<vtkPolyDataNormals> normalFilter;
+  //normalFilter->SetInputConnection(transformPolyDataFilter->GetOutputPort());
+  //normalFilter->ConsistencyOn();
+  //normalFilter->Update();
+
+  vtkNew<vtkPolyDataWriter> writer;
+  writer->SetInputConnection(transformPolyDataFilter->GetOutputPort());
+  writer->SetFileName("E:\\test\\abc.vtk");
+  writer->Update();
+
+  this->createMaskImageFromPolyData(transformPolyDataFilter->GetOutput(), outputMask);
+
 }
 
+
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPolyData* polyData, vtkOrientedImageData* outputMask, qMRMLSliceWidget* sliceWidget)
+void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromPolyData(vtkPolyData* polyData, vtkOrientedImageData* outputMask)
 {
-  if (!polyData || !outputMask)
+  // Rasterize a poly data onto the input image into the slice view
+  // - Points are specified in current XY space
+
+  Q_Q(qSlicerSegmentEditorAbstractLabelEffect);
+
+  vtkSmartPointer<vtkOrientedImageData> modifierLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+  modifierLabelmap->DeepCopy(q->defaultModifierLabelmap());
+
+  if (!modifierLabelmap)
     {
-    qCritical() << Q_FUNC_INFO << ": Invalid inputs!";
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentationNode";
     return;
     }
-  vtkMRMLSliceNode* sliceNode = vtkMRMLSliceNode::SafeDownCast(
-    qSlicerSegmentEditorAbstractEffect::viewNode(sliceWidget) );
-  if (!sliceNode)
+
+  if (!q->parameterSetNode())
     {
-    qCritical() << Q_FUNC_INFO << ": Failed to get slice node!";
+    qCritical() << Q_FUNC_INFO << ": Invalid segment editor parameter set node!";
     return;
     }
 
-  // Need to know the mapping from RAS into polygon space
-  // so the painter can use this as a mask
-  // - Need the bounds in RAS space
-  // - Need to get an IJKToRAS for just the mask area
-  // - Directions are the XYToRAS for this slice
-  // - Origin is the lower left of the polygon bounds
-  // - TODO: need to account for the boundary pixels
-  //
-  // Note: uses the slicer2-based vtkImageFillROI filter
-  vtkSmartPointer<vtkMatrix4x4> maskIjkToRasMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-  maskIjkToRasMatrix->DeepCopy(sliceNode->GetXYToRAS());
+  vtkMRMLSegmentationNode* segmentationNode = q->parameterSetNode()->GetSegmentationNode();
+  if (!segmentationNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentationNode";
+    return;
+    }
 
-  polyData->GetPoints()->Modified();
-  double bounds[6] = {0,0,0,0,0,0};
-  polyData->GetBounds(bounds);
+  q->saveStateForUndo();
 
-  double xlo = bounds[0] - 1.0;
-  double xhi = bounds[1];
-  double ylo = bounds[2] - 1.0;
-  double yhi = bounds[3];
+  vtkNew<vtkMatrix4x4> imageToWorldMatrix;
+  outputMask->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
 
-  double originXYZ[3] = {xlo, ylo, 0.0};
-  double originRAS[3] = {0.0,0.0,0.0};
-  qSlicerSegmentEditorAbstractEffect::xyzToRas(originXYZ, originRAS, sliceWidget);
+  vtkNew<vtkMatrix4x4> inverseImageToWorldMatrix;
+  inverseImageToWorldMatrix->DeepCopy(imageToWorldMatrix.GetPointer());
+  inverseImageToWorldMatrix->Invert();
 
-  maskIjkToRasMatrix->SetElement(0, 3, originRAS[0]);
-  maskIjkToRasMatrix->SetElement(1, 3, originRAS[1]);
-  maskIjkToRasMatrix->SetElement(2, 3, originRAS[2]);
+  bool masterRepresentationIsFractionalLabelmap = false;
 
-  // Get a good size for the draw buffer
-  // - Needs to include the full region of the polygon
-  // - Plus a little extra
-  //
-  // Round to int and add extra pixel for both sides
-  // TODO: figure out why we need to add buffer pixels on each
-  //   side for the width in order to end up with a single extra
-  //   pixel in the rasterized image map.  Probably has to
-  //   do with how boundary conditions are handled in the filler
-  int w = (int)(xhi - xlo) + 32;
-  int h = (int)(yhi - ylo) + 32;
 
-  vtkSmartPointer<vtkOrientedImageData> imageData = vtkSmartPointer<vtkOrientedImageData>::New();
-  imageData->SetDimensions(w, h, 1);
-  imageData->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
+  double* boundsRas = polyData->GetBounds();
 
-  // Move the points so the lower left corner of the bounding box is at 1, 1 (to avoid clipping)
-  vtkSmartPointer<vtkTransform> translate = vtkSmartPointer<vtkTransform>::New();
-  translate->Translate(-xlo, -ylo, 0.0);
+  int dimensions[3] = { ceil(boundsRas[1]) - floor(boundsRas[0]) + 2,
+                        ceil(boundsRas[3]) - floor(boundsRas[2]) + 2,
+                        ceil(boundsRas[5]) - floor(boundsRas[4]) + 2 };
 
-  vtkSmartPointer<vtkPoints> drawPoints = vtkSmartPointer<vtkPoints>::New();
-  drawPoints->Reset();
-  translate->TransformPoints(polyData->GetPoints(), drawPoints);
-  drawPoints->Modified();
+  vtkNew<vtkPolyDataToImageStencil> polyDataToStencil;
+  polyDataToStencil->SetInputData(polyData);
 
-  vtkSmartPointer<vtkImageFillROI> fill = vtkSmartPointer<vtkImageFillROI>::New();
-  fill->SetInputData(imageData);
-  fill->SetValue(1);
-  fill->SetPoints(drawPoints);
-  fill->Update();
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    double offset = 5.0/12.0; //TODO
+    polyDataToStencil->SetOutputWholeExtent(0, dimensions[0]*6-1, 0, dimensions[1]*6-1, 0, dimensions[2]*6-1);
+    polyDataToStencil->SetOutputOrigin(floor(boundsRas[0])-1 - offset, floor(boundsRas[2])-1 - offset, floor(boundsRas[4])-1 - offset);
+    polyDataToStencil->SetOutputSpacing(1.0/6.0, 1.0/6.0, 1.0/6.0);
+    }
+  else
+    {
+    polyDataToStencil->SetOutputWholeExtent(0, dimensions[0]-1, 0, dimensions[1]-1, 0, dimensions[2]-1);
+    polyDataToStencil->SetOutputOrigin(floor(boundsRas[0])-1, floor(boundsRas[2])-1, floor(boundsRas[4])-1);
+    polyDataToStencil->SetOutputSpacing(1.0, 1.0, 1.0);
+    }
 
-  outputMask->DeepCopy(fill->GetOutput());
-  outputMask->SetGeometryFromImageToWorldMatrix(maskIjkToRasMatrix);
+  vtkNew<vtkImageStencilToImage> stencilToImage;
+  stencilToImage->SetInputConnection(polyDataToStencil->GetOutputPort());
+  stencilToImage->SetInsideValue(q->m_FillValue);
+  stencilToImage->SetOutsideValue(q->m_EraseValue);
+  stencilToImage->SetOutputScalarType(modifierLabelmap->GetScalarType());
+  stencilToImage->Update();
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryLabelmapToFractionalLabelmap;
+    resampleBinaryLabelmapToFractionalLabelmap->SetInputConnection(stencilToImage->GetOutputPort());
+    resampleBinaryLabelmapToFractionalLabelmap->SetOutputMinimumValue(-108);
+    resampleBinaryLabelmapToFractionalLabelmap->SetOutputScalarType(VTK_CHAR);
+    int outputExtent[6] = {0, dimensions[0]-1, 0, dimensions[1]-1, 0, dimensions[2]-1};
+    resampleBinaryLabelmapToFractionalLabelmap->SetOutputExtent(outputExtent);
+    resampleBinaryLabelmapToFractionalLabelmap->Update();
+    outputMask->DeepCopy(resampleBinaryLabelmapToFractionalLabelmap->GetOutput());
+    }
+  else
+    {
+    outputMask->DeepCopy(stencilToImage->GetOutput());
+    }
+
+  outputMask->DeepCopy(stencilToImage->GetOutput());
+  outputMask->SetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
+  outputMask->SetOrigin(imageToWorldMatrix->MultiplyDoublePoint(polyDataToStencil->GetOutputOrigin()));
+
+  vtkFractionalLogicalOperations::Write(outputMask, "E:\\test\\polyMask.nrrd");
+
+  return;
 }
 
 //-----------------------------------------------------------------------------
