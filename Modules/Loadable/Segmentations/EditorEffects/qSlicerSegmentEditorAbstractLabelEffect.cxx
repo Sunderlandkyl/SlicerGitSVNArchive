@@ -163,12 +163,14 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
 
   if (!input)
     {
-
+    //TODO: Error
+    return;
     }
 
   if (!polyData)
     {
-
+    //TODO: Error
+    return;
     }
 
   if (polyData->GetNumberOfPolys() < 1)
@@ -185,18 +187,6 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
     d->createMaskImageFromPolyData(polyData, input);
     }
 }
-
-class LabelPipeline
-{
-public:
-  LabelPipeline()
-    {
-
-    };
-  ~LabelPipeline()
-    {
-    };
-};
 
 //-----------------------------------------------------------------------------
 void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(vtkPolyData* contourPolyData, vtkOrientedImageData* outputMask, qMRMLSliceWidget* sliceWidget)
@@ -237,13 +227,34 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
   vtkNew<vtkIdList> line;
   lines->GetCell(0, line.GetPointer());
 
+  vtkNew<vtkIdList> lowerLine;
+  vtkNew<vtkIdList> upperLine;
+
   if (line->GetId(0) != line->GetId(line->GetNumberOfIds()-1))
     {
     line->InsertNextId(line->GetId(0));
     lines->Initialize();
-    lines->InsertNextCell(line.GetPointer());
-    contourPolyData->SetLines(lines);
     }
+  lines->InsertNextCell(line.GetPointer());
+
+  vtkPoints* linePoints = contourPolyData->GetPoints();
+
+  for (int i=0; i < line->GetNumberOfIds(); ++i)
+    {
+    double currentPoint[3] = {0,0,0};
+    linePoints->GetPoint(line->GetId(i), currentPoint);
+
+    currentPoint[3] = 0.5;
+    upperLine->InsertNextId(linePoints->InsertNextPoint(currentPoint));
+    lowerLine->DeepCopy(line.GetPointer());
+
+    }
+
+  contourPolyData->SetLines(lines);
+  contourPolyData->SetPoints(linePoints);
+
+  vtkNew<vtkPolygon> lowerPolygon;
+  lowerP
 
   bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
 
@@ -256,6 +267,8 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
   vtkNew<vtkLinearExtrusionFilter> linearExtrusionFilter;
   linearExtrusionFilter->SetInputConnection(cleanPolyData->GetOutputPort());
   linearExtrusionFilter->SetScaleFactor(1.0);
+  linearExtrusionFilter->SetExtrusionTypeToVectorExtrusion();
+  linearExtrusionFilter->SetVector(0.0, 0.0, 1.0);
 
   //vtkNew<vtkRibbonFilter> ribbonFilter;
   //ribbonFilter->SetInputConnection(cleanPolyData->GetOutputPort());
@@ -307,7 +320,7 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
   vtkNew<vtkTransform> sliceXyToIJKTransform;
   sliceXyToIJKTransform->PostMultiply();
   sliceXyToIJKTransform->Identity();
-  //sliceXyToIJKTransform->Translate(0.0,0.0,-0.5);
+  sliceXyToIJKTransform->Translate(0.0,0.0,-0.5);
   sliceXyToIJKTransform->Concatenate(sliceXyToRas);
   sliceXyToIJKTransform->Concatenate(inverseImageToWorldMatrix.GetPointer());
 
@@ -323,17 +336,17 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
   //ribbonFilter->SetDefaultNormal(ijkNormal);
   //ribbonFilter->UseDefaultNormalOn();
 
-  //vtkNew<vtkPolyDataNormals> normalFilter;
-  //normalFilter->SetInputConnection(transformPolyDataFilter->GetOutputPort());
-  //normalFilter->ConsistencyOn();
-  //normalFilter->Update();
+  vtkNew<vtkPolyDataNormals> normalFilter;
+  normalFilter->SetInputConnection(transformPolyDataFilter->GetOutputPort());
+  normalFilter->ConsistencyOn();
+  normalFilter->Update();
 
   vtkNew<vtkPolyDataWriter> writer;
-  writer->SetInputConnection(transformPolyDataFilter->GetOutputPort());
+  writer->SetInputConnection(normalFilter->GetOutputPort());
   writer->SetFileName("E:\\test\\abc.vtk");
   writer->Update();
 
-  this->createMaskImageFromPolyData(transformPolyDataFilter->GetOutput(), outputMask);
+  this->createMaskImageFromPolyData(normalFilter->GetOutput(), outputMask);
 
 }
 
