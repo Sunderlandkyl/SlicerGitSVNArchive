@@ -67,6 +67,7 @@
 #include <vtkClipPolyData.h>
 #include <vtkClipClosedSurface.h>
 #include <vtkPlaneCollection.h>
+#include <vtkPolygon.h>
 
 #include <vtkPlane.h>
 #include <vtkCutter.h>
@@ -79,6 +80,7 @@
 #include "qMRMLSliceWidget.h"
 #include "vtkMRMLSliceLogic.h"
 #include "vtkMRMLSliceLayerLogic.h"
+#include "vtkImageFillROI.h"
 
 
 // MRML includes
@@ -215,6 +217,22 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
 
   //TODO: more checks
 
+  vtkCellArray* lines = contourPolyData->GetLines();
+
+  vtkNew<vtkIdList> line;
+  lines->GetCell(0, line.GetPointer());
+
+  if (line->GetId(0) != line->GetId(line->GetNumberOfIds()-1))
+    {
+    line->InsertNextId(line->GetId(0));
+    lines->Initialize();
+    lines->InsertNextCell(line.GetPointer());
+    }
+
+  bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
+  double* xyBounds = contourPolyData->GetBounds();
+
   vtkNew<vtkMatrix4x4> imageToWorldMatrix;
   outputMask->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
 
@@ -222,131 +240,53 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
   inverseImageToWorldMatrix->DeepCopy(imageToWorldMatrix.GetPointer());
   inverseImageToWorldMatrix->Invert();
 
-  vtkCellArray* lines = contourPolyData->GetLines();
-
-  vtkNew<vtkIdList> line;
-  lines->GetCell(0, line.GetPointer());
-
-  vtkNew<vtkIdList> lowerLine;
-  vtkNew<vtkIdList> upperLine;
-
-  if (line->GetId(0) != line->GetId(line->GetNumberOfIds()-1))
-    {
-    line->InsertNextId(line->GetId(0));
-    lines->Initialize();
-    }
-  lines->InsertNextCell(line.GetPointer());
-
-  vtkPoints* linePoints = contourPolyData->GetPoints();
-
-  for (int i=0; i < line->GetNumberOfIds(); ++i)
-    {
-    double currentPoint[3] = {0,0,0};
-    linePoints->GetPoint(line->GetId(i), currentPoint);
-
-    currentPoint[3] = 0.5;
-    upperLine->InsertNextId(linePoints->InsertNextPoint(currentPoint));
-    lowerLine->DeepCopy(line.GetPointer());
-
-    }
-
-  contourPolyData->SetLines(lines);
-  contourPolyData->SetPoints(linePoints);
-
-  vtkNew<vtkPolygon> lowerPolygon;
-  lowerP
-
-  bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
-
-  vtkNew<vtkCleanPolyData> cleanPolyData;
-  cleanPolyData->SetInputData(contourPolyData);
-  cleanPolyData->Update();
-
-  double* xyBounds = cleanPolyData->GetOutput()->GetBounds();
-
-  vtkNew<vtkLinearExtrusionFilter> linearExtrusionFilter;
-  linearExtrusionFilter->SetInputConnection(cleanPolyData->GetOutputPort());
-  linearExtrusionFilter->SetScaleFactor(1.0);
-  linearExtrusionFilter->SetExtrusionTypeToVectorExtrusion();
-  linearExtrusionFilter->SetVector(0.0, 0.0, 1.0);
-
-  //vtkNew<vtkRibbonFilter> ribbonFilter;
-  //ribbonFilter->SetInputConnection(cleanPolyData->GetOutputPort());
-  //ribbonFilter->SetWidth(0.5);
-  //ribbonFilter->SetAngle(90.0);
-  //ribbonFilter->SetDefaultNormal(0,0,1);
-  //ribbonFilter->UseDefaultNormalOn();
-
-  vtkNew<vtkFillHolesFilter> fillHolesFilter;
-  fillHolesFilter->SetInputConnection(linearExtrusionFilter->GetOutputPort());
-  fillHolesFilter->SetHoleSize(VTK_DOUBLE_MAX);
-
-  //vtkNew<vtkPlaneSource> upperPlane;
-  //upperPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4] + 1.0);
-  //upperPlane->SetPoint1(xyBounds[0], xyBounds[3], xyBounds[4] + 1.0);
-  //upperPlane->SetPoint2(xyBounds[1], xyBounds[2], xyBounds[4] + 1.0);
-  //upperPlane->SetNormal(0.0, 0.0, -1.0);
-  //upperPlane->Update();
-
-  //vtkNew<vtkPlaneSource> lowerPlane;
-  //lowerPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4]);
-  //lowerPlane->SetPoint1(xyBounds[0], xyBounds[3], xyBounds[4]);
-  //lowerPlane->SetPoint2(xyBounds[1], xyBounds[2], xyBounds[4]);
-  //lowerPlane->SetNormal(0.0, 0.0, 1.0);
-  //lowerPlane->Update();
-
-  //vtkNew<vtkAppendPolyData> appendPolydata;
-  //appendPolydata->SetInputConnection(linearExtrusionFilter->GetOutputPort());
-  //appendPolydata->AddInputDataObject(upperPlane->GetOutput());
-  //appendPolydata->AddInputDataObject(lowerPlane->GetOutput());
-
-  //vtkNew<vtkPlane> upperPlane;
-  //upperPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4]+1.0);
-  //upperPlane->SetNormal(0, 0, -1);
-
-  //vtkNew<vtkPlane> lowerPlane;
-  //lowerPlane->SetOrigin(xyBounds[0], xyBounds[2], xyBounds[4]);
-  //lowerPlane->SetNormal(0, 0, 1);
-
-  //vtkNew<vtkPlaneCollection> planeCollection;
-  //planeCollection->AddItem(upperPlane.GetPointer());
-  //planeCollection->AddItem(lowerPlane.GetPointer());
-
-  //vtkNew<vtkClipClosedSurface> clipClosedSurface;
-  //clipClosedSurface->SetInputConnection(linearExtrusionFilter->GetOutputPort());
-  //clipClosedSurface->SetClippingPlanes(planeCollection.GetPointer());
-
   vtkMatrix4x4* sliceXyToRas = sliceWidget->sliceLogic()->GetSliceNode()->GetXYToRAS();
   vtkNew<vtkTransform> sliceXyToIJKTransform;
   sliceXyToIJKTransform->PostMultiply();
   sliceXyToIJKTransform->Identity();
-  sliceXyToIJKTransform->Translate(0.0,0.0,-0.5);
+//  sliceXyToIJKTransform->Translate(0.0,0.0,-0.5);
   sliceXyToIJKTransform->Concatenate(sliceXyToRas);
   sliceXyToIJKTransform->Concatenate(inverseImageToWorldMatrix.GetPointer());
 
   vtkNew<vtkTransformPolyDataFilter> transformPolyDataFilter;
-  transformPolyDataFilter->SetInputConnection(fillHolesFilter->GetOutputPort());
-  //transformPolyDataFilter->SetInputData(polyData);
+  transformPolyDataFilter->SetInputData(contourPolyData);
   transformPolyDataFilter->SetTransform(sliceXyToIJKTransform.GetPointer());
   transformPolyDataFilter->Update();
 
-  //double xyNormal[4] = {0,0,1,0};
-  //double ijkNormal[4] = {0,0,0,0};
-  //sliceXyToIJKTransform->MultiplyPoint(xyNormal, ijkNormal);
-  //ribbonFilter->SetDefaultNormal(ijkNormal);
-  //ribbonFilter->UseDefaultNormalOn();
-
-  vtkNew<vtkPolyDataNormals> normalFilter;
-  normalFilter->SetInputConnection(transformPolyDataFilter->GetOutputPort());
-  normalFilter->ConsistencyOn();
-  normalFilter->Update();
-
   vtkNew<vtkPolyDataWriter> writer;
-  writer->SetInputConnection(normalFilter->GetOutputPort());
+  writer->SetInputConnection(transformPolyDataFilter->GetOutputPort());
   writer->SetFileName("E:\\test\\abc.vtk");
   writer->Update();
 
-  this->createMaskImageFromPolyData(normalFilter->GetOutput(), outputMask);
+  //this->createMaskImageFromPolyData(transformPolyDataFilter->GetOutput(), outputMask);
+
+  vtkNew<vtkMatrix4x4> identityMatrix;
+  identityMatrix->Identity();
+
+  double* boundsRas = transformPolyDataFilter->GetOutput()->GetBounds();
+
+  int dimensions[3] = { ceil(boundsRas[1]) - floor(boundsRas[0]) + 1,
+                        ceil(boundsRas[3]) - floor(boundsRas[2]) + 1,
+                        ceil(boundsRas[5]) - floor(boundsRas[4]) + 1 };
+
+  for (int i=0; i<3; ++i)
+    {
+      dimensions[i] > 1 ? ++dimensions[i] : false;
+    }
+
+  vtkNew<vtkOrientedImageData> modifierLabelmap;
+  modifierLabelmap->SetExtent(0, dimensions[0]-1, 0, dimensions[1]-1, 0, dimensions[2]-1);
+  modifierLabelmap->SetOrigin(floor(boundsRas[0])-1, floor(boundsRas[2])-1, floor(boundsRas[4])-1);
+  modifierLabelmap->SetSpacing(1.0, 1.0, 1.0);
+  modifierLabelmap->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
+
+  vtkNew<vtkImageFillROI> imageFillROI;
+  imageFillROI->SetPoints(transformPolyDataFilter->GetOutput()->GetPoints());
+  imageFillROI->SetInputData(modifierLabelmap.GetPointer());
+  imageFillROI->Update();
+
+  outputMask->DeepCopy(imageFillROI->GetOutput());
+  outputMask->SetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
 
 }
 
