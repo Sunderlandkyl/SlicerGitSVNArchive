@@ -34,6 +34,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
+#include "vtkFractionalLogicalOperations.h"
 
 // Segment editor effects includes
 #include "qSlicerSegmentEditorAbstractEffect.h"
@@ -790,17 +791,30 @@ bool qMRMLSegmentEditorWidgetPrivate::updateMaskLabelmap()
     vtkSmartPointer<vtkMatrix4x4> mergedImageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
     maskImage->GetImageToWorldMatrix(mergedImageToWorldMatrix);
 
-    vtkSmartPointer<vtkImageThreshold> threshold = vtkSmartPointer<vtkImageThreshold>::New();
-    threshold->SetInputData(maskImage);
-    threshold->SetInValue(paintInsideSegments ? 1 : 0);
-    threshold->SetOutValue(paintInsideSegments ? 0 : 1);
-    threshold->ReplaceInOn();
-    threshold->ThresholdByLower(0);
-    threshold->SetOutputScalarType(VTK_UNSIGNED_CHAR);
-    threshold->Update();
+    bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      if (!paintInsideSegments)
+        {
+        vtkFractionalLogicalOperations::Invert(maskImage);
+        }
+      std::cout << "A" << std::endl;
+      }
+    else
+      {
 
-    maskImage->DeepCopy(threshold->GetOutput());
-    maskImage->SetImageToWorldMatrix(mergedImageToWorldMatrix);
+      vtkSmartPointer<vtkImageThreshold> threshold = vtkSmartPointer<vtkImageThreshold>::New();
+      threshold->SetInputData(maskImage);
+      threshold->SetInValue(paintInsideSegments ? 1 : 0);
+      threshold->SetOutValue(paintInsideSegments ? 0 : 1);
+      threshold->ReplaceInOn();
+      threshold->ThresholdByLower(0);
+      threshold->SetOutputScalarType(VTK_UNSIGNED_CHAR);
+      threshold->Update();
+
+      maskImage->DeepCopy(threshold->GetOutput());
+      maskImage->SetImageToWorldMatrix(mergedImageToWorldMatrix);
+      }
     }
   return true;
 }

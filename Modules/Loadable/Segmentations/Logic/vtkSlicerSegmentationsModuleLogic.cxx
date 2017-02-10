@@ -806,13 +806,31 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(vtkMRMLSegm
     return false;
     }
 
+  bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
   // Make sure binary labelmap representation exists in segment
-  bool binaryLabelmapPresent = segmentationNode->GetSegmentation()->CreateRepresentation(
-    vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName());
-  if (!binaryLabelmapPresent)
+  bool labelmapPresent = (
+    (!masterRepresentationIsFractionalLabelmap && segmentationNode->GetSegmentation()->CreateRepresentation(
+      vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName())) ||
+    (masterRepresentationIsFractionalLabelmap && segmentationNode->GetSegmentation()->CreateRepresentation(
+      vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())));
+  if (!labelmapPresent)
     {
-    vtkErrorWithObjectMacro(segmentationNode, "ExportSegmentsToLabelmapNode: Unable to convert segment to binary labelmap representation!");
+    vtkErrorWithObjectMacro(segmentationNode, "ExportSegmentsToLabelmapNode: Unable to convert segment to labelmap representation!");
     return false;
+    }
+
+  double scalarRange[2] = {0.0, 1.0};
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
+      segmentationNode->GetSegmentation()->GetNthSegment(0)->GetRepresentation(
+      vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+      {
+      scalarRange[0] = scalarRangeArray->GetValue(0);
+      scalarRange[1] = scalarRangeArray->GetValue(1);
+      }
     }
 
   // Use reference volume's parent transform if available, otherwise put under the same transform as segmentation node
@@ -870,7 +888,7 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(vtkMRMLSegm
     vtkAbstractTransform* segmentationToReferenceGeometryTransform = referenceGeometryToSegmentationTransform->GetInverse();
     segmentationToReferenceGeometryTransform->Update();
     vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(mergedImage_Segmentation, referenceGeometry_Reference, mergedImage_Reference,
-      false /* nearest neighbor interpolation*/, false /* no padding */, segmentationToReferenceGeometryTransform);
+      masterRepresentationIsFractionalLabelmap /* nearest neighbor interpolation*/, false /* no padding */, segmentationToReferenceGeometryTransform, scalarRange[0]);
     }
   else
     {
@@ -907,6 +925,7 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(vtkMRMLSegm
     labelmapNode->GetScene()->AddNode(newColorTable);
     labelmapNode->GetDisplayNode()->SetAndObserveColorNodeID(newColorTable->GetID());
     }
+
   // Copy segment colors to color table node
   vtkMRMLColorTableNode* colorTableNode = vtkMRMLColorTableNode::SafeDownCast(
     labelmapNode->GetDisplayNode()->GetColorNode() ); // Always valid, as it was created just above if was missing
@@ -921,15 +940,47 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(vtkMRMLSegm
     {
     exportedSegmentIDs = segmentIDs;
     }
-  colorTableNode->SetNumberOfColors(exportedSegmentIDs.size() + 1);
-  colorTableNode->GetLookupTable()->SetNumberOfTableValues(exportedSegmentIDs.size() + 1);
-  colorTableNode->SetColor(0, "Background", 0.0, 0.0, 0.0, 0.0);
-  short colorIndex = 1;
-  for (std::vector<std::string>::iterator segmentIt = exportedSegmentIDs.begin(); segmentIt != exportedSegmentIDs.end(); ++segmentIt, ++colorIndex)
+
+  if (masterRepresentationIsFractionalLabelmap)
     {
-    const char* segmentName = segmentationNode->GetSegmentation()->GetSegment(*segmentIt)->GetName();
-    vtkVector3d color = displayNode->GetSegmentColor(*segmentIt);
-    colorTableNode->SetColor(colorIndex, segmentName, color.GetX(), color.GetY(), color.GetZ());
+    colorTableNode->SetNumberOfColors(scalarRange[1]-scalarRange[0] + 1);
+    colorTableNode->GetLookupTable()->SetNumberOfTableValues(scalarRange[1]-scalarRange[0] + 1);
+    colorTableNode->GetLookupTable()->SetRange(scalarRange[0], scalarRange[1]);
+    colorTableNode->GetLookupTable()->SetRampToLinear();
+
+    double color[3] = {1.0,1.0,1.0};
+    double hsv[3] = {0,0,0};
+    vtkMath::RGBToHSV(color, hsv);
+    colorTableNode->GetLookupTable()->SetHueRange(hsv[0], hsv[0]);
+    colorTableNode->GetLookupTable()->SetSaturationRange(hsv[1], hsv[1]);
+    colorTableNode->GetLookupTable()->SetValueRange(hsv[2], hsv[2]);
+    colorTableNode->GetLookupTable()->SetAlphaRange(0.0, 1.0);
+    colorTableNode->GetLookupTable()->ForceBuild();
+
+    /*int colorIndex = 0;
+    for (double currentValue = scalarRange[0]; currentValue <= scalarRange[1]; ++currentValue)
+      {
+        double percent = (currentValue-scalarRange[0])/(scalarRange[1]-scalarRange[0]);
+        std::stringstream percentString;
+        percentString << 100.0 * percent << "%";
+        colorTableNode->SetColor(colorIndex, percentString.str().c_str(), 1.0, 1.0, 1.0, percent);
+        ++colorIndex;
+      }
+    colorTableNode->SetColor(0, "Background", 0.0, 0.0, 0.0, 0.0);*/
+
+    }
+  else
+    {
+    colorTableNode->SetNumberOfColors(exportedSegmentIDs.size() + 1);
+    colorTableNode->GetLookupTable()->SetNumberOfTableValues(exportedSegmentIDs.size() + 1);
+    colorTableNode->SetColor(0, "Background", 0.0, 0.0, 0.0, 0.0);
+    short colorIndex = 1;
+    for (std::vector<std::string>::iterator segmentIt = exportedSegmentIDs.begin(); segmentIt != exportedSegmentIDs.end(); ++segmentIt, ++colorIndex)
+      {
+      const char* segmentName = segmentationNode->GetSegmentation()->GetSegment(*segmentIt)->GetName();
+      vtkVector3d color = displayNode->GetSegmentColor(*segmentIt);
+      colorTableNode->SetColor(colorIndex, segmentName, color.GetX(), color.GetY(), color.GetZ());
+      }
     }
 
   return true;

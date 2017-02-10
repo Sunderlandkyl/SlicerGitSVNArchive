@@ -51,6 +51,10 @@ public:
   static void CopyFractionalParameters(vtkOrientedImageData* input, vtkOrientedImageData* originalLabelmap);
   static void CopyFractionalParameters(vtkOrientedImageData* input, vtkSegmentation* segmentation);
 
+  static void FractionalMask(vtkOrientedImageData* input, vtkOrientedImageData* mask);
+
+  //TODO
+  // static void ConvertFractionalImage(vtkOrientedImageData* input, template, output)?
   //static void GetScalarRange(vtkOrientedImageData* input, double scalarRange[2]);
 
 

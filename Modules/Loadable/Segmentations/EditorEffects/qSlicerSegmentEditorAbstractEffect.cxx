@@ -66,6 +66,8 @@
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
 #include <vtkWeakPointer.h>
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 
 #include <vtkOrientedImageDataResample.h>
 
@@ -269,6 +271,17 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
 
   vtkSmartPointer<vtkOrientedImageData> modifierLabelmap = modifierLabelmapInput;
 
+  bool masterRepresentationIsFractionalLabelmap = parameterSetNode->GetSegmentationNode()->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
+  double scalarRange[2] = {0.0, 1.0};
+  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
+    modifierLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+    {
+    scalarRange[0] = scalarRangeArray->GetValue(0);
+    scalarRange[1] = scalarRangeArray->GetValue(1);
+    }
+
   // Apply mask to modifier labelmap if paint over is turned off
   if (parameterSetNode->GetMaskMode() != vtkMRMLSegmentEditorNode::PaintAllowedEverywhere)
     {
@@ -281,7 +294,16 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       maskedModifierLabelmap->DeepCopy(modifierLabelmap);
       modifierLabelmap = maskedModifierLabelmap.GetPointer();
       }
-    this->applyImageMask(modifierLabelmap, maskImage, this->m_EraseValue, true); //TODO: when the mask is applied
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      //vtkFractionalLogicalOperations::FractionalMask(modifierLabelmap, maskImage);
+      vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskImage, modifierLabelmap, maskImage, true, false, NULL, scalarRange[0]);
+      vtkOrientedImageDataResample::MergeImage(modifierLabelmap, maskImage, modifierLabelmap, vtkOrientedImageDataResample::OPERATION_MINIMUM, maskImage->GetExtent(), scalarRange[0], scalarRange[1], NULL, scalarRange[0]);
+      }
+    else
+      {
+      this->applyImageMask(modifierLabelmap, maskImage, this->m_EraseValue, true); //TODO: when the mask is applied
+      }
     }
 
   // Apply threshold mask if paint threshold is turned on
@@ -373,9 +395,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   inverter->ReplaceInOn();
   inverter->ThresholdByLower(0);
   inverter->SetOutputScalarType(VTK_UNSIGNED_CHAR);
-
-  bool masterRepresentationIsFractionalLabelmap =
-    segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
 
   if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeSet)
     {

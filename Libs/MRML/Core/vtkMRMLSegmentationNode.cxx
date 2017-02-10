@@ -51,6 +51,8 @@
 #include <vtkStringArray.h>
 #include <vtkMatrix4x4.h>
 #include <vtkTransform.h>
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 
 // STD includes
 #include <algorithm>
@@ -491,7 +493,7 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
     return false;
     }
 
-  bool masterRepresentationIsFractionalLabelmap = ( this->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName() );
+  bool masterRepresentationIsFractionalLabelmap = this->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
 
   if (!( this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) && !masterRepresentationIsFractionalLabelmap ) &&
       !( this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()) && masterRepresentationIsFractionalLabelmap))
@@ -532,6 +534,7 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
       }
     vtkSegmentationConverter::DeserializeImageGeometry(commonGeometryString, commonGeometryImage);
     }
+
   commonGeometryImage->GetImageToWorldMatrix(mergedImageToWorldMatrix);
   int referenceDimensions[3] = {0,0,0};
   commonGeometryImage->GetDimensions(referenceDimensions);
@@ -563,7 +566,28 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
     }
 
   const short backgroundColorIndex = 0;
-  vtkOrientedImageDataResample::FillImage(mergedImageData, backgroundColorIndex);
+
+  double scalarRange[2] = {0.0, 1.0};
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
+      this->Segmentation->GetNthSegment(0)->GetRepresentation(
+      vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+      {
+      scalarRange[0] = scalarRangeArray->GetValue(0);
+      scalarRange[1] = scalarRangeArray->GetValue(1);
+      }
+    }
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkOrientedImageDataResample::FillImage(mergedImageData, scalarRange[0]);
+    }
+  else
+    {
+    vtkOrientedImageDataResample::FillImage(mergedImageData, backgroundColorIndex);
+    }
 
   // Skip the rest if there are no segments
   if (this->Segmentation->GetNumberOfSegments() == 0)
@@ -622,12 +646,6 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
       labelmap = resampledLabelmap;
       }
 
-    //if (masterRepresentationIsFractionalLabelmap)
-    //  {
-    //    labelmap->DeepCopy(this->GetSegmentation()->GetSegmentRepresentation(0, vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
-    //  }
-    //else
-    //  {
       // Copy image data voxels into merged labelmap with the proper color index
       vtkOrientedImageDataResample::ModifyImage(
             mergedImageData,
@@ -637,7 +655,28 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
             0,
             colorIndex);
       }
-    //}
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    // Specify the scalar range of values in the labelmap
+    vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
+    scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
+    scalarRangeArray->InsertNextValue(scalarRange[0]);
+    scalarRangeArray->InsertNextValue(scalarRange[1]);
+    mergedImageData->GetFieldData()->AddArray(scalarRangeArray);
+    //TODO
+    // Specify the surface threshold value for visualization
+    vtkSmartPointer<vtkDoubleArray> thresholdValueArray = vtkSmartPointer<vtkDoubleArray>::New();
+    thresholdValueArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
+    thresholdValueArray->InsertNextValue(0);
+    mergedImageData->GetFieldData()->AddArray(thresholdValueArray);
+    //TODO
+    // Specify the interpolation type for visualization
+    vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
+    interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
+    interpolationTypeArray->InsertNextValue(VTK_LINEAR_INTERPOLATION);
+    mergedImageData->GetFieldData()->AddArray(interpolationTypeArray);
+    }
 
   return true;
 }

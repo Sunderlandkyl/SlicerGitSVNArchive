@@ -27,6 +27,8 @@
 #include <vtkDoubleArray.h>
 #include <vtkIntArray.h>
 #include <vtkStringArray.h>
+#include <vtkImageConstantPad.h>
+#include <vtkImageMathematics.h>
 
 // Segmentation includes
 #include <vtkOrientedImageData.h>
@@ -352,6 +354,80 @@ void vtkFractionalLogicalOperations::GetThreshold(vtkOrientedImageData* input, d
     }
 
 }*/
+
+//----------------------------------------------------------------------------
+//TODO check
+template <class ImageScalarType, class MaskScalarType>
+void FractionalMaskGeneric(vtkOrientedImageData* input, vtkOrientedImageData* mask, const double scalarRange[2], ImageScalarType* inputTypePtr, MaskScalarType* maskTypePtr)
+{
+
+  vtkNotUsed(inputTypePtr);
+  vtkNotUsed(maskTypePtr);
+
+  ImageScalarType* inputPointer = (ImageScalarType*)input->GetScalarPointerForExtent(input->GetExtent());
+  MaskScalarType* maskPointer = (MaskScalarType*)input->GetScalarPointerForExtent(mask->GetExtent());
+
+  std::cout << input->GetExtent()[0] << " || " << input->GetExtent()[1] << " || " << input->GetExtent()[2] << " || " << input->GetExtent()[3] << " || " << input->GetExtent()[4] << " || " << input->GetExtent()[5] << std::endl;
+  std::cout << mask->GetExtent()[0] << " || " << mask->GetExtent()[1] << " || " << mask->GetExtent()[2] << " || " << mask->GetExtent()[3] << " || " << mask->GetExtent()[4] << " || " << mask->GetExtent()[5] << std::endl;
+
+  int dimensions[3] = {0,0,0};
+  input->GetDimensions(dimensions);
+
+  int numberOfVoxels = dimensions[0]*dimensions[1]*dimensions[2];
+
+  std::cout << scalarRange[0] << " || " << scalarRange[1] << std::endl;
+
+  for (int i=0; i < numberOfVoxels; ++i)
+    {
+    double maskValue = (static_cast<double>(*maskPointer)-scalarRange[0]) / (scalarRange[1] - scalarRange[0]);
+    double imageValue = (static_cast<double>(*inputPointer)-scalarRange[0]) / (scalarRange[1] - scalarRange[0]);
+
+    (*inputPointer) = static_cast<ImageScalarType>((imageValue*maskValue)*(scalarRange[1]-scalarRange[0]) + scalarRange[0]);
+
+    ++inputPointer;
+    ++maskPointer;
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkFractionalLogicalOperations::FractionalMask(vtkOrientedImageData* input, vtkOrientedImageData* mask)
+{
+
+  double scalarRange[2] = {0.0, 1.0};
+  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
+  mask->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+    {
+    scalarRange[0] = scalarRangeArray->GetValue(0);
+    scalarRange[1] = scalarRangeArray->GetValue(1);
+    }
+
+  vtkSmartPointer<vtkOrientedImageData> paddedMask = vtkSmartPointer<vtkOrientedImageData>::New();
+
+  vtkNew<vtkImageConstantPad> imageConstantPad;
+  imageConstantPad->SetInputData(mask);
+  imageConstantPad->SetConstant(scalarRange[0]);
+  imageConstantPad->SetOutputWholeExtent(input->GetExtent());
+  imageConstantPad->Update();
+
+  paddedMask->DeepCopy(imageConstantPad->GetOutput());
+
+  Write(input, "E:\\test\\preInput.nrrd");
+  Write(paddedMask, "E:\\test\\paddedMask.nrrd");
+
+
+  switch (vtkTemplate2PackMacro(input->GetScalarType(), paddedMask->GetScalarType()))
+  {
+  vtkTemplate2Macro(FractionalMaskGeneric(input, paddedMask, scalarRange, static_cast<VTK_T1*>(NULL), static_cast<VTK_T2*>(NULL)));
+  default:
+    //TODO error
+    return;
+  }
+
+  Write(input, "E:\\test\\postInput.nrrd");
+
+}
+
 
 //----------------------------------------------------------------------------
 void vtkFractionalLogicalOperations::Write(vtkImageData* image, const char* name)
