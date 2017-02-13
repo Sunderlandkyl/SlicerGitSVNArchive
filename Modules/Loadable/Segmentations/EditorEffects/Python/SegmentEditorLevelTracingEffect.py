@@ -209,4 +209,4 @@ class LevelTracingPipeline:
     slicer.testing = self
     # Apply poly data on modifier labelmap
     self.effect.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget)
-    self.effect.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
+    #self.effect.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)

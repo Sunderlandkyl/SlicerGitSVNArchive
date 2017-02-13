@@ -81,6 +81,7 @@
 #include "qMRMLSliceWidget.h"
 #include "vtkMRMLSliceLogic.h"
 #include "vtkMRMLSliceLayerLogic.h"
+#include "vtkImageFillROI.h"
 
 
 // MRML includes
@@ -238,68 +239,81 @@ void qSlicerSegmentEditorAbstractLabelEffectPrivate::createMaskImageFromContour(
   vtkNew<vtkPolyData> contourPolyData;
   contourPolyData->DeepCopy(cleanPolyData->GetOutput());
 
-  double* xyBounds = contourPolyData->GetBounds();
-
-  std::cout << outputMask->GetSpacing()[0] << " | " << outputMask->GetSpacing()[1] << " | " << outputMask->GetSpacing()[2] << std::endl;
-
-  vtkNew<vtkPolygon> contourPolygon;
-  contourPolygon->DeepCopy(contourPolyData->GetCell(0));
-
-  vtkNew<vtkIdList> polygonIds;
-  contourPolygon->Triangulate(polygonIds.GetPointer());
-
-  vtkNew<vtkCellArray> contourPolys;
-  for (int currentPolygonIndex = 0; currentPolygonIndex < polygonIds->GetNumberOfIds();  currentPolygonIndex += 3)
+  vtkMRMLSliceNode* sliceNode = vtkMRMLSliceNode::SafeDownCast(
+    qSlicerSegmentEditorAbstractEffect::viewNode(sliceWidget) );
+  if (!sliceNode)
     {
-    contourPolys->InsertNextCell(3);
-    contourPolys->InsertCellPoint(contourPolygon->GetPointId(polygonIds->GetId(currentPolygonIndex)));
-    contourPolys->InsertCellPoint(contourPolygon->GetPointId(polygonIds->GetId(currentPolygonIndex + 1)));
-    contourPolys->InsertCellPoint(contourPolygon->GetPointId(polygonIds->GetId(currentPolygonIndex + 2)));
+    qCritical() << Q_FUNC_INFO << ": Failed to get slice node!";
+    return;
     }
 
-  contourPolyData->SetPolys(contourPolys.GetPointer());
-
-  //vtkNew<vtkFillHolesFilter> fillHolesFilter;
-  //fillHolesFilter->SetInputData(contourPolyData.GetPointer());
-  //fillHolesFilter->SetHoleSize(VTK_DOUBLE_MAX);
-
-  vtkNew<vtkLinearExtrusionFilter> linearExtrusionFilter;
-  linearExtrusionFilter->SetInputData(contourPolyData.GetPointer());
-  //linearExtrusionFilter->SetInputConnection(fillHolesFilter->GetOutputPort());
-  linearExtrusionFilter->SetScaleFactor(1.0);
-  linearExtrusionFilter->SetExtrusionTypeToVectorExtrusion();
-  linearExtrusionFilter->SetVector(0.0, 0.0, 1.0);
-
-  vtkNew<vtkFillHolesFilter> fillHolesFilter;
-  fillHolesFilter->SetInputConnection(linearExtrusionFilter->GetOutputPort());
-  fillHolesFilter->SetHoleSize(VTK_DOUBLE_MAX);
-
-  vtkNew<vtkMatrix4x4> imageToWorldMatrix;
-  outputMask->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
-
-  vtkNew<vtkMatrix4x4> inverseImageToWorldMatrix;
-  inverseImageToWorldMatrix->DeepCopy(imageToWorldMatrix.GetPointer());
-  inverseImageToWorldMatrix->Invert();
-
-  vtkMatrix4x4* sliceXyToRas = sliceWidget->sliceLogic()->GetSliceNode()->GetXYToRAS();
-  vtkNew<vtkTransform> sliceXyToIJKTransform;
-  sliceXyToIJKTransform->PostMultiply();
-  sliceXyToIJKTransform->Identity();
-  sliceXyToIJKTransform->Translate(0.0,0.0,-0.5);
-  sliceXyToIJKTransform->Concatenate(sliceXyToRas);
-  sliceXyToIJKTransform->Concatenate(inverseImageToWorldMatrix.GetPointer());
+  vtkNew<vtkTransform> xyToSliceTransform;
+  xyToSliceTransform->PostMultiply();
+  xyToSliceTransform->SetMatrix(sliceNode->GetXYToSlice());
 
   vtkNew<vtkTransformPolyDataFilter> transformPolyDataFilter;
-  transformPolyDataFilter->SetInputConnection(fillHolesFilter->GetOutputPort());
-  transformPolyDataFilter->SetTransform(sliceXyToIJKTransform.GetPointer());
+  transformPolyDataFilter->SetInputData(contourPolyData.GetPointer());
+  transformPolyDataFilter->SetTransform(xyToSliceTransform.GetPointer());
   transformPolyDataFilter->Update();
 
+  vtkPolyData* slicePolyData = transformPolyDataFilter->GetOutput();
+  double* slicePolyDataBounds = slicePolyData->GetBounds();
+
+  int xlo = slicePolyDataBounds[0] - 1.0;
+  int xhi = slicePolyDataBounds[1] + 1.0;
+  int ylo = slicePolyDataBounds[2] - 1.0;
+  int yhi = slicePolyDataBounds[3] + 1.0;
+
+  std::cout << slicePolyDataBounds[0] << " || " << slicePolyDataBounds[0] << " || " << slicePolyDataBounds[1] << " || " << slicePolyDataBounds[2] << " || " << slicePolyDataBounds[3] << " || " << slicePolyDataBounds[4] << " || " << slicePolyDataBounds[5] << std::endl;
+  std::cout << xlo << " | " << xhi << " | " << ylo << " | " << yhi << std::endl;
+
+  int w = (int)(xhi-xlo) + 32;
+  int h = (int)(yhi-ylo) + 32;
+
+  double origin[3] = {xlo, ylo, 0};
+
+  //vtkNew<vtkTransform> translate;
+  //translate->Translate(-xlo, -ylo, 0);
+
+  //vtkSmartPointer<vtkPoints> drawPoints = vtkSmartPointer<vtkPoints>::New();
+  //drawPoints->Reset();
+  //translate->TransformPoints(slicePolyData->GetPoints(), drawPoints);
+  //drawPoints->Modified();
+
+
+  //vtkNew<vtkPolyDataToImageStencil> polyDataToStencil;
+  //polyDataToStencil->SetInputData(slicePolyData);
+  //polyDataToStencil->SetOutputOrigin(xlo, ylo, 0);
+  //polyDataToStencil->SetOutputWholeExtent(xlo, xhi, ylo, yhi, 0, 0);
+  //polyDataToStencil->SetOutputWholeExtent(0, w, 0, h, 0, 0);
+
+  //vtkNew<vtkImageStencilToImage> imageStencilToImage;
+  //imageStencilToImage->SetInputConnection(polyDataToStencil->GetOutputPort());
+  //imageStencilToImage->SetInsideValue(1.0);
+  //imageStencilToImage->SetOutsideValue(0.0);
+  //imageStencilToImage->Update();
+
+  //vtkFractionalLogicalOperations::Write(imageData, "E:\\test\\sliceImage.nrrd");
+
   vtkNew<vtkPolyDataWriter> writer;
-  writer->SetInputConnection(transformPolyDataFilter->GetOutputPort());
-  writer->SetFileName("E:\\test\\abc.vtk");
+  writer->SetInputData(slicePolyData);
+  writer->SetFileName("E:\\test\\slicePolydata.vtk");
   writer->Update();
 
-  this->createMaskImageFromPolyData(transformPolyDataFilter->GetOutput(), outputMask);
+  vtkSmartPointer<vtkImageData> imageData = vtkSmartPointer<vtkImageData>::New();
+
+
+  vtkNew<vtkImageFillROI> fill;
+  fill->SetInputData(imageData);
+  fill->SetValue(1);
+  fill->SetPoints(drawPoints);
+  fill->Update();
+
+  outputMask->DeepCopy(imageStencilToImage->GetOutput());
+  outputMask->SetGeometryFromImageToWorldMatrix(sliceNode->GetSliceToRAS());
+//  outputMask->SetOrigin(sliceNode->GetSliceToRAS()->MultiplyDoublePoint(translatedOrigin));
+
+  q->modifySelectedSegmentByLabelmap(outputMask, qSlicerSegmentEditorAbstractEffect::ModificationModeAdd);
 
 }
 

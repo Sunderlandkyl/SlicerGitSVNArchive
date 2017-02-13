@@ -1612,10 +1612,17 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(vtkOrientedIm
     if (!vtkOrientedImageDataResample::DoGeometriesMatch(segmentLabelmap, labelmap))
       {
       // Make sure appended image has the same lattice as the input image
-      vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      /*vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
-        segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/);
-      if (!vtkOrientedImageDataResample::MergeImage(resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified))
+        segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate, true /*pad);
+    */
+
+      vtkSmartPointer<vtkOrientedImageData> resampledLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
+        labelmap, segmentLabelmap, resampledLabelmap, false /*interpolate*/, true /*pad*/);
+
+      //if (!vtkOrientedImageDataResample::MergeImage(resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified))
+      if (!vtkOrientedImageDataResample::MergeImage(segmentLabelmap, resampledLabelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified))
         {
         vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
         return false;
