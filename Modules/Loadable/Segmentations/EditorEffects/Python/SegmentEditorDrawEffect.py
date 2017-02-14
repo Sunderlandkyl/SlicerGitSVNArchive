@@ -240,26 +240,8 @@ class DrawPipeline:
       vtkSegmentationCore.vtkFractionalLogicalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
       modifierLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
 
-      scalarRange = [0.0,1.0]
-      scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
-        modifierLabelmap.GetFieldData().GetAbstractArray(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
-      if ( scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
-        scalarRange[0] = scalarRangeArray.GetValue(0)
-        scalarRange[1] = scalarRangeArray.GetValue(1)
-
-      print scalarRange[0]
-      print scalarRange[1]
-
-      thresh = vtk.vtkImageThreshold()
-      thresh.SetInputData(modifierLabelmap)
-      thresh.ThresholdBetween(0,0)
-      thresh.SetInValue(scalarRange[0])
-      thresh.SetOutValue(scalarRange[0])
-      thresh.Update()
-      modifierLabelmap.DeepCopy(thresh.GetOutput())
-
     # Apply poly data on modifier labelmap
-    self.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget)
+    self.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget, masterRepresentationIsFractionalLabelmap)
     self.resetPolyData()
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
 

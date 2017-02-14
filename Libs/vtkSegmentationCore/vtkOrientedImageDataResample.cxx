@@ -234,8 +234,7 @@ vtkOrientedImageDataResample::~vtkOrientedImageDataResample()
 }
 
 //-----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* referenceImage, vtkOrientedImageData* outputImage, bool linearInterpolation/*=false*/, bool padImage/*=false*/, vtkAbstractTransform* inputImageTransform/*=NULL*/, double backgroundValue/*=0*/)
-{
+bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* referenceImage, vtkOrientedImageData* outputImage, bool linearInterpolation/*=false*/, bool padImage/*=false*/, vtkAbstractTransform* inputImageTransform/*=NULL*/, double backgroundValue/*=0*/){
   if (!inputImage || !referenceImage || !outputImage)
     {
     return false;
@@ -383,7 +382,9 @@ bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage
   // Set output
   outputImage->ShallowCopy(resliceFilter->GetOutput());
   outputImage->SetGeometryFromImageToWorldMatrix(referenceImageToWorldMatrix.GetPointer());
-
+  std::cout << inputExtentInReferenceFrame[0] << " | " << inputExtentInReferenceFrame[1] << " | " << inputExtentInReferenceFrame[2] << " | " << inputExtentInReferenceFrame[3] << " | " << inputExtentInReferenceFrame[4] << " | " << inputExtentInReferenceFrame[5] << std::endl;
+  std::cout << referenceExtent[0] << " | " << referenceExtent[1] << " | " << referenceExtent[2] << " | " << referenceExtent[3] << " | " << referenceExtent[4] << " | " << referenceExtent[5] << std::endl;
+  std::cout << unionExtent[0] << " | " << unionExtent[1] << " | " << unionExtent[2] << " | " << unionExtent[3] << " | " << unionExtent[4] << " | " << unionExtent[5] << std::endl;
   return true;
 }
 
@@ -466,7 +467,6 @@ bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(vtkO
   resliceFilter->SetOutputOrigin(0, 0, 0);
   resliceFilter->SetOutputSpacing(1, 1, 1);
   resliceFilter->SetOutputExtent(outputExtent);
-
   resliceFilter->SetResliceTransform(inputImageToReferenceImageTransform);
 
   // Set interpolation mode
