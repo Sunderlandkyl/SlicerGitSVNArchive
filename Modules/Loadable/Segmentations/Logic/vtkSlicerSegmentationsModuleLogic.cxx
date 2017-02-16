@@ -1649,9 +1649,6 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(vtkOrientedIm
       vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
         segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/);
-      vtkFractionalLogicalOperations::Write(resampledSegmentLabelmap, "E:\\test\\resampled.nrrd");
-      vtkFractionalLogicalOperations::Write(labelmap, "E:\\test\\labelmap.nrrd");
-      vtkFractionalLogicalOperations::Write(segmentLabelmap, "E:\\test\\segmentLabelmap.nrrd");
       if (!vtkOrientedImageDataResample::MergeImage(resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified))
         {
         vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
@@ -1806,14 +1803,9 @@ bool vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(vtkOrient
 
       // Make sure appended image has the same lattice as the input image
       vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
-      //vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
-      //  segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/, NULL, scalarRange[0]);
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
-        labelmap, segmentLabelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/, NULL, scalarRange[0]);
-      vtkFractionalLogicalOperations::Write(resampledSegmentLabelmap, "E:\\test\\resampled.nrrd");
-      vtkFractionalLogicalOperations::Write(labelmap, "E:\\test\\labelmap.nrrd");
-      vtkFractionalLogicalOperations::Write(segmentLabelmap, "E:\\test\\segmentLabelmap.nrrd");
-      if (!vtkOrientedImageDataResample::MergeImage(segmentLabelmap, resampledSegmentLabelmap, newSegmentLabelmap, operation, extent, scalarRange[0], scalarRange[1], &segmentLabelmapModified, scalarRange[0]))
+        segmentLabelmap, labelmap, resampledSegmentLabelmap, true /*interpolate*/, true /*pad*/, NULL, scalarRange[0]);
+      if (!vtkOrientedImageDataResample::MergeImage(resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified, scalarRange[0]))
         {
         vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment: Failed to merge labelmap (max)");
         return false;

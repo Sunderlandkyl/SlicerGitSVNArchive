@@ -238,6 +238,7 @@ class DrawPipeline:
 
     if (masterRepresentationIsFractionalLabelmap):
       vtkSegmentationCore.vtkFractionalLogicalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
+      # TODO: get type if neccissary
       modifierLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
 
     # Apply poly data on modifier labelmap

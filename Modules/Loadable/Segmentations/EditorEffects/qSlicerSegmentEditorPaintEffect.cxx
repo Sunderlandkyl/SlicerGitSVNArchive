@@ -450,12 +450,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
       modifierLabelmap->AllocateScalars(scalarType, 1);
       }
 
-    this->BrushPolyDataToStencil->Update();
-
-    vtkImageStencilData* stencilData = this->BrushPolyDataToStencil->GetOutput();
-    int stencilExtent[6]={0,-1,0,-1,0,-1};
-    stencilData->GetExtent(stencilExtent);
-
     vtkNew<vtkTransform> worldToModifierLabelmapIjkTransform;
 
     vtkNew<vtkMatrix4x4> segmentationToSegmentationIjkTransformMatrix;
