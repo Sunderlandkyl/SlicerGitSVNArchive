@@ -923,15 +923,6 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
     double aSpacing[3] = {0,0,0};
     this->BrushPolyDataToStencil->GetOutputSpacing(aSpacing);
 
-    std::cout << originalBrushExtent[0] << " | " << originalBrushExtent[1] << " | " << originalBrushExtent[2] << " | " << originalBrushExtent[3] << " | " << originalBrushExtent[4] << " | " << originalBrushExtent[5] << std::endl;
-    std::cout << aExtent[0] << " | " << aExtent[1] << " | " << aExtent[2] << " | " << aExtent[3] << " | " << aExtent[4] << " | " << aExtent[5] << std::endl;
-    std::cout << "||||||||||||||||||||||||||||||||" << std::endl;
-    std::cout << originalBrushOrigin[0] << " | " << originalBrushOrigin[1] << " | " << originalBrushOrigin[2] << std::endl;
-    std::cout << aorigin[0] << " | " << aorigin[1] << " | " << aorigin[2] << std::endl;
-    std::cout << "||||||||||||||||||||||||||||||||" << std::endl;
-    std::cout << originalBrushSpacing[0] << " | " << originalBrushSpacing[1] << " | " << originalBrushSpacing[2] << std::endl;
-    std::cout << aSpacing[0] << " | " << aSpacing[1] << " | " << aSpacing[2] << std::endl;
-
     }
 
   if (modifierLabelmap->GetScalarType() != scalarType)

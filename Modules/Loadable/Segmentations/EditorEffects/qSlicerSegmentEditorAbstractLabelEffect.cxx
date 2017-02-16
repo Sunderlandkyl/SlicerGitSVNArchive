@@ -138,10 +138,25 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
     polyMaskImage->AllocateScalars(input->GetScalarType(),1);
     }
 
+  double scalarRange[2] = {0.0, 1.0};
+  if (isFractional)
+    {
+    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(polyMaskImage->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+      {
+      scalarRange[0] = scalarRangeArray->GetValue(0);
+      scalarRange[1] = scalarRangeArray->GetValue(1);
+      }
+    }
+
   qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(polyData, polyMaskImage, sliceWidget, isFractional);
 
   vtkFractionalLogicalOperations::CopyFractionalParameters(polyMaskImage, input);
-  input->DeepCopy(polyMaskImage);
+
+  vtkSmartPointer<vtkOrientedImageData> resampledImage = vtkSmartPointer<vtkOrientedImageData>::New();
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(polyMaskImage, input, resampledImage, isFractional, false, NULL, scalarRange[0]);
+
+  input->DeepCopy(resampledImage);
   vtkFractionalLogicalOperations::CopyFractionalParameters(input, polyMaskImage);
 
 }
@@ -165,9 +180,6 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* 
       scalarRange[1] = scalarRangeArray->GetValue(1);
       }
   }
-
-  std::cout << "!" << scalarRange[0] << std::endl;
-  std::cout << "!" << scalarRange[1] << std::endl;
 
   // Make sure appended image has the same lattice as the input image
   vtkSmartPointer<vtkOrientedImageData> resampledAppendedImage = vtkSmartPointer<vtkOrientedImageData>::New();
@@ -273,9 +285,6 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   transform->TransformPoints(slicePoints, drawPoints);
   drawPoints->Modified();
 
-  std::cout << imageData->GetBounds()[0] << " || " << imageData->GetBounds()[1]  << " || " << imageData->GetBounds()[2]  << " || " << imageData->GetBounds()[3]  << " || " << imageData->GetBounds()[4]  << " || " << imageData->GetBounds()[5] << std::endl;
-  std::cout << drawPoints->GetBounds()[0] << " || " << drawPoints->GetBounds()[1]  << " || " << drawPoints->GetBounds()[2]  << " || " << drawPoints->GetBounds()[3]  << " || " << drawPoints->GetBounds()[4]  << " || " << drawPoints->GetBounds()[5] << std::endl;
-
   vtkSmartPointer<vtkImageFillROI> fill = vtkSmartPointer<vtkImageFillROI>::New();
   fill->SetInputData(imageData);
   fill->SetValue(1);
@@ -292,14 +301,11 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
     scalarRange[1] = scalarRangeArray->GetValue(1);
     }
 
-    std::cout << scalarRange[0] << "!!!" << std::endl;
-    std::cout << scalarRange[1] << "!!!" << std::endl;
-
     vtkSmartPointer<vtkResampleBinaryLabelmapToFractionalLabelmap> fractionalLabelmapFilter = vtkSmartPointer<vtkResampleBinaryLabelmapToFractionalLabelmap>::New();
     fractionalLabelmapFilter->SetInputConnection(fill->GetOutputPort());
     fractionalLabelmapFilter->SetOutputScalarType(outputMask->GetScalarType());
-    int extent[6] = {0, w-1, 0, h-1, 0, 0};
-    fractionalLabelmapFilter->SetOutputExtent(extent);
+    int oversampledExtent[6] = {0, w-1, 0, h-1, 0, 0};
+    fractionalLabelmapFilter->SetOutputExtent(oversampledExtent);
     fractionalLabelmapFilter->SetStepSize(6.0);
     fractionalLabelmapFilter->SetOutputMinimumValue(scalarRange[0]);
     fractionalLabelmapFilter->Update();

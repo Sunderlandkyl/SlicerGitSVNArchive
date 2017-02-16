@@ -798,7 +798,6 @@ bool qMRMLSegmentEditorWidgetPrivate::updateMaskLabelmap()
         {
         vtkFractionalLogicalOperations::Invert(maskImage);
         }
-      std::cout << "A" << std::endl;
       }
     else
       {

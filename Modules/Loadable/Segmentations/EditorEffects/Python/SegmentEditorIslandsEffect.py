@@ -130,6 +130,33 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
     # Get modifier labelmap
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
 
+    import vtkSegmentationCorePython as vtkSegmentationCore
+
+    masterRepresentationIsFractionalLabelmap = \
+      self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation().GetMasterRepresentationName() == \
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+    scalarRange = [0.0, 1.0]
+    if (masterRepresentationIsFractionalLabelmap):
+      scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
+      selectedSegmentLabelmap.GetFieldData().GetAbstractArray(
+        vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
+      if (scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
+        scalarRange[0] = scalarRangeArray.GetValue(0)
+        scalarRange[1] = scalarRangeArray.GetValue(1)
+
+      fractionalThreshold = vtk.vtkImageThreshold()
+      fractionalThreshold.SetInputData(selectedSegmentLabelmap)
+      fractionalThreshold.ThresholdBetween(scalarRange[0] + 0.0000001, scalarRange[1])
+      fractionalThreshold.SetInValue(1)
+      fractionalThreshold.SetOutValue(0)
+      fractionalThreshold.Update()
+      selectedSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+      selectedSegmentLabelmap.DeepCopy(fractionalThreshold.GetOutput())
+      identityMatrix = vtk.vtkMatrix4x4()
+      identityMatrix.Identity()
+      selectedSegmentLabelmap.SetImageToWorldMatrix(identityMatrix)
+
     castIn = vtk.vtkImageCast()
     castIn.SetInputData(selectedSegmentLabelmap)
     castIn.SetOutputScalarTypeToUnsignedInt()
@@ -157,14 +184,24 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
     thresh.SetInputData(islandMath.GetOutput())
     thresh.SetOutValue(backgroundValue)
     thresh.SetInValue(labelValue)
-    thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+    if (masterRepresentationIsFractionalLabelmap):
+      thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_CHAR)
+    else:
+      thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
     thresh.Update()
     # Create oriented image data from output
-    import vtkSegmentationCorePython as vtkSegmentationCore
     largestIslandImage = vtkSegmentationCore.vtkOrientedImageData()
-    largestIslandImage.ShallowCopy(thresh.GetOutput())
+    if (masterRepresentationIsFractionalLabelmap):
+      mask = vtk.vtkImageMask()
+      mask.SetInputData(self.scriptedEffect.selectedSegmentLabelmap())
+      mask.SetMaskInputData(thresh.GetOutput())
+      mask.SetMaskedOutputValue(scalarRange[0])
+      mask.Update()
+      largestIslandImage.ShallowCopy(mask.GetOutput())
+    else:
+      largestIslandImage.ShallowCopy(thresh.GetOutput())
     selectedSegmentLabelmapImageToWorldMatrix = vtk.vtkMatrix4x4()
-    selectedSegmentLabelmap.GetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
+    self.scriptedEffect.selectedSegmentLabelmap().GetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
     largestIslandImage.SetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
 
     if split and (maxNumberOfSegments != 1):
@@ -186,11 +223,10 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
       logging.info( "%d islands created (%d ignored)" % (islandCount, ignoredIslands) )
 
       # Create oriented image data from output
-      import vtkSegmentationCorePython as vtkSegmentationCore
       multiLabelImage = vtkSegmentationCore.vtkOrientedImageData()
       multiLabelImage.DeepCopy(thresh2.GetOutput())
       selectedSegmentLabelmapImageToWorldMatrix = vtk.vtkMatrix4x4()
-      selectedSegmentLabelmap.GetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
+      self.scriptedEffect.selectedSegmentLabelmap().GetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
       multiLabelImage.SetGeometryFromImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
 
       # Import multi-label labelmap to segmentation
@@ -200,8 +236,7 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
       insertBeforeSegmentID = segmentationNode.GetSegmentation().GetNthSegmentID(selectedSegmentIndex + 1)
       selectedSegmentName = segmentationNode.GetSegmentation().GetSegment(selectedSegmentID).GetName()
       slicer.vtkSlicerSegmentationsModuleLogic.ImportLabelmapToSegmentationNode( \
-        multiLabelImage, segmentationNode, selectedSegmentName+" -", insertBeforeSegmentID )
-
+        multiLabelImage, segmentationNode, selectedSegmentName+" -", insertBeforeSegmentID, masterRepresentationIsFractionalLabelmap, self.scriptedEffect.selectedSegmentLabelmap() )
     self.scriptedEffect.modifySelectedSegmentByLabelmap(largestIslandImage, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
     qt.QApplication.restoreOverrideCursor()
@@ -239,6 +274,18 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
 
     operationName = self.scriptedEffect.parameter("Operation")
 
+    masterRepresentationIsFractionalLabelmap = \
+      self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation().GetMasterRepresentationName() == \
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+    scalarRange = [0.0, 1.0]
+    scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
+      self.scriptedEffect.selectedSegmentLabelmap().GetFieldData().GetAbstractArray(
+        vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
+    if (scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
+      scalarRange[0] = scalarRangeArray.GetValue(0)
+      scalarRange[1] = scalarRangeArray.GetValue(1)
+
     if operationName == ADD_SELECTED_ISLAND:
       inputLabelImage = vtkSegmentationCore.vtkOrientedImageData()
       if not segmentationNode.GenerateMergedLabelmapForAllSegments(inputLabelImage,
@@ -249,30 +296,33 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
         return abortEvent
     else:
       selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
-      # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
-      labelValue = 1
-      backgroundValue = 0
-      thresh = vtk.vtkImageThreshold()
-      thresh.SetInputData(selectedSegmentLabelmap)
-      thresh.ThresholdByLower(0)
-      thresh.SetInValue(backgroundValue)
-      thresh.SetOutValue(labelValue)
-      thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
-      thresh.Update()
-      # Create oriented image data from output
-      import vtkSegmentationCorePython as vtkSegmentationCore
-      inputLabelImage = vtkSegmentationCore.vtkOrientedImageData()
-      inputLabelImage.ShallowCopy(thresh.GetOutput())
-      selectedSegmentLabelmapImageToWorldMatrix = vtk.vtkMatrix4x4()
-      selectedSegmentLabelmap.GetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
-      inputLabelImage.SetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
+      if (masterRepresentationIsFractionalLabelmap):
+        inputLabelImage = vtkSegmentationCore.vtkOrientedImageData()
+        inputLabelImage.DeepCopy(selectedSegmentLabelmap)
+      else:
+        # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
+        labelValue = 1
+        backgroundValue = 0
+        thresh = vtk.vtkImageThreshold()
+        thresh.SetInputData(selectedSegmentLabelmap)
+        thresh.ThresholdByLower(0)
+        thresh.SetInValue(backgroundValue)
+        thresh.SetOutValue(labelValue)
+        thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+        thresh.Update()
+        # Create oriented image data from output
+        import vtkSegmentationCorePython as vtkSegmentationCore
+        inputLabelImage = vtkSegmentationCore.vtkOrientedImageData()
+        inputLabelImage.ShallowCopy(thresh.GetOutput())
+        selectedSegmentLabelmapImageToWorldMatrix = vtk.vtkMatrix4x4()
+        selectedSegmentLabelmap.GetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
+        inputLabelImage.SetImageToWorldMatrix(selectedSegmentLabelmapImageToWorldMatrix)
 
     xy = callerInteractor.GetEventPosition()
     ijk = self.xyToIjk(xy, viewWidget, inputLabelImage)
     pixelValue = inputLabelImage.GetScalarComponentAsFloat(ijk[0], ijk[1], ijk[2], 0)
 
     try:
-
       floodFillingFilter = vtk.vtkImageThresholdConnectivity()
       floodFillingFilter.SetInputData(inputLabelImage)
       seedPoints = vtk.vtkPoints()
@@ -280,24 +330,31 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
       spacing = inputLabelImage.GetSpacing()
       seedPoints.InsertNextPoint(origin[0]+ijk[0]*spacing[0], origin[1]+ijk[1]*spacing[1], origin[2]+ijk[2]*spacing[2])
       floodFillingFilter.SetSeedPoints(seedPoints)
-      floodFillingFilter.ThresholdBetween(pixelValue, pixelValue)
+      if (masterRepresentationIsFractionalLabelmap):
+        #TODO: Define small constant
+        floodFillingFilter.ThresholdBetween(scalarRange[0], scalarRange[1]-0.00001)
+      else:
+        floodFillingFilter.ThresholdBetween(pixelValue, pixelValue)
 
       if operationName == ADD_SELECTED_ISLAND:
-        floodFillingFilter.SetInValue(1)
-        floodFillingFilter.SetOutValue(0)
+        floodFillingFilter.SetInValue(scalarRange[1])
+        floodFillingFilter.SetOutValue(scalarRange[0])
         floodFillingFilter.Update()
         modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
         modifierLabelmap.DeepCopy(floodFillingFilter.GetOutput())
         self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
 
-      elif pixelValue != 0: # if clicked on empty part then there is nothing to remove or keep
+      elif pixelValue != scalarRange[0]: # if clicked on empty part then there is nothing to remove or keep
+
+        if (masterRepresentationIsFractionalLabelmap):
+            #TODO: Define small constant
+            floodFillingFilter.ThresholdBetween(scalarRange[0]+0.00001, scalarRange[1])
 
         if operationName == KEEP_SELECTED_ISLAND:
-          floodFillingFilter.SetInValue(1)
-          floodFillingFilter.SetOutValue(0)
+          floodFillingFilter.SetOutValue(scalarRange[0])
         else: # operationName == REMOVE_SELECTED_ISLAND:
-          floodFillingFilter.SetInValue(1)
-          floodFillingFilter.SetOutValue(0)
+          floodFillingFilter.SetInValue(scalarRange[1])
+          floodFillingFilter.SetOutValue(scalarRange[0])
 
         floodFillingFilter.Update()
         modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
