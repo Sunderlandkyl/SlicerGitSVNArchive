@@ -650,10 +650,12 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
       vtkOrientedImageDataResample::ModifyImage(
             mergedImageData,
             labelmap,
-            masterRepresentationIsFractionalLabelmap ? vtkOrientedImageDataResample::OPERATION_MAXIMUM : vtkOrientedImageDataResample::OPERATION_MASKING,
+            masterRepresentationIsFractionalLabelmap ? vtkOrientedImageDataResample::OPERATION_FRACTIONAL_ADDITION : vtkOrientedImageDataResample::OPERATION_MASKING,
             NULL,
             0,
-            colorIndex);
+            colorIndex,
+            masterRepresentationIsFractionalLabelmap ? scalarRange[0] : 0,
+            masterRepresentationIsFractionalLabelmap ? scalarRange[1] : 1);
       }
 
   if (masterRepresentationIsFractionalLabelmap)

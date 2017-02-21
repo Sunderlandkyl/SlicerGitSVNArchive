@@ -54,7 +54,9 @@ void MergeImageGeneric2(
     int operation,
     const int extent[6],
     int maskThreshold,
-    double fillValue)
+    double fillValue,
+    double minimumValue,
+    double maximumValue)
 {
   // Compute update extent as intersection of base and modifier image extents (extent can be further reduced by specifying a smaller extent)
   int updateExt[6] = { 0, -1, 0, -1, 0, -1 };
@@ -189,6 +191,31 @@ void MergeImageGeneric2(
       modifierImagePtr += modifierIncZ;
       }
     }
+  else if (operation == vtkOrientedImageDataResample::OPERATION_FRACTIONAL_ADDITION)
+    {
+    for (vtkIdType idxZ = 0; idxZ <= maxZ; idxZ++)
+      {
+      for (vtkIdType idxY = 0; idxY <= maxY; idxY++)
+        {
+        for (vtkIdType idxX = 0; idxX <= maxX; idxX++)
+          {
+          double baseImageValue = static_cast<double>(*baseImagePtr - minimumValue) / static_cast<double>(maximumValue);
+          double modifierImageValue = static_cast<double>(*modifierImagePtr - minimumValue) / static_cast<double>(maximumValue);
+          double sumValue = std::min(1.0, std::max(0.0, (baseImageValue + modifierImageValue)));
+          *baseImagePtr = static_cast<BaseImageScalarType>(sumValue * (maximumValue - minimumValue)) + static_cast<BaseImageScalarType>(minimumValue);
+
+          baseImageModified = true;
+          baseImagePtr++;
+          modifierImagePtr++;
+        }
+        baseImagePtr += baseIncY;
+        modifierImagePtr += modifierIncY;
+        }
+      baseImagePtr += baseIncZ;
+      modifierImagePtr += modifierIncZ;
+      }
+    }
+
   if (baseImageModified)
     {
     baseImage->Modified();
@@ -203,7 +230,9 @@ void MergeImageGeneric(
     int operation,
     const int extent[6],
     int maskThreshold,
-    double fillValue)
+    double fillValue,
+    double minimumValue,
+    double maximumValue)
 {
   switch (modifierImage->GetScalarType())
     {
@@ -213,7 +242,9 @@ void MergeImageGeneric(
                         operation,
                         extent,
                         maskThreshold,
-                        fillValue)));
+                        fillValue,
+                        minimumValue,
+                        maximumValue)));
   default:
     vtkGenericWarningMacro("vtkOrientedImageDataResample::MergeImage: Unknown ScalarType");
     }
@@ -993,7 +1024,9 @@ bool vtkOrientedImageDataResample::MergeImage(
     int maskThreshold /*=0*/,
     double fillValue /*=1*/,
     bool *outputModified /*=NULL*/,
-    double backgroundValue/*=0*/)
+    double backgroundValue/*=0*/,
+    double minimumValue/*=0*/,
+    double maximumValue/*=1*/)
 {
   if (outputModified != NULL)
     {
@@ -1023,7 +1056,9 @@ bool vtkOrientedImageDataResample::MergeImage(
                        operation,
                        extent,
                        maskThreshold,
-                       fillValue));
+                       fillValue,
+                       minimumValue,
+                       maximumValue));
   default:
     vtkGenericWarningMacro("vtkOrientedImageDataResample::MergeImage: Unknown ScalarType");
     return false;
@@ -1043,7 +1078,9 @@ bool vtkOrientedImageDataResample::ModifyImage(
     int operation,
     const int extent[6]/*=0*/,
     int maskThreshold /*=0*/,
-    double fillValue /*=1*/)
+    double fillValue /*=1*/,
+    double minimumValue/*=0*/,
+    double maximumValue/*=1)*/)
 {
   if (!inputImage || !modifierImage)
     {
@@ -1063,7 +1100,9 @@ bool vtkOrientedImageDataResample::ModifyImage(
                        operation,
                        extent,
                        maskThreshold,
-                       fillValue));
+                       fillValue,
+                       minimumValue,
+                       maximumValue));
   default:
     vtkGenericWarningMacro("vtkOrientedImageDataResample::ModifyImage failed: unknown ScalarType");
     return false;
