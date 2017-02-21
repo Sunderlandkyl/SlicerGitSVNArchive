@@ -860,8 +860,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrushModel(qMRMLWidget* viewW
     {
     this->BrushCylinderSource->SetRadius(diameterMm/2.0);
     this->BrushCylinderSource->SetResolution(32);
-    this->BrushCylinderSource->SetRadius(radiusMm);
-    this->BrushCylinderSource->SetResolution(32);
     double sliceSpacingMm = qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget);
     this->BrushCylinderSource->SetHeight(sliceSpacingMm);
     this->BrushCylinderSource->SetCenter(0, 0, sliceSpacingMm/2.0);

@@ -995,7 +995,7 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
   vtkNew<vtkMatrix4x4> imageToWorld;
   modifierLabelmap->GetImageToWorldMatrix(imageToWorld.GetPointer());
   orientedBrushPositionerOutput->SetImageToWorldMatrix(imageToWorld.GetPointer());
-  vtkFractionalLogicalOperations::Write(orientedBrushPositionerOutput.GetPointer(), "E:\\test\\scissorsModInput.nrrd");
+
   vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput.GetPointer(), vtkOrientedImageDataResample::OPERATION_MAXIMUM, NULL, 0, scalarRange[0]);
   vtkFractionalLogicalOperations::Write(modifierLabelmap, "E:\\test\\scissorsModifier.nrrd");
   // Notify editor about changes

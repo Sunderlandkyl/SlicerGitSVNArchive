@@ -151,8 +151,6 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
       }
     }
 
-  input->Print(std::cout);
-
   qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(polyData, polyMaskImage, sliceWidget, isFractional);
 
   vtkFractionalLogicalOperations::CopyFractionalParameters(polyMaskImage, input);
@@ -160,14 +158,8 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
   vtkSmartPointer<vtkOrientedImageData> resampledImage = vtkSmartPointer<vtkOrientedImageData>::New();
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(polyMaskImage, input, resampledImage, isFractional, false, NULL, scalarRange[0]);
 
-  vtkFractionalLogicalOperations::Write(polyMaskImage, "E:\\test\\polyMaskImage.nrrd");
-  vtkFractionalLogicalOperations::Write(input, "E:\\test\\inputres.nrrd");
-  vtkFractionalLogicalOperations::Write(resampledImage, "E:\\test\\resampledImage.nrrd");
-
   input->DeepCopy(resampledImage);
   vtkFractionalLogicalOperations::CopyFractionalParameters(input, polyMaskImage);
-
-  input->Print(std::cout);
 
 }
 
