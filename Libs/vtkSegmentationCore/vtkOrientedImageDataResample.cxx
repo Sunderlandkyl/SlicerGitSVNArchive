@@ -193,18 +193,23 @@ void MergeImageGeneric2(
     }
   else if (operation == vtkOrientedImageDataResample::OPERATION_FRACTIONAL_ADDITION)
     {
+    double scalarRangeMagnitude = maximumValue-minimumValue;
+
     for (vtkIdType idxZ = 0; idxZ <= maxZ; idxZ++)
       {
       for (vtkIdType idxY = 0; idxY <= maxY; idxY++)
         {
         for (vtkIdType idxX = 0; idxX <= maxX; idxX++)
           {
-          double baseImageValue = static_cast<double>(*baseImagePtr - minimumValue) / static_cast<double>(maximumValue);
-          double modifierImageValue = static_cast<double>(*modifierImagePtr - minimumValue) / static_cast<double>(maximumValue);
-          double sumValue = std::min(1.0, std::max(0.0, (baseImageValue + modifierImageValue)));
-          *baseImagePtr = static_cast<BaseImageScalarType>(sumValue * (maximumValue - minimumValue)) + static_cast<BaseImageScalarType>(minimumValue);
+          if (static_cast<double>(*modifierImagePtr) > minimumValue)
+            {
+            double baseImageValue = (static_cast<double>(*baseImagePtr) - minimumValue) / scalarRangeMagnitude;
+            double modifierImageValue = (static_cast<double>(*modifierImagePtr) - minimumValue) / scalarRangeMagnitude;
+            double sumValue = std::min(1.0, std::max(0.0, (baseImageValue + modifierImageValue) ));
+            *baseImagePtr = static_cast<BaseImageScalarType>(sumValue * scalarRangeMagnitude + minimumValue);
 
-          baseImageModified = true;
+            baseImageModified = true;
+            }
           baseImagePtr++;
           modifierImagePtr++;
         }
@@ -424,13 +429,14 @@ bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(vtkO
   // Only support the following scalar types
   int inputImageScalarType = inputImage->GetScalarType();
   if ( inputImageScalarType != VTK_UNSIGNED_CHAR
+    && inputImageScalarType != VTK_CHAR
     && inputImageScalarType != VTK_UNSIGNED_SHORT
     && inputImageScalarType != VTK_SHORT )
     {
     vtkErrorWithObjectMacro(inputImage, "ResampleOrientedImageToReferenceGeometry: Input image scalar type must be unsigned char, unsighed short, or short!");
     return false;
     }
-
+  //TODO: Fractional range:: pass background value as argument
   // Determine IJK extent of contained data (non-zero voxels) in the input image
   int inputExtent[6] = {0,-1,0,-1,0,-1};
   inputImage->GetExtent(inputExtent);
@@ -1079,8 +1085,8 @@ bool vtkOrientedImageDataResample::ModifyImage(
     const int extent[6]/*=0*/,
     int maskThreshold /*=0*/,
     double fillValue /*=1*/,
-    double minimumValue/*=0*/,
-    double maximumValue/*=1)*/)
+    double minimumValue/*=VTK_DOUBLE_MIN*/,
+    double maximumValue/*=VTK_DOUBLE_MAX)*/)
 {
   if (!inputImage || !modifierImage)
     {

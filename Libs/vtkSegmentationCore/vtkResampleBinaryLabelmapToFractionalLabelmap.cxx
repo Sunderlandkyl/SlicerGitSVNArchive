@@ -31,8 +31,8 @@
 #include <vtkMatrix4x4.h>
 #include <vtkNew.h>
 
-#include <vtkFractionalLogicalOperations.h>
-#include <vtkOrientedImageData.h>
+// Segmentation includes
+#include "vtkFractionalLogicalOperations.h"
 
 vtkStandardNewMacro(vtkResampleBinaryLabelmapToFractionalLabelmap);
 
@@ -52,6 +52,13 @@ vtkResampleBinaryLabelmapToFractionalLabelmap::vtkResampleBinaryLabelmapToFracti
 
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
+
+  vtkOrientedImageData* output = vtkOrientedImageData::New();
+
+  this->GetExecutive()->SetOutputData(0, output);
+
+  output->ReleaseData();
+  output->Delete();
 }
 
 //----------------------------------------------------------------------------
@@ -60,30 +67,19 @@ vtkResampleBinaryLabelmapToFractionalLabelmap::~vtkResampleBinaryLabelmapToFract
 }
 
 //----------------------------------------------------------------------------
-void vtkResampleBinaryLabelmapToFractionalLabelmap::SetOutputExtent(int extent[6])
+int vtkResampleBinaryLabelmapToFractionalLabelmap::FillOutputPortInformation(
+  int, vtkInformation* info)
 {
-  for (int i = 0; i < 6; ++i)
-  {
-    this->OutputExtent[i] = extent[i];
-  }
+  info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkOrientedImageData");
+  return 1;
 }
 
 //----------------------------------------------------------------------------
-void vtkResampleBinaryLabelmapToFractionalLabelmap::SetOutputScalarType(int outputScalarType)
+int vtkResampleBinaryLabelmapToFractionalLabelmap::FillInputPortInformation(
+  int, vtkInformation* info)
 {
-  this->OutputScalarType = outputScalarType;
-}
-
-//----------------------------------------------------------------------------
-void vtkResampleBinaryLabelmapToFractionalLabelmap::SetOutputMinimumValue(double outputMinimumValue)
-{
-  this->OutputMinimumValue = outputMinimumValue;
-}
-
-//----------------------------------------------------------------------------
-void vtkResampleBinaryLabelmapToFractionalLabelmap::SetStepSize(double stepSize)
-{
-  this->StepSize = stepSize;
+  info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkOrientedImageData");
+  return 1;
 }
 
 //----------------------------------------------------------------------------
@@ -92,7 +88,7 @@ void ResampleBinaryToFractional( vtkImageData* binaryLabelmap, vtkImageData* fra
 {
   switch (fractionalLabelmap->GetScalarType())
     {
-    vtkTemplateMacro( ResampleBinaryToFractional2(binaryLabelmap, fractionalLabelmap, oversamplingFactor, outputMinimumValue, stepSize, outputScalarType, (BinaryImageType*) NULL, (VTK_TT*) NULL));
+    vtkTemplateMacro( ResampleBinaryToFractional2(binaryLabelmap, fractionalLabelmap, oversamplingFactor, outputMinimumValue, stepSize, outputScalarType, (BinaryImageType*)NULL, (VTK_TT*)NULL) );
     default:
       std::cout << "error" << std::endl; // TODO: actual error message
       return;
@@ -101,7 +97,8 @@ void ResampleBinaryToFractional( vtkImageData* binaryLabelmap, vtkImageData* fra
 
 //----------------------------------------------------------------------------
 template <class BinaryImageType, class FractionalImageType>
-void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fractionalLabelmap, int oversamplingFactor, int outputMinimumValue, double stepSize, int outputScalarType, BinaryImageType* binaryTypePtr, FractionalImageType* fractionalImageTypePtr )
+void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fractionalLabelmap, int oversamplingFactor, int outputMinimumValue, double stepSize, int outputScalarType,
+                                  BinaryImageType* binaryTypePtr, FractionalImageType* fractionalImageTypePtr )
 {
 
   int binaryDimensions[3] = { 0, 0, 0 };
@@ -224,7 +221,6 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
         this->OutputExtent[i+1] = this->OutputExtent[i] + std::ceil(binaryDimensions[i] / this->OversamplingFactor) - 1;
         }
       }
-
       fractionalLabelmap->SetExtent(this->OutputExtent);
     }
 
@@ -240,7 +236,7 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
 
   switch (binaryLabelmap->GetScalarType())
   {
-    vtkTemplateMacro(ResampleBinaryToFractional( binaryLabelmap, fractionalLabelmap, this->OversamplingFactor, this->OutputMinimumValue, this->StepSize, this->OutputScalarType, (VTK_TT*) NULL));
+    vtkTemplateMacro(ResampleBinaryToFractional( binaryLabelmap, fractionalLabelmap, this->OversamplingFactor, this->OutputMinimumValue, this->StepSize, this->OutputScalarType, (VTK_TT*)NULL ));
 
     default:
       vtkErrorMacro(<< "Execute: Unknown scalar type");
@@ -250,12 +246,23 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
   output->ShallowCopy(fractionalLabelmap);
   output->SetExtent(fractionalLabelmap->GetExtent());
 
-  vtkNew<vtkOrientedImageData> a;
-  a->DeepCopy(input);
-
-  vtkFractionalLogicalOperations::Write(a.GetPointer(), "E:\\test\\input.nrrd");
-    a->DeepCopy(output);
-  vtkFractionalLogicalOperations::Write(a.GetPointer(), "E:\\test\\output.nrrd");
-
   return 1;
+}
+
+//----------------------------------------------------------------------------
+void vtkResampleBinaryLabelmapToFractionalLabelmap::SetOutput(vtkOrientedImageData* output)
+{
+    this->GetExecutive()->SetOutputData(0, output);
+}
+
+//----------------------------------------------------------------------------
+vtkOrientedImageData* vtkResampleBinaryLabelmapToFractionalLabelmap::GetOutput()
+{
+  if (this->GetNumberOfOutputPorts() < 1)
+    {
+    return NULL;
+    }
+
+  return vtkOrientedImageData::SafeDownCast(
+    this->GetExecutive()->GetOutputData(0));
 }

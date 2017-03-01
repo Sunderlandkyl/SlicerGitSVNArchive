@@ -27,6 +27,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkCalculateOversamplingFactor.h"
+#include "vtkFractionalLogicalOperations.h"
 
 // MRML includes
 #include <vtkEventBroker.h>
@@ -492,7 +493,7 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
     vtkErrorMacro("GenerateMergedLabelmap: Invalid segmentation");
     return false;
     }
-
+  std::cout << "Generating" <<std::endl;
   bool masterRepresentationIsFractionalLabelmap = this->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
 
   if (!( this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) && !masterRepresentationIsFractionalLabelmap ) &&
@@ -654,8 +655,8 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
             NULL,
             0,
             colorIndex,
-            masterRepresentationIsFractionalLabelmap ? scalarRange[0] : 0,
-            masterRepresentationIsFractionalLabelmap ? scalarRange[1] : 1);
+            masterRepresentationIsFractionalLabelmap ? scalarRange[0] : VTK_DOUBLE_MIN,
+            masterRepresentationIsFractionalLabelmap ? scalarRange[1] : VTK_DOUBLE_MAX);
       }
 
   if (masterRepresentationIsFractionalLabelmap)

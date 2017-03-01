@@ -89,7 +89,7 @@ public:
   /// Extent can be specified to restrict modifierImage's extent to a smaller region.
   /// inputImage and modifierImage must have the same geometry (origin, spacing, directions) and scalar type, but they may have different extents.
   static bool ModifyImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* modifierImage, int operation,
-    const int extent[6] = 0, int maskThreshold = 0, double fillValue = 1, double minimumValue=0, double maximumValue=1);
+    const int extent[6] = 0, int maskThreshold = 0, double fillValue = 1, double minimumValue=VTK_DOUBLE_MIN, double maximumValue=VTK_DOUBLE_MAX);
 
   /// Copy image with clipping to the specified extent
   static bool CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]=0, const double backgroundValue=0);

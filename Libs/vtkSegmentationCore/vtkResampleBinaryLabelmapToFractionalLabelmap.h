@@ -21,10 +21,12 @@
 #ifndef __vtkResampleBinaryLabelmapToFractionalLabelmap_h
 #define __vtkResampleBinaryLabelmapToFractionalLabelmap_h
 
-// Segmentation includes
-#include "vtkSegmentationCoreConfigure.h"
+// VTK includes
+#include <vtkImageAlgorithm.h>
 
-#include "vtkImageAlgorithm.h"
+// Segmentation includes
+#include "vtkOrientedImageData.h"
+#include "vtkSegmentationCoreConfigure.h"
 
 /// \ingroup SegmentationCore
 /// \brief Utility functions for resampling oriented image data
@@ -35,19 +37,33 @@ public:
   static vtkResampleBinaryLabelmapToFractionalLabelmap *New();
   vtkTypeMacro(vtkResampleBinaryLabelmapToFractionalLabelmap,vtkAlgorithm);
 
-public:
-  void SetOutputExtent(int extent[6]);
-  void SetOutputScalarType(int outputScalarType);
-  void SetOutputMinimumValue(double outputMinimumValue);
-  void SetStepSize(double stepsize);
+  vtkSetMacro(OversamplingFactor, int)
+  vtkGetMacro(OversamplingFactor, int)
+
+  vtkSetMacro(OutputScalarType, vtkIdType);
+  vtkGetMacro(OutputScalarType, vtkIdType);
+
+  vtkSetVector6Macro(OutputExtent, int);
+  vtkGetVector6Macro(OutputExtent, int);
+
+  vtkSetMacro(OutputMinimumValue, double);
+  vtkGetMacro(OutputMinimumValue, double);
+
+  vtkSetMacro(StepSize, double);
+  vtkGetMacro(StepSize, double);
+
+  virtual vtkOrientedImageData* GetOutput();
+  virtual void SetOutput(vtkOrientedImageData* output);
 
 protected:
   int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
+  virtual int FillOutputPortInformation(int, vtkInformation*);
+  virtual int FillInputPortInformation(int, vtkInformation*);
 
 private:
   int OversamplingFactor;
   int OutputExtent[6];
-  int OutputScalarType;
+  vtkIdType OutputScalarType;
   double OutputMinimumValue;
   double StepSize;
 

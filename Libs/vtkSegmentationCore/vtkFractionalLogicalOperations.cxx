@@ -367,15 +367,10 @@ void FractionalMaskGeneric(vtkOrientedImageData* input, vtkOrientedImageData* ma
   ImageScalarType* inputPointer = (ImageScalarType*)input->GetScalarPointerForExtent(input->GetExtent());
   MaskScalarType* maskPointer = (MaskScalarType*)input->GetScalarPointerForExtent(mask->GetExtent());
 
-  std::cout << input->GetExtent()[0] << " || " << input->GetExtent()[1] << " || " << input->GetExtent()[2] << " || " << input->GetExtent()[3] << " || " << input->GetExtent()[4] << " || " << input->GetExtent()[5] << std::endl;
-  std::cout << mask->GetExtent()[0] << " || " << mask->GetExtent()[1] << " || " << mask->GetExtent()[2] << " || " << mask->GetExtent()[3] << " || " << mask->GetExtent()[4] << " || " << mask->GetExtent()[5] << std::endl;
-
   int dimensions[3] = {0,0,0};
   input->GetDimensions(dimensions);
 
   int numberOfVoxels = dimensions[0]*dimensions[1]*dimensions[2];
-
-  std::cout << scalarRange[0] << " || " << scalarRange[1] << std::endl;
 
   for (int i=0; i < numberOfVoxels; ++i)
     {
