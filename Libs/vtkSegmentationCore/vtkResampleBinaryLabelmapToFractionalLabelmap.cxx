@@ -176,10 +176,11 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
     return 1;
   }
 
-  vtkSmartPointer<vtkImageData> binaryLabelmap = vtkSmartPointer<vtkImageData>::New();
+  vtkSmartPointer<vtkOrientedImageData> binaryLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
   binaryLabelmap->ShallowCopy(input);
 
-  vtkSmartPointer<vtkImageData> fractionalLabelmap = vtkSmartPointer<vtkImageData>::New();
+  vtkSmartPointer<vtkOrientedImageData> fractionalLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+  fractionalLabelmap->CopyDirections(binaryLabelmap);
 
   double binarySpacing[3] = { 0, 0, 0 };
   binaryLabelmap->GetSpacing(binarySpacing);
@@ -189,49 +190,27 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
                                   binarySpacing[2] * this->OversamplingFactor };
   fractionalLabelmap->SetSpacing(fractionalSpacing);
 
-  double binaryOrigin[3] = {0,0,0};
-  binaryLabelmap->GetOrigin(binaryOrigin);
+  int binaryDimensions[3] = { 0, 0, 0 };
+  binaryLabelmap->GetDimensions(binaryDimensions);
 
   int binaryExtent[6] = {0, -1, 0, -1, 0, -1};
   binaryLabelmap->GetExtent(binaryExtent);
 
-  int binaryDimensions[3] = { 0, 0, 0 };
-  binaryLabelmap->GetDimensions(binaryDimensions);
+  int fractionalExtent[6] = { binaryExtent[0]/this->OversamplingFactor, (binaryExtent[1]-this->OversamplingFactor+1)/this->OversamplingFactor,
+                              binaryExtent[2]/this->OversamplingFactor, (binaryExtent[3]-this->OversamplingFactor+1)/this->OversamplingFactor,
+                              binaryExtent[4]/this->OversamplingFactor, (binaryExtent[5]-this->OversamplingFactor+1)/this->OversamplingFactor };
+  fractionalLabelmap->SetExtent(fractionalExtent);
 
-  if (this->OutputExtent[0] > this->OutputExtent[1] ||
-      this->OutputExtent[2] > this->OutputExtent[3] ||
-      this->OutputExtent[4] > this->OutputExtent[5])
-    {
-    int fractionalDimensions[3] = { std::ceil(binaryDimensions[0] / this->OversamplingFactor),
-                                    std::ceil(binaryDimensions[1] / this->OversamplingFactor),
-                                    std::ceil(binaryDimensions[2] / this->OversamplingFactor) };
-    fractionalLabelmap->SetDimensions(fractionalDimensions);
-    }
-  else
-    {
-    fractionalLabelmap->SetExtent(this->OutputExtent);
+  vtkSmartPointer<vtkMatrix4x4> binaryImageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
+  binaryLabelmap->GetImageToWorldMatrix(binaryImageToWorldMatrix);
 
-    int fractionalDimensions[3] = {0,0,0};
-    fractionalLabelmap->GetDimensions(fractionalDimensions);
+  double offset = 0.5*(this->OversamplingFactor-1);
+  double ijkOrigin[4] = {offset, offset, offset, 1};
+  double* rasOrigin = binaryImageToWorldMatrix->MultiplyDoublePoint(ijkOrigin);
 
-    for (int i = 0; i < 3; ++i)
-      {
-      if (fractionalDimensions[i] < std::ceil(binaryDimensions[i] / this->OversamplingFactor))
-        {
-        this->OutputExtent[i+1] = this->OutputExtent[i] + std::ceil(binaryDimensions[i] / this->OversamplingFactor) - 1;
-        }
-      }
-      fractionalLabelmap->SetExtent(this->OutputExtent);
-    }
+  //binaryLabelmap->GetOrigin(ijkOrigin);
 
-  int fractionalExtent[6] = {0, -1, 0, -1, 0, -1};
-  fractionalLabelmap->GetExtent(fractionalExtent);
-
-  double offset = (this->OversamplingFactor - 1.0) / (2.0 * this->OversamplingFactor);
-  double fractionalOrigin[3] = { binaryOrigin[0] + offset * fractionalSpacing[0] - fractionalExtent[0] * fractionalSpacing[0],
-                                 binaryOrigin[1] + offset * fractionalSpacing[1] - fractionalExtent[2] * fractionalSpacing[1],
-                                 binaryOrigin[2] + offset * fractionalSpacing[2] - fractionalExtent[4] * fractionalSpacing[2] };
-  fractionalLabelmap->SetOrigin(fractionalOrigin);
+  fractionalLabelmap->SetOrigin(rasOrigin);
   fractionalLabelmap->AllocateScalars(this->OutputScalarType, 1);
 
   switch (binaryLabelmap->GetScalarType())
@@ -245,6 +224,9 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
 
   output->ShallowCopy(fractionalLabelmap);
   output->SetExtent(fractionalLabelmap->GetExtent());
+
+  vtkFractionalLogicalOperations::Write(binaryLabelmap, "E:\\test\\input.nrrd");
+  vtkFractionalLogicalOperations::Write(fractionalLabelmap, "E:\\test\\output.nrrd");
 
   return 1;
 }

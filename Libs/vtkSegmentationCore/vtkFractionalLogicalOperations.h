@@ -46,6 +46,8 @@ public:
   static void Union(vtkOrientedImageData* output, vtkOrientedImageData* a, vtkOrientedImageData* b);
   static void Union(vtkOrientedImageData* output, vtkSegmentation* segmentation, vtkStringArray* segmentIds);
 
+  static void CalculateOversampledGeometry(vtkOrientedImageData* input, vtkOrientedImageData* outputGeometry, int oversamplingFactor);
+
   static void ClearFractionalParameters(vtkOrientedImageData* input);
   static void SetDefaultFractionalParameters(vtkOrientedImageData* input);
   static void CopyFractionalParameters(vtkOrientedImageData* input, vtkOrientedImageData* originalLabelmap);

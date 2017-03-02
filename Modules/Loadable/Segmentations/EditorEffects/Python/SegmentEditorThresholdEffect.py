@@ -215,26 +215,31 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
             scalarType = fractionalLabelmapTemplate.GetScalarType()
 
+        masterImageToWorldMatrix = vtk.vtkMatrix4x4()
+        masterImageData.GetImageToWorldMatrix(masterImageToWorldMatrix)
+
+        identityMatrix = vtk.vtkMatrix4x4()
+        identityMatrix.Identity()
+        masterImageData.SetImageToWorldMatrix(identityMatrix)
+
         origin = masterImageData.GetOrigin()
-        dimensions = masterImageData.GetDimensions()
         spacing = masterImageData.GetSpacing()
         extent = masterImageData.GetExtent()
+        dimensions = masterImageData.GetDimensions()
 
-        imageToWorldMatrix = vtk.vtkMatrix4x4()
-        masterImageData.GetImageToWorldMatrix(imageToWorldMatrix)
+        oversamplingFactor = 6
+        shift = -(oversamplingFactor-1.0)/(2.0*oversamplingFactor)
+        originIJK = [shift, shift, shift, 1]
+        originRAS = identityMatrix.MultiplyDoublePoint(originIJK)
 
-        oversamplingFactor = 6.0
-        shift =  (oversamplingFactor-1.0)/(2.0*oversamplingFactor)
+        oversampledImageDataGeometry = vtkSegmentationCore.vtkOrientedImageData()
+        vtkSegmentationCore.vtkFractionalLogicalOperations.CalculateOversampledGeometry(masterImageData, oversampledImageDataGeometry, oversamplingFactor)
+        oversampledExtent = oversampledImageDataGeometry.GetExtent()
 
-        # TODO: determine if offsets are calculated correctly
-        #offsetOrigin = imageToWorldMatrix.MultiplyDoublePoint([extent[0]-shift, extent[2]-shift, extent[4]-shift, 1]) # does not work
-        #offsetOrigin = imageToWorldMatrix.MultiplyDoublePoint([extent[0]+shift, extent[2]+shift, extent[4]-shift, 1]) # works
-        #offsetOrigin = offsetOrigin[0:3]
-        offsetOrigin = [origin[0] + (extent[0] - shift) * spacing[0],
-                        origin[1] + (extent[2] - shift) * spacing[1],
-                        origin[2] + (extent[4] - shift) * spacing[2]]
+        oversampledImageToWorldMatrix = vtk.vtkMatrix4x4()
+        oversampledImageDataGeometry.GetImageToWorldMatrix(oversampledImageToWorldMatrix)
 
-        modifierLabelmap.SetImageToWorldMatrix(imageToWorldMatrix)
+        modifierLabelmap.SetImageToWorldMatrix(masterImageToWorldMatrix)
         modifierLabelmap.SetExtent(extent)
         modifierLabelmap.AllocateScalars(scalarType, 1)
 
@@ -250,51 +255,40 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
         reslice = vtk.vtkImageReslice()
         reslice.SetInputData(masterImageData)
         reslice.SetInterpolationModeToLinear()
-        reslice.SetOutputOrigin(offsetOrigin)
-        reslice.SetOutputSpacing(spacing[0]/6, spacing[1]/6, spacing[2]/6)
+        reslice.SetOutputOrigin(originRAS[0:3])
+        reslice.SetOutputSpacing(oversampledImageDataGeometry.GetSpacing())
 
         thresh.SetInputData(None)
         thresh.SetInputConnection(reslice.GetOutputPort())
 
-        stepSize = [int(math.ceil(dimensions[0]/oversamplingFactor)),
-                    int(math.ceil(dimensions[1]/oversamplingFactor)),
-                    int(math.ceil(dimensions[2]/oversamplingFactor))]
+        stepSize = [oversamplingFactor*int(math.ceil(dimensions[0]/oversamplingFactor)),
+                    oversamplingFactor*int(math.ceil(dimensions[1]/oversamplingFactor)),
+                    oversamplingFactor*int(math.ceil(dimensions[2]/oversamplingFactor))]
 
-        for k in range(0, dimensions[2], stepSize[2]):
-          for j in range(0, dimensions[1], stepSize[1]):
-            for i in range(0, dimensions[0], stepSize[0]):
+        for k in range(oversampledExtent[4], oversampledExtent[5], stepSize[2]):
+          for j in range(oversampledExtent[2], oversampledExtent[3], stepSize[1]):
+            for i in range(oversampledExtent[0], oversampledExtent[1], stepSize[0]):
 
-              offsetExtent = [
-                int( i * oversamplingFactor),
-                int( min( i * oversamplingFactor + stepSize[0] * oversamplingFactor - 1, dimensions[0] * oversamplingFactor - 1)),
-                int( j * oversamplingFactor),
-                int( min( j * oversamplingFactor + stepSize[1] * oversamplingFactor - 1, dimensions[1] * oversamplingFactor - 1)),
-                int( k * oversamplingFactor),
-                int( min( k * oversamplingFactor + stepSize[2] * oversamplingFactor - 1, dimensions[2] * oversamplingFactor - 1))
-                ]
-
-              fractionalExtent = [
-                i, min(i + stepSize[0] - 1, dimensions[0] - 1),
-                j, min(j + stepSize[1] - 1, dimensions[1] - 1),
-                k, min(k + stepSize[2] - 1, dimensions[2] - 1)
-                ]
+              offsetExtent = [i, min(i+stepSize[0]-1, oversampledExtent[1]),
+                              j, min(j+stepSize[1]-1, oversampledExtent[3]),
+                              k, min(k+stepSize[2]-1, oversampledExtent[5])]
 
               reslice.SetOutputExtent(offsetExtent)
               thresh.Update()
 
+              binaryLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+              binaryLabelmap.ShallowCopy(thresh.GetOutput())
+              binaryLabelmap.SetImageToWorldMatrix(oversampledImageToWorldMatrix)
+
               resampleBinaryToFractionalFilter = vtkSegmentationCore.vtkResampleBinaryLabelmapToFractionalLabelmap()
-              resampleBinaryToFractionalFilter.SetInputConnection(thresh.GetOutputPort())
+              resampleBinaryToFractionalFilter.SetInputData(binaryLabelmap)
               resampleBinaryToFractionalFilter.SetOutputScalarType(scalarType)
               resampleBinaryToFractionalFilter.SetOutputMinimumValue(scalarRange[0])
-              resampleBinaryToFractionalFilter.SetOutputExtent(fractionalExtent)
               resampleBinaryToFractionalFilter.Update()
 
               fractionalLabelmap = vtkSegmentationCore.vtkOrientedImageData()
               fractionalLabelmap.ShallowCopy(resampleBinaryToFractionalFilter.GetOutput())
-
-              #matrix = vtk.vtkMatrix4x4()
-              #modifierLabelmap.GetImageToWorldMatrix(matrix)
-              fractionalLabelmap.SetImageToWorldMatrix(imageToWorldMatrix)
+              fractionalLabelmap.SetImageToWorldMatrix(masterImageToWorldMatrix)
               vtkSegmentationCore.vtkOrientedImageDataResample.MergeImage(modifierLabelmap, fractionalLabelmap, modifierLabelmap, vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
 
         # Specify the scalar range of values in the labelmap
@@ -315,6 +309,8 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
         interpolationTypeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetInterpolationTypeFieldName())
         interpolationTypeArray.InsertNextValue(interpolationType)
         modifierLabelmap.GetFieldData().AddArray(interpolationTypeArray)
+
+        masterImageData.SetImageToWorldMatrix(masterImageToWorldMatrix)
 
       else:
         thresh.Update()

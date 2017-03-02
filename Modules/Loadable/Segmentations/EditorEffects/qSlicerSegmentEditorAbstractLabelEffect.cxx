@@ -237,14 +237,12 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   double ylo = std::floor(bounds[2] - 1.0);
   double yhi = std::ceil(bounds[3]);
 
+  int oversamplingFactor = 6;
+
   vtkSmartPointer<vtkTransform> sliceToRASTransform = vtkSmartPointer<vtkTransform>::New();
   sliceToRASTransform->PostMultiply();
   sliceToRASTransform->Identity();
   sliceToRASTransform->Translate(xlo, ylo, 0.0);
-  if (isFractional)
-    {
-    sliceToRASTransform->Translate(-5.0/12.0, -5.0/12.0, 0.0);
-    }
   sliceToRASTransform->Concatenate(sliceNode->GetSliceToRAS());
 
   // Get a good size for the draw buffer
@@ -262,7 +260,7 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   vtkSmartPointer<vtkOrientedImageData> imageData = vtkSmartPointer<vtkOrientedImageData>::New();
   if (isFractional)
     {
-    imageData->SetDimensions(6*w, 6*h, 1);
+    imageData->SetDimensions(oversamplingFactor*w, oversamplingFactor*h, 1);
     }
   else
     {
@@ -275,7 +273,11 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   transform->Identity();
   if (isFractional)
     {
-    transform->Scale(6.0, 6.0, 1.0);
+    transform->Scale(oversamplingFactor, oversamplingFactor, 1.0);
+    double offset[3] = { (oversamplingFactor-1.0)/(2.0*oversamplingFactor),
+                         (oversamplingFactor-1.0)/(2.0*oversamplingFactor),
+                          0.0};
+    transform->Translate(offset);
     }
   transform->Translate(-xlo, -ylo, 0.0);
 
@@ -300,12 +302,13 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
     scalarRange[1] = scalarRangeArray->GetValue(1);
     }
 
+    vtkSmartPointer<vtkOrientedImageData> oversampledBinaryImage = vtkSmartPointer<vtkOrientedImageData>::New();
+    oversampledBinaryImage->ShallowCopy(fill->GetOutput());
+
     vtkSmartPointer<vtkResampleBinaryLabelmapToFractionalLabelmap> fractionalLabelmapFilter = vtkSmartPointer<vtkResampleBinaryLabelmapToFractionalLabelmap>::New();
-    fractionalLabelmapFilter->SetInputConnection(fill->GetOutputPort());
+    fractionalLabelmapFilter->SetInputData(oversampledBinaryImage);
     fractionalLabelmapFilter->SetOutputScalarType(outputMask->GetScalarType());
-    int oversampledExtent[6] = {0, w-1, 0, h-1, 0, 0};
-    fractionalLabelmapFilter->SetOutputExtent(oversampledExtent);
-    fractionalLabelmapFilter->SetStepSize(6.0);
+    fractionalLabelmapFilter->SetStepSize(oversamplingFactor);
     fractionalLabelmapFilter->SetOutputMinimumValue(scalarRange[0]);
     fractionalLabelmapFilter->Update();
     outputMask->DeepCopy(fractionalLabelmapFilter->GetOutput());

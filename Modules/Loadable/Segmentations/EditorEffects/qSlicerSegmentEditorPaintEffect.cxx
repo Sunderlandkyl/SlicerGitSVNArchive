@@ -432,17 +432,19 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
     if (masterRepresentationIsFractionalLabelmap)
       {
+      int oversamplingFactor = 6;
 
-      this->BrushPolyDataToStencil->SetOutputWholeExtent(0, 6*(originalBrushExtent[1]-originalBrushExtent[0]+1) - 1,
-                                                         0, 6*(originalBrushExtent[3]-originalBrushExtent[2]+1) - 1,
-                                                         0, 6*(originalBrushExtent[5]-originalBrushExtent[4]+1) - 1);
+      vtkSmartPointer<vtkOrientedImageData> originalGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
+      originalGeometry->SetExtent(originalBrushExtent);
+      originalGeometry->SetOrigin(originalBrushOrigin);
+      originalGeometry->SetSpacing(originalBrushSpacing);
+      vtkSmartPointer<vtkOrientedImageData> oversampledGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
 
-      this->BrushPolyDataToStencil->SetOutputSpacing(originalBrushSpacing[0]/6, originalBrushSpacing[1]/6, originalBrushSpacing[2]/6);
+      vtkFractionalLogicalOperations::CalculateOversampledGeometry(originalGeometry, oversampledGeometry, oversamplingFactor);
 
-      double offset = 5.0/12.0;
-      this->BrushPolyDataToStencil->SetOutputOrigin(originalBrushOrigin[0] - offset * originalBrushSpacing[0] + originalBrushExtent[0] * originalBrushSpacing[0],
-                                                    originalBrushOrigin[1] - offset * originalBrushSpacing[1] + originalBrushExtent[2] * originalBrushSpacing[1],
-                                                    originalBrushOrigin[2] - offset * originalBrushSpacing[2] + originalBrushExtent[4] * originalBrushSpacing[2]);
+      this->BrushPolyDataToStencil->SetOutputWholeExtent(oversampledGeometry->GetExtent());
+      this->BrushPolyDataToStencil->SetOutputSpacing(oversampledGeometry->GetSpacing());
+      this->BrushPolyDataToStencil->SetOutputOrigin(oversampledGeometry->GetOrigin());
       }
 
     if (modifierLabelmap->GetScalarType() != scalarType)
@@ -487,11 +489,14 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
         imageThreshold->Update();
         modifierLabelmap->DeepCopy(imageThreshold->GetOutput());
 
+        stencilToImage->Update();
+
+        vtkSmartPointer<vtkOrientedImageData> stencilToImageOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
+        stencilToImageOrientedImageData->ShallowCopy(stencilToImage->GetOutput());
         vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryToFractional;
-        resampleBinaryToFractional->SetInputConnection(stencilToImage->GetOutputPort());
+        resampleBinaryToFractional->SetInputData(stencilToImageOrientedImageData);
         resampleBinaryToFractional->SetOutputScalarType(scalarType);
         resampleBinaryToFractional->SetOutputMinimumValue(scalarRange[0]);
-        resampleBinaryToFractional->SetOutputExtent(originalBrushExtent);
         brushPositioner->SetInputConnection(resampleBinaryToFractional->GetOutputPort());
 
       }
@@ -514,7 +519,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
         vtkNew<vtkMatrix4x4> imageToWorldMatrix;
         orientedBrushPositionerOutput->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
-
         double shiftDifference[4] = {shiftDouble[0]-shift[0], shiftDouble[1]-shift[1], shiftDouble[2]-shift[2], 0};
 
         double shiftedOrigin[3] = {0,0,0};

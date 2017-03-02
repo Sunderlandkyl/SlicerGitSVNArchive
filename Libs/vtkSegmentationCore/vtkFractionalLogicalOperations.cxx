@@ -167,6 +167,34 @@ void vtkFractionalLogicalOperations::Union(vtkOrientedImageData* output, vtkSegm
 }
 
 //----------------------------------------------------------------------------
+void vtkFractionalLogicalOperations::CalculateOversampledGeometry(vtkOrientedImageData* input, vtkOrientedImageData* outputGeometry, int oversamplingFactor)
+{
+  double spacing[3] = {0,0,0};
+  input->GetSpacing(spacing);
+
+  int extent[6] = {0,-1,0,-1,0,-1};
+  input->GetExtent(extent);
+
+  outputGeometry->CopyDirections(input);
+
+  vtkSmartPointer<vtkMatrix4x4> imageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
+  input->GetImageToWorldMatrix(imageToWorldMatrix);
+
+  double shift = -(oversamplingFactor-1.0)/(2.0*oversamplingFactor);
+  double originIJK[4] = {shift, shift, shift, 1};
+  double* originRAS = imageToWorldMatrix->MultiplyDoublePoint(originIJK);
+  outputGeometry->SetOrigin(originRAS);
+
+  outputGeometry->SetSpacing(spacing[0]/oversamplingFactor,
+                             spacing[1]/oversamplingFactor,
+                             spacing[2]/oversamplingFactor);
+
+  outputGeometry->SetExtent(oversamplingFactor*extent[0], oversamplingFactor*extent[1]+oversamplingFactor-1,
+                            oversamplingFactor*extent[2], oversamplingFactor*extent[3]+oversamplingFactor-1,
+                            oversamplingFactor*extent[4], oversamplingFactor*extent[5]+oversamplingFactor-1);
+}
+
+//----------------------------------------------------------------------------
 void vtkFractionalLogicalOperations::ClearFractionalParameters(vtkOrientedImageData* input)
 {
   if (!input)

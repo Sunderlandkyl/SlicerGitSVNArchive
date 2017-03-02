@@ -347,27 +347,7 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
       self.mergedLabelmapGeometryImage.SetExtent(labelsExpandedExtent)
 
       if (masterRepresentationIsFractionalLabelmap):
-
-        self.mergedOversampledLabelmapGeometryImage.CopyDirections(self.mergedLabelmapGeometryImage)
-
-        originIJK = [
-          labelsExpandedExtent[0]+shiftMagnitude,
-          labelsExpandedExtent[2]+shiftMagnitude,
-          labelsExpandedExtent[4]+shiftMagnitude,
-          1]
-
-        imageToWorldMatrix = vtk.vtkMatrix4x4()
-        self.mergedLabelmapGeometryImage.GetImageToWorldMatrix(imageToWorldMatrix)
-        originRAS = imageToWorldMatrix.MultiplyPoint(originIJK)
-        dimensions = self.mergedLabelmapGeometryImage.GetDimensions()
-        spacing = self.mergedLabelmapGeometryImage.GetSpacing()
-        self.mergedOversampledLabelmapGeometryImage.SetOrigin(originRAS[0:3])
-        self.mergedOversampledLabelmapGeometryImage.SetExtent(0, int(oversamplingFactor*dimensions[0]-1),
-                                                              0, int(oversamplingFactor*dimensions[1]-1),
-                                                              0, int(oversamplingFactor*dimensions[2]-1))
-        self.mergedOversampledLabelmapGeometryImage.SetSpacing(spacing[0]/oversamplingFactor,
-                                                               spacing[1]/oversamplingFactor,
-                                                               spacing[2]/oversamplingFactor)
+        vtkSegmentationCore.vtkFractionalLogicalOperations.CalculateOversampledGeometry(self.mergedLabelmapGeometryImage, self.mergedOversampledLabelmapGeometryImage, oversamplingFactor)
 
       previewNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLSegmentationNode')
       previewNode.UnRegister(None)
@@ -468,19 +448,20 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
       if masterRepresentationIsFractionalLabelmap:
 
         resampleBinaryToFractionalFilter = vtkSegmentationCore.vtkResampleBinaryLabelmapToFractionalLabelmap()
-        resampleBinaryToFractionalFilter.SetInputConnection(thresh.GetOutputPort())
+        oversampledBinaryLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+        oversampledBinaryLabelmap.ShallowCopy(thresh.GetOutput())
+        oversampledImageToWorldMatrix = vtk.vtkMatrix4x4()
+        self.mergedOversampledLabelmapGeometryImage.GetImageToWorldMatrix(oversampledImageToWorldMatrix)
+        oversampledBinaryLabelmap.SetImageToWorldMatrix(oversampledImageToWorldMatrix)
+        resampleBinaryToFractionalFilter.SetInputData(oversampledBinaryLabelmap)
         #TODO: get parameters
         resampleBinaryToFractionalFilter.SetStepSize(stepSize)
-        resampleBinaryToFractionalFilter.SetOversamplingFactor(int(oversamplingFactor))
+        resampleBinaryToFractionalFilter.SetOversamplingFactor(oversamplingFactor)
         resampleBinaryToFractionalFilter.SetOutputScalarType(vtk.VTK_CHAR)
         resampleBinaryToFractionalFilter.SetOutputMinimumValue(-108)
-        resampleBinaryToFractionalFilter.SetOutputExtent(self.mergedLabelmapGeometryImage.GetExtent())
         resampleBinaryToFractionalFilter.Update()
 
-        newSegmentLabelmap.ShallowCopy(resampleBinaryToFractionalFilter.GetOutput())
-        labelmapImageToWorldMatrix = vtk.vtkMatrix4x4()
-        self.mergedLabelmapGeometryImage.GetImageToWorldMatrix(labelmapImageToWorldMatrix)
-        newSegmentLabelmap.SetImageToWorldMatrix(labelmapImageToWorldMatrix)
+        newSegmentLabelmap.DeepCopy(resampleBinaryToFractionalFilter.GetOutput())
 
         # Specify the scalar range of values in the labelmap
         scalarRangeArray = vtk.vtkDoubleArray()

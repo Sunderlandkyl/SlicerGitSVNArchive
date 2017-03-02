@@ -855,8 +855,6 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
 
   if (masterRepresentationIsFractionalLabelmap)
     {
-    double oversamplingFactor = 6.0;
-
     scalarRange[0] = -108.0;
     scalarRange[1] = 108.0;
     thresholdValue = 0.0;
@@ -903,25 +901,19 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
       scalarType = fractionalLabelmap->GetScalarType();
       }
 
-    this->BrushPolyDataToStencil->SetOutputWholeExtent(0, oversamplingFactor*(originalBrushExtent[1]-originalBrushExtent[0]+1) - 1,
-                                                       0, oversamplingFactor*(originalBrushExtent[3]-originalBrushExtent[2]+1) - 1,
-                                                       0, oversamplingFactor*(originalBrushExtent[5]-originalBrushExtent[4]+1) - 1);
+    int oversamplingFactor = 6;
 
-    this->BrushPolyDataToStencil->SetOutputSpacing(originalBrushSpacing[0]/oversamplingFactor,
-                                                   originalBrushSpacing[1]/oversamplingFactor,
-                                                   originalBrushSpacing[2]/oversamplingFactor);
+    vtkSmartPointer<vtkOrientedImageData> originalGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
+    originalGeometry->SetExtent(originalBrushExtent);
+    originalGeometry->SetOrigin(originalBrushOrigin);
+    originalGeometry->SetSpacing(originalBrushSpacing);
+    vtkSmartPointer<vtkOrientedImageData> oversampledGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
 
-    double offset = (oversamplingFactor-1)/(2*oversamplingFactor);
-    this->BrushPolyDataToStencil->SetOutputOrigin(originalBrushOrigin[0] - offset * originalBrushSpacing[0] + originalBrushExtent[0] * originalBrushSpacing[0],
-                                                  originalBrushOrigin[1] - offset * originalBrushSpacing[1] + originalBrushExtent[2] * originalBrushSpacing[1],
-                                                  originalBrushOrigin[2] - offset * originalBrushSpacing[2] + originalBrushExtent[4] * originalBrushSpacing[2]);
+    vtkFractionalLogicalOperations::CalculateOversampledGeometry(originalGeometry, oversampledGeometry, oversamplingFactor);
 
-    int aExtent[6] = {0,0,0,0,0,0};
-    this->BrushPolyDataToStencil->GetOutputWholeExtent(aExtent);
-    double aorigin[3] = {0,0,0};
-    this->BrushPolyDataToStencil->GetOutputOrigin(aorigin);
-    double aSpacing[3] = {0,0,0};
-    this->BrushPolyDataToStencil->GetOutputSpacing(aSpacing);
+    this->BrushPolyDataToStencil->SetOutputWholeExtent(oversampledGeometry->GetExtent());
+    this->BrushPolyDataToStencil->SetOutputSpacing(oversampledGeometry->GetSpacing());
+    this->BrushPolyDataToStencil->SetOutputOrigin(oversampledGeometry->GetOrigin());
 
     }
 
@@ -978,12 +970,14 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
 
   if (masterRepresentationIsFractionalLabelmap)
     {
+    stencilToImage->Update();
+    vtkSmartPointer<vtkOrientedImageData> stencilOutputOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
+    stencilOutputOrientedImageData->ShallowCopy(stencilToImage->GetOutput());
 
     vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryToFractional;
-    resampleBinaryToFractional->SetInputConnection(stencilToImage->GetOutputPort());
+    resampleBinaryToFractional->SetInputData(stencilOutputOrientedImageData);
     resampleBinaryToFractional->SetOutputScalarType(scalarType);
     resampleBinaryToFractional->SetOutputMinimumValue(scalarRange[0]);
-    resampleBinaryToFractional->SetOutputExtent(originalBrushExtent);
     brushPositioner->SetInputConnection(resampleBinaryToFractional->GetOutputPort());
 
     }
