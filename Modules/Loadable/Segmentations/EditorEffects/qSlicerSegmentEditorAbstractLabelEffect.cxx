@@ -232,10 +232,10 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   double bounds[6] = {0,0,0,0,0,0};
   slicePoints->GetBounds(bounds);
 
-  double xlo = std::floor(bounds[0] - 1.0);
-  double xhi = std::ceil(bounds[1]);
-  double ylo = std::floor(bounds[2] - 1.0);
-  double yhi = std::ceil(bounds[3]);
+  double xlo = bounds[0] - 1.0;
+  double xhi = bounds[1];
+  double ylo = bounds[2] - 1.0;
+  double yhi = bounds[3];
 
   int oversamplingFactor = 6;
 
