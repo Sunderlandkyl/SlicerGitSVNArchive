@@ -27,7 +27,7 @@
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkOrientedImageData.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
-#include "vtkFractionalLogicalOperations.h"
+#include "vtkFractionalOperations.h"
 
 // Qt includes
 #include <QDebug>
@@ -296,7 +296,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       }
     if (masterRepresentationIsFractionalLabelmap)
       {
-      //vtkFractionalLogicalOperations::FractionalMask(modifierLabelmap, maskImage);
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskImage, modifierLabelmap, maskImage, true, false, NULL, scalarRange[0]);
       vtkOrientedImageDataResample::MergeImage(modifierLabelmap, maskImage, modifierLabelmap, vtkOrientedImageDataResample::OPERATION_MINIMUM, maskImage->GetExtent(), scalarRange[0], scalarRange[1], NULL, scalarRange[0]);
       }
@@ -446,7 +445,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
     if (masterRepresentationIsFractionalLabelmap)
       {
       invertedModifierLabelmap->DeepCopy(modifierLabelmap);
-      vtkFractionalLogicalOperations::Invert(invertedModifierLabelmap.GetPointer());
+      vtkFractionalOperations::Invert(invertedModifierLabelmap.GetPointer());
       if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
         invertedModifierLabelmap.GetPointer(), segmentationNode, selectedSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
         {
@@ -511,7 +510,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
         if (masterRepresentationIsFractionalLabelmap)
           {
           invertedModifierLabelmap->DeepCopy(modifierLabelmap);
-          vtkFractionalLogicalOperations::Invert(invertedModifierLabelmap.GetPointer());
+          vtkFractionalOperations::Invert(invertedModifierLabelmap.GetPointer());
           if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
             invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
             {

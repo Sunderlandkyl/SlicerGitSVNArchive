@@ -25,7 +25,7 @@
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkOrientedImageData.h"
 #include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
-#include <vtkFractionalLogicalOperations.h>
+#include <vtkFractionalOperations.h>
 
 // Qt includes
 #include <QDebug>
@@ -440,7 +440,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
       originalGeometry->SetSpacing(originalBrushSpacing);
       vtkSmartPointer<vtkOrientedImageData> oversampledGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
 
-      vtkFractionalLogicalOperations::CalculateOversampledGeometry(originalGeometry, oversampledGeometry, oversamplingFactor);
+      vtkFractionalOperations::CalculateOversampledGeometry(originalGeometry, oversampledGeometry, oversamplingFactor);
 
       this->BrushPolyDataToStencil->SetOutputWholeExtent(oversampledGeometry->GetExtent());
       this->BrushPolyDataToStencil->SetOutputSpacing(oversampledGeometry->GetSpacing());
@@ -598,7 +598,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
   if (masterRepresentationIsFractionalLabelmap)
     {
-      vtkFractionalLogicalOperations::ClearFractionalParameters(modifierLabelmap);
+      vtkFractionalOperations::ClearFractionalParameters(modifierLabelmap);
     }
 }
 

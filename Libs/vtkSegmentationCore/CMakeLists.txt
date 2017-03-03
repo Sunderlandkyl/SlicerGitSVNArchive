@@ -63,8 +63,8 @@ set(vtkSegmentationCore_SRCS
   vtkPolyDataToFractionalLabelmapFilter.cxx
   vtkResampleBinaryLabelmapToFractionalLabelmap.h
   vtkResampleBinaryLabelmapToFractionalLabelmap.cxx
-  vtkFractionalLogicalOperations.cxx
-  vtkFractionalLogicalOperations.h
+  vtkFractionalOperations.cxx
+  vtkFractionalOperations.h
   )
 
 # Abstract/pure virtual classes

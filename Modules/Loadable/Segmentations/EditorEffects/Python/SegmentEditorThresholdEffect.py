@@ -233,7 +233,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
         originRAS = identityMatrix.MultiplyDoublePoint(originIJK)
 
         oversampledImageDataGeometry = vtkSegmentationCore.vtkOrientedImageData()
-        vtkSegmentationCore.vtkFractionalLogicalOperations.CalculateOversampledGeometry(masterImageData, oversampledImageDataGeometry, oversamplingFactor)
+        vtkSegmentationCore.vtkFractionalOperations.CalculateOversampledGeometry(masterImageData, oversampledImageDataGeometry, oversamplingFactor)
         oversampledExtent = oversampledImageDataGeometry.GetExtent()
 
         oversampledImageToWorldMatrix = vtk.vtkMatrix4x4()

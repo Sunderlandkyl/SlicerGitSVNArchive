@@ -28,7 +28,7 @@
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
 #include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
-#include "vtkFractionalLogicalOperations.h" //TODO
+#include "vtkFractionalOperations.h" //TODO
 
 // Qt includes
 #include <QDebug>
@@ -136,7 +136,7 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
 
   if (isFractional)
     {
-    vtkFractionalLogicalOperations::CopyFractionalParameters(polyMaskImage, input);
+    vtkFractionalOperations::CopyFractionalParameters(polyMaskImage, input);
     polyMaskImage->AllocateScalars(input->GetScalarType(),1);
     }
 
@@ -153,13 +153,13 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
 
   qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(polyData, polyMaskImage, sliceWidget, isFractional);
 
-  vtkFractionalLogicalOperations::CopyFractionalParameters(polyMaskImage, input);
+  vtkFractionalOperations::CopyFractionalParameters(polyMaskImage, input);
 
   vtkSmartPointer<vtkOrientedImageData> resampledImage = vtkSmartPointer<vtkOrientedImageData>::New();
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(polyMaskImage, input, resampledImage, isFractional, false, NULL, scalarRange[0]);
 
   input->DeepCopy(resampledImage);
-  vtkFractionalLogicalOperations::CopyFractionalParameters(input, polyMaskImage);
+  vtkFractionalOperations::CopyFractionalParameters(input, polyMaskImage);
 
 }
 

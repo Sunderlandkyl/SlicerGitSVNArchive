@@ -188,7 +188,7 @@ class LevelTracingPipeline:
     masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
 
     if (masterRepresentationIsFractionalLabelmap):
-      vtkSegmentationCore.vtkFractionalLogicalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
+      vtkSegmentationCore.vtkFractionalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
       # TODO: get type if neccissary
       modifierLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
 
@@ -197,4 +197,4 @@ class LevelTracingPipeline:
     self.effect.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
 
     if (masterRepresentationIsFractionalLabelmap):
-      vtkSegmentationCore.vtkFractionalLogicalOperations.ClearFractionalParameters(modifierLabelmap)
+      vtkSegmentationCore.vtkFractionalOperations.ClearFractionalParameters(modifierLabelmap)

@@ -333,7 +333,7 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
         self.mergedOversampledLabelmapGeometryImage = vtkSegmentationCore.vtkOrientedImageData()
 
       if (masterRepresentationIsFractionalLabelmap):
-        vtkSegmentationCore.vtkFractionalLogicalOperations.CalculateOversampledGeometry(self.mergedLabelmapGeometryImage, self.mergedOversampledLabelmapGeometryImage, oversamplingFactor)
+        vtkSegmentationCore.vtkFractionalOperations.CalculateOversampledGeometry(self.mergedLabelmapGeometryImage, self.mergedOversampledLabelmapGeometryImage, oversamplingFactor)
 
       previewNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLSegmentationNode')
       previewNode.UnRegister(None)

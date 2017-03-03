@@ -18,7 +18,7 @@
 
 ==============================================================================*/
 
-#include "vtkFractionalLogicalOperations.h"
+#include "vtkFractionalOperations.h"
 
 // VTK inlcludes
 #include <vtkNew.h>
@@ -38,20 +38,20 @@
 
 #include <vtkNRRDWriter.h>
 
-vtkStandardNewMacro(vtkFractionalLogicalOperations);
+vtkStandardNewMacro(vtkFractionalOperations);
 
 //----------------------------------------------------------------------------
-vtkFractionalLogicalOperations::vtkFractionalLogicalOperations()
+vtkFractionalOperations::vtkFractionalOperations()
 {
 }
 
 //----------------------------------------------------------------------------
-vtkFractionalLogicalOperations::~vtkFractionalLogicalOperations()
+vtkFractionalOperations::~vtkFractionalOperations()
 {
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::Invert(vtkOrientedImageData* labelmap)
+void vtkFractionalOperations::Invert(vtkOrientedImageData* labelmap)
 {
   if (!labelmap)
     {
@@ -76,7 +76,7 @@ void vtkFractionalLogicalOperations::Invert(vtkOrientedImageData* labelmap)
     }
 
   double scalarRange[2] = {0.0, 1.0};
-  //vtkFractionalLogicalOperations::GetScalarRange(labelmap, scalarRange); //TODO
+  //vtkFractionalOperations::GetScalarRange(labelmap, scalarRange); //TODO
   vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
   labelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
   if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
@@ -100,7 +100,7 @@ void vtkFractionalLogicalOperations::Invert(vtkOrientedImageData* labelmap)
 
 //----------------------------------------------------------------------------
 template <class T>
-void vtkFractionalLogicalOperations::InvertGeneric(T* labelmapPointer, int dimensions[3], double scalarRange[2])
+void vtkFractionalOperations::InvertGeneric(T* labelmapPointer, int dimensions[3], double scalarRange[2])
 {
   if (!labelmapPointer)
   {
@@ -123,7 +123,7 @@ void vtkFractionalLogicalOperations::InvertGeneric(T* labelmapPointer, int dimen
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::Union(vtkOrientedImageData* output, vtkOrientedImageData* a, vtkOrientedImageData* b)
+void vtkFractionalOperations::Union(vtkOrientedImageData* output, vtkOrientedImageData* a, vtkOrientedImageData* b)
 {
   if (!output || !a || !b)
   {
@@ -135,7 +135,7 @@ void vtkFractionalLogicalOperations::Union(vtkOrientedImageData* output, vtkOrie
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::Union(vtkOrientedImageData* output, vtkSegmentation* segmentation, vtkStringArray* segmentIds)
+void vtkFractionalOperations::Union(vtkOrientedImageData* output, vtkSegmentation* segmentation, vtkStringArray* segmentIds)
 {
   if (!output)
   {
@@ -167,7 +167,7 @@ void vtkFractionalLogicalOperations::Union(vtkOrientedImageData* output, vtkSegm
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::CalculateOversampledGeometry(vtkOrientedImageData* input, vtkOrientedImageData* outputGeometry, int oversamplingFactor)
+void vtkFractionalOperations::CalculateOversampledGeometry(vtkOrientedImageData* input, vtkOrientedImageData* outputGeometry, int oversamplingFactor)
 {
   double spacing[3] = {0,0,0};
   input->GetSpacing(spacing);
@@ -195,7 +195,7 @@ void vtkFractionalLogicalOperations::CalculateOversampledGeometry(vtkOrientedIma
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::ClearFractionalParameters(vtkOrientedImageData* input)
+void vtkFractionalOperations::ClearFractionalParameters(vtkOrientedImageData* input)
 {
   if (!input)
   {
@@ -209,7 +209,7 @@ void vtkFractionalLogicalOperations::ClearFractionalParameters(vtkOrientedImageD
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::SetDefaultFractionalParameters(vtkOrientedImageData* input)
+void vtkFractionalOperations::SetDefaultFractionalParameters(vtkOrientedImageData* input)
 {
   if (!input)
   {
@@ -217,7 +217,7 @@ void vtkFractionalLogicalOperations::SetDefaultFractionalParameters(vtkOrientedI
     return;
   }
 
-  vtkFractionalLogicalOperations::ClearFractionalParameters(input);
+  vtkFractionalOperations::ClearFractionalParameters(input);
 
   double defaultScalarRange[2] = {-108.0, 108.0};
   double defaultThreshold = 0.0;
@@ -243,7 +243,7 @@ void vtkFractionalLogicalOperations::SetDefaultFractionalParameters(vtkOrientedI
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::CopyFractionalParameters(vtkOrientedImageData* input, vtkOrientedImageData* originalLabelmap)
+void vtkFractionalOperations::CopyFractionalParameters(vtkOrientedImageData* input, vtkOrientedImageData* originalLabelmap)
 {
   if (!input || !originalLabelmap)
   {
@@ -251,8 +251,8 @@ void vtkFractionalLogicalOperations::CopyFractionalParameters(vtkOrientedImageDa
     return;
   }
 
-  vtkFractionalLogicalOperations::ClearFractionalParameters(input);
-  //vtkFractionalLogicalOperations::SetDefaultFractionalParameters(input);
+  vtkFractionalOperations::ClearFractionalParameters(input);
+  //vtkFractionalOperations::SetDefaultFractionalParameters(input);
 
   vtkFieldData* inputFieldData = input->GetFieldData();
   vtkFieldData* originalFieldData = originalLabelmap->GetFieldData();
@@ -271,7 +271,7 @@ void vtkFractionalLogicalOperations::CopyFractionalParameters(vtkOrientedImageDa
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::CopyFractionalParameters(vtkOrientedImageData* input, vtkSegmentation* segmentation)
+void vtkFractionalOperations::CopyFractionalParameters(vtkOrientedImageData* input, vtkSegmentation* segmentation)
 {
   if (!input)
     {
@@ -293,7 +293,7 @@ void vtkFractionalLogicalOperations::CopyFractionalParameters(vtkOrientedImageDa
   vtkFieldData* inputFieldData = input->GetFieldData();
   for (std::vector<std::string>::iterator segmentIDIt = segmentIds.begin(); segmentIDIt != segmentIds.end(); ++segmentIDIt)
     {
-    vtkFractionalLogicalOperations::ClearFractionalParameters(input);
+    vtkFractionalOperations::ClearFractionalParameters(input);
 
     vtkOrientedImageData* originalLabelmap = vtkOrientedImageData::SafeDownCast(segmentation->GetSegmentRepresentation(*segmentIDIt, vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
     vtkFieldData* originalFieldData = originalLabelmap->GetFieldData();
@@ -333,12 +333,12 @@ void vtkFractionalLogicalOperations::CopyFractionalParameters(vtkOrientedImageDa
 
   if (!foundCompleteParamters)
     {
-    vtkFractionalLogicalOperations::SetDefaultFractionalParameters(input);
+    vtkFractionalOperations::SetDefaultFractionalParameters(input);
     }
 }
 
 /*//----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::GetScalarRange(vtkOrientedImageData* input, double scalarRange[2])
+void vtkFractionalOperations::GetScalarRange(vtkOrientedImageData* input, double scalarRange[2])
 {
   if (!input)
     {
@@ -361,7 +361,7 @@ void vtkFractionalLogicalOperations::GetScalarRange(vtkOrientedImageData* input,
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::GetThreshold(vtkOrientedImageData* input, double threshold[1])
+void vtkFractionalOperations::GetThreshold(vtkOrientedImageData* input, double threshold[1])
 {
   if (!input)
     {
@@ -413,7 +413,7 @@ void FractionalMaskGeneric(vtkOrientedImageData* input, vtkOrientedImageData* ma
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::FractionalMask(vtkOrientedImageData* input, vtkOrientedImageData* mask)
+void vtkFractionalOperations::FractionalMask(vtkOrientedImageData* input, vtkOrientedImageData* mask)
 {
 
   double scalarRange[2] = {0.0, 1.0};
@@ -453,7 +453,7 @@ void vtkFractionalLogicalOperations::FractionalMask(vtkOrientedImageData* input,
 
 
 //----------------------------------------------------------------------------
-void vtkFractionalLogicalOperations::Write(vtkImageData* image, const char* name)
+void vtkFractionalOperations::Write(vtkImageData* image, const char* name)
 {
   vtkNew<vtkNRRDWriter> writer;
   writer->SetInputData(image);

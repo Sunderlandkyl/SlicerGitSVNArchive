@@ -18,8 +18,8 @@
 
 ==============================================================================*/
 
-#ifndef __vtkFractionalLogicalOperations_h
-#define __vtkFractionalLogicalOperations_h
+#ifndef __vtkFractionalOperations_h
+#define __vtkFractionalOperations_h
 
 // Segmentation includes
 #include "vtkSegmentationCoreConfigure.h"
@@ -33,12 +33,12 @@ class vtkImageData;
 
 /// \ingroup SegmentationCore
 /// \brief Utility functions for resampling oriented image data
-class vtkSegmentationCore_EXPORT vtkFractionalLogicalOperations : public vtkObject
+class vtkSegmentationCore_EXPORT vtkFractionalOperations : public vtkObject
 {
 
 public:
-  static vtkFractionalLogicalOperations *New();
-  vtkTypeMacro(vtkFractionalLogicalOperations,vtkObject);
+  static vtkFractionalOperations *New();
+  vtkTypeMacro(vtkFractionalOperations,vtkObject);
 
 public:
   static void Invert(vtkOrientedImageData* labelmap);
@@ -67,12 +67,12 @@ protected:
   static void InvertGeneric(T* labelmapPointer, int dimensions[3], double scalarRange[2]);
 
 protected:
-  vtkFractionalLogicalOperations();
-  ~vtkFractionalLogicalOperations();
+  vtkFractionalOperations();
+  ~vtkFractionalOperations();
 
 private:
-  vtkFractionalLogicalOperations(const vtkFractionalLogicalOperations&);  // Not implemented.
-  void operator=(const vtkFractionalLogicalOperations&);  // Not implemented.
+  vtkFractionalOperations(const vtkFractionalOperations&);  // Not implemented.
+  void operator=(const vtkFractionalOperations&);  // Not implemented.
 
 };
 

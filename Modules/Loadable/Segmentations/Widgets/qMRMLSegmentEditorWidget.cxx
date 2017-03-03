@@ -34,7 +34,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
-#include "vtkFractionalLogicalOperations.h"
+#include "vtkFractionalOperations.h"
 
 // Segment editor effects includes
 #include "qSlicerSegmentEditorAbstractEffect.h"
@@ -796,7 +796,7 @@ bool qMRMLSegmentEditorWidgetPrivate::updateMaskLabelmap()
       {
       if (!paintInsideSegments)
         {
-        vtkFractionalLogicalOperations::Invert(maskImage);
+        vtkFractionalOperations::Invert(maskImage);
         }
       }
     else

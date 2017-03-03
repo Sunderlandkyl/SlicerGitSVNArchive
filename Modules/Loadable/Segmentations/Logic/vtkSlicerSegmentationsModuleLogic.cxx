@@ -29,7 +29,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkSegmentationConverterFactory.h"
-#include "vtkFractionalLogicalOperations.h"
+#include "vtkFractionalOperations.h"
 
 // Subject Hierarchy includes
 #include <vtkMRMLSubjectHierarchyNode.h>

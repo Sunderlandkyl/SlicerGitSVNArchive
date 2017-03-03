@@ -231,7 +231,7 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
           if (masterRepresentationIsFractionalLabelmap):
             invertedModifierSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
             invertedModifierSegmentLabelmap.DeepCopy(modifierSegmentLabelmap)
-            vtkSegmentationCore.vtkFractionalLogicalOperations.Invert(invertedModifierSegmentLabelmap)
+            vtkSegmentationCore.vtkFractionalOperations.Invert(invertedModifierSegmentLabelmap)
             slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(invertedModifierSegmentLabelmap, segmentationNode, selectedSegmentID,
               slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MIN, invertedModifierSegmentLabelmap.GetExtent())
           else:
@@ -268,7 +268,7 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
       if (masterRepresentationIsFractionalLabelmap):
         invertedSelectedSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
         invertedSelectedSegmentLabelmap.DeepCopy(self.scriptedEffect.selectedSegmentLabelmap())
-        vtkSegmentationCore.vtkFractionalLogicalOperations.Invert(invertedSelectedSegmentLabelmap)
+        vtkSegmentationCore.vtkFractionalOperations.Invert(invertedSelectedSegmentLabelmap)
       else:
         selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
         invertedSelectedSegmentLabelmap = self.getInvertedBinaryLabelmap(selectedSegmentLabelmap)

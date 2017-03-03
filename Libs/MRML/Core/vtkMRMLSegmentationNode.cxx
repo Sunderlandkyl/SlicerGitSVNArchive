@@ -27,7 +27,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkCalculateOversamplingFactor.h"
-#include "vtkFractionalLogicalOperations.h"
+#include "vtkFractionalOperations.h"
 
 // MRML includes
 #include <vtkEventBroker.h>

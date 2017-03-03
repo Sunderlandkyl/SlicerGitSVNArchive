@@ -32,7 +32,7 @@
 #include <vtkNew.h>
 
 // Segmentation includes
-#include "vtkFractionalLogicalOperations.h"
+#include "vtkFractionalOperations.h"
 
 vtkStandardNewMacro(vtkResampleBinaryLabelmapToFractionalLabelmap);
 
@@ -225,8 +225,8 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
   output->ShallowCopy(fractionalLabelmap);
   output->SetExtent(fractionalLabelmap->GetExtent());
 
-  vtkFractionalLogicalOperations::Write(binaryLabelmap, "E:\\test\\input.nrrd");
-  vtkFractionalLogicalOperations::Write(fractionalLabelmap, "E:\\test\\output.nrrd");
+  vtkFractionalOperations::Write(binaryLabelmap, "E:\\test\\input.nrrd");
+  vtkFractionalOperations::Write(fractionalLabelmap, "E:\\test\\output.nrrd");
 
   return 1;
 }
