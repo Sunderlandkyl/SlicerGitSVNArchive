@@ -40,11 +40,17 @@ public:
   static vtkFractionalOperations *New();
   vtkTypeMacro(vtkFractionalOperations,vtkObject);
 
+private:
+  static const double DefaultScalarRange[2];
+  static const double DefaultThreshold;
+  static const vtkIdType DefaultInterpolationType;
+  static const vtkIdType DefaultScalarType;
+
 public:
   static void Invert(vtkOrientedImageData* labelmap);
 
-  static void Union(vtkOrientedImageData* output, vtkOrientedImageData* a, vtkOrientedImageData* b);
-  static void Union(vtkOrientedImageData* output, vtkSegmentation* segmentation, vtkStringArray* segmentIds);
+  static void ConvertFractionalImage(vtkOrientedImageData* input, vtkOrientedImageData* output, vtkSegmentation* segmentationTemplate);
+  static void ConvertFractionalImage(vtkOrientedImageData* input, vtkOrientedImageData* output, vtkOrientedImageData* outputTemplate);
 
   static void CalculateOversampledGeometry(vtkOrientedImageData* input, vtkOrientedImageData* outputGeometry, int oversamplingFactor);
 
@@ -53,18 +59,33 @@ public:
   static void CopyFractionalParameters(vtkOrientedImageData* input, vtkOrientedImageData* originalLabelmap);
   static void CopyFractionalParameters(vtkOrientedImageData* input, vtkSegmentation* segmentation);
 
-  static void FractionalMask(vtkOrientedImageData* input, vtkOrientedImageData* mask);
-
   //TODO
-  // static void ConvertFractionalImage(vtkOrientedImageData* input, template, output)?
-  //static void GetScalarRange(vtkOrientedImageData* input, double scalarRange[2]);
+  static void GetScalarRange(vtkSegmentation* input, double scalarRange[2]);
+  static double GetThreshold(vtkSegmentation* input);
+  static vtkIdType GetInterpolationType(vtkSegmentation* input);
 
+  static void GetScalarRange(vtkOrientedImageData* input, double scalarRange[2]);
+  static double GetThreshold(vtkOrientedImageData* input);
+  static vtkIdType GetInterpolationType(vtkOrientedImageData* input);
+
+  static void SetScalarRange(vtkOrientedImageData* input, const double scalarRange[2]);
+  static void SetThreshold(vtkOrientedImageData* input, const double threshold);
+  static void SetInterpolationType(vtkOrientedImageData* input, const vtkIdType interpolationType);
+
+  static vtkIdType GetScalarType(vtkSegmentation* input);
+
+  static bool ContainsFractionalParameters(vtkOrientedImageData* input);
 
   static void Write(vtkImageData* image, const char* name);
 
 protected:
-  template <class T>
-  static void InvertGeneric(T* labelmapPointer, int dimensions[3], double scalarRange[2]);
+  template <class LabelmapScalarType>
+  static void InvertGeneric(LabelmapScalarType* labelmapPointer, int dimensions[3], double scalarRange[2]);
+
+  template <class InputScalarType>
+  static void ConvertFractionalImageGeneric(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType*);
+  template <class InputScalarType, class OutputScalarType>
+  static void ConvertFractionalImageGeneric2(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType*, OutputScalarType*);
 
 protected:
   vtkFractionalOperations();

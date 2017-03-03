@@ -138,12 +138,7 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
 
     scalarRange = [0.0, 1.0]
     if (masterRepresentationIsFractionalLabelmap):
-      scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
-      selectedSegmentLabelmap.GetFieldData().GetAbstractArray(
-        vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
-      if (scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
-        scalarRange[0] = scalarRangeArray.GetValue(0)
-        scalarRange[1] = scalarRangeArray.GetValue(1)
+      vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(selectedSegmentLabelmap, scalarRange)
 
       fractionalThreshold = vtk.vtkImageThreshold()
       fractionalThreshold.SetInputData(selectedSegmentLabelmap)
@@ -279,12 +274,7 @@ class SegmentEditorIslandsEffect(AbstractScriptedSegmentEditorEffect):
       vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
 
     scalarRange = [0.0, 1.0]
-    scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
-      self.scriptedEffect.selectedSegmentLabelmap().GetFieldData().GetAbstractArray(
-        vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
-    if (scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
-      scalarRange[0] = scalarRangeArray.GetValue(0)
-      scalarRange[1] = scalarRangeArray.GetValue(1)
+    vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(self.scriptedEffect.selectedSegmentLabelmap(), scalarRange)
 
     if operationName == ADD_SELECTED_ISLAND:
       inputLabelImage = vtkSegmentationCore.vtkOrientedImageData()

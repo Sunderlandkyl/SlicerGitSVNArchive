@@ -567,24 +567,19 @@ bool qMRMLSegmentEditorWidgetPrivate::updateSelectedSegmentLabelmap()
 
   bool masterRepresentationIsFractional = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
 
+  double scalarRange[2] = {0.0, 1.0};
+
   vtkOrientedImageData* segmentLabelmap;
   if (masterRepresentationIsFractional)
     {
     segmentLabelmap = vtkOrientedImageData::SafeDownCast(
       selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
+    vtkFractionalOperations::GetScalarRange(segmentLabelmap, scalarRange);
     }
   else
     {
     segmentLabelmap = vtkOrientedImageData::SafeDownCast(
       selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
-    }
-
-  double minimumValue = 0.0;
-  vtkDoubleArray* scalarRange = vtkDoubleArray::SafeDownCast(
-  segmentLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRange && scalarRange->GetNumberOfValues() == 2)
-    {
-    minimumValue = scalarRange->GetValue(0);
     }
 
   if (!segmentLabelmap)
@@ -604,7 +599,7 @@ bool qMRMLSegmentEditorWidgetPrivate::updateSelectedSegmentLabelmap()
   vtkNew<vtkMatrix4x4> referenceImageToWorld;
   vtkSegmentationConverter::DeserializeImageGeometry(referenceImageGeometry, referenceImage.GetPointer(), false);
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(segmentLabelmap, referenceImage.GetPointer(), this->SelectedSegmentLabelmap,
-    masterRepresentationIsFractional, false, NULL, minimumValue);
+    masterRepresentationIsFractional, false, NULL, scalarRange[0]);
 
   return true;
 }

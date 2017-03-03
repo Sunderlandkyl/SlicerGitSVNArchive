@@ -274,12 +274,9 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   bool masterRepresentationIsFractionalLabelmap = parameterSetNode->GetSegmentationNode()->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
 
   double scalarRange[2] = {0.0, 1.0};
-  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-    modifierLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+  if (masterRepresentationIsFractionalLabelmap)
     {
-    scalarRange[0] = scalarRangeArray->GetValue(0);
-    scalarRange[1] = scalarRangeArray->GetValue(1);
+    vtkFractionalOperations::GetScalarRange(modifierLabelmap, scalarRange);
     }
 
   // Apply mask to modifier labelmap if paint over is turned off

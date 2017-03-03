@@ -183,37 +183,10 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
       if (masterRepresentationIsFractionalLabelmap):
         scalarRange = [-108.0, 108.0]
-        thresholdValue = 0.0
-        interpolationType = vtk.VTK_LINEAR_INTERPOLATION
-        scalarType = vtk.VTK_CHAR
-
-        fractionalLabelmapTemplate = segmentation.GetSegmentRepresentation(
-          segmentation.GetNthSegmentID(0), vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
-        fractionalExtent = {0, -1, 0, -1, 0, -1}
-        fractionalExtent = fractionalLabelmapTemplate.GetExtent()
-
-        if (fractionalLabelmapTemplate and
-            fractionalExtent[1] > fractionalExtent[0] or
-            fractionalExtent[3] > fractionalExtent[2] or
-            fractionalExtent[5] > fractionalExtent[4] ):
-
-            scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
-              fractionalLabelmapTemplate.GetFieldData().GetAbstractArray(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
-            if (scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
-              scalarRange[0] = scalarRangeArray.GetValue(0)
-              scalarRange[1] = scalarRangeArray.GetValue(1)
-
-            thresholdValueArray = vtk.vtkDoubleArray.SafeDownCast(
-              fractionalLabelmapTemplate.GetFieldData().GetAbstractArray(vtkSegmentationCore.vtkSegmentationConverter.GetThresholdValueFieldName()))
-            if (thresholdValueArray and thresholdValueArray.GetNumberOfValues() == 1 ):
-              threshold = thresholdValueArray.GetValue(0)
-
-            interpolationTypeArray = vtk.vtkIntArray.SafeDownCast(
-              fractionalLabelmapTemplate.GetFieldData().GetAbstractArray(vtkSegmentationCore.vtkSegmentationConverter.GetThresholdValueFieldName()))
-            if (interpolationTypeArray and interpolationTypeArray.GetNumberOfValues() == 1 ):
-              interpolationType = interpolationTypeArray.GetValue(0)
-
-            scalarType = fractionalLabelmapTemplate.GetScalarType()
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentation, scalarRange)
+        thresholdValue = vtkSegmentationCore.vtkFractionalOperations.GetThreshold(segmentation)
+        interpolationType = vtkSegmentationCore.vtkFractionalOperations.GetInterpolationType(segmentation)
+        scalarType = vtkSegmentationCore.vtkFractionalOperations.GetScalarType(segmentation)
 
         masterImageToWorldMatrix = vtk.vtkMatrix4x4()
         masterImageData.GetImageToWorldMatrix(masterImageToWorldMatrix)
@@ -292,23 +265,13 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
               vtkSegmentationCore.vtkOrientedImageDataResample.MergeImage(modifierLabelmap, fractionalLabelmap, modifierLabelmap, vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
 
         # Specify the scalar range of values in the labelmap
-        scalarRangeArray = vtk.vtkDoubleArray()
-        scalarRangeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName())
-        scalarRangeArray.InsertNextValue(scalarRange[0])
-        scalarRangeArray.InsertNextValue(scalarRange[1])
-        modifierLabelmap.GetFieldData().AddArray(scalarRangeArray)
+        vtkSegmentationCore.vtkFractionalOperations.SetScalarRange(modifierLabelmap, scalarRange)
 
         # Specify the surface threshold value for visualization
-        thresholdValueArray = vtk.vtkDoubleArray()
-        thresholdValueArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetThresholdValueFieldName())
-        thresholdValueArray.InsertNextValue(thresholdValue)
-        modifierLabelmap.GetFieldData().AddArray(thresholdValueArray)
+        vtkSegmentationCore.vtkFractionalOperations.SetThreshold(modifierLabelmap, thresholdValue)
 
         # Specify the interpolation type for visualization
-        interpolationTypeArray = vtk.vtkIntArray()
-        interpolationTypeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetInterpolationTypeFieldName())
-        interpolationTypeArray.InsertNextValue(interpolationType)
-        modifierLabelmap.GetFieldData().AddArray(interpolationTypeArray)
+        vtkSegmentationCore.vtkFractionalOperations.SetInterpolationType(modifierLabelmap, interpolationType)
 
         masterImageData.SetImageToWorldMatrix(masterImageToWorldMatrix)
 

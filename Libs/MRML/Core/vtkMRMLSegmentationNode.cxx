@@ -571,14 +571,7 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
   double scalarRange[2] = {0.0, 1.0};
   if (masterRepresentationIsFractionalLabelmap)
     {
-    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-      this->Segmentation->GetNthSegment(0)->GetRepresentation(
-      vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-      {
-      scalarRange[0] = scalarRangeArray->GetValue(0);
-      scalarRange[1] = scalarRangeArray->GetValue(1);
-      }
+    vtkFractionalOperations::GetScalarRange(this->Segmentation, scalarRange);
     }
 
   if (masterRepresentationIsFractionalLabelmap)
@@ -662,23 +655,15 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
   if (masterRepresentationIsFractionalLabelmap)
     {
     // Specify the scalar range of values in the labelmap
-    vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
-    scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
-    scalarRangeArray->InsertNextValue(scalarRange[0]);
-    scalarRangeArray->InsertNextValue(scalarRange[1]);
-    mergedImageData->GetFieldData()->AddArray(scalarRangeArray);
-    //TODO
+    vtkFractionalOperations::SetScalarRange(mergedImageData, scalarRange);
+
     // Specify the surface threshold value for visualization
-    vtkSmartPointer<vtkDoubleArray> thresholdValueArray = vtkSmartPointer<vtkDoubleArray>::New();
-    thresholdValueArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
-    thresholdValueArray->InsertNextValue(0);
-    mergedImageData->GetFieldData()->AddArray(thresholdValueArray);
-    //TODO
+    double threshold = vtkFractionalOperations::GetThreshold(this->Segmentation);
+    vtkFractionalOperations::SetThreshold(mergedImageData, threshold);
+
     // Specify the interpolation type for visualization
-    vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
-    interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
-    interpolationTypeArray->InsertNextValue(VTK_LINEAR_INTERPOLATION);
-    mergedImageData->GetFieldData()->AddArray(interpolationTypeArray);
+    vtkIdType interpolationType = vtkFractionalOperations::GetInterpolationType(this->Segmentation);
+    vtkFractionalOperations::SetInterpolationType(mergedImageData, interpolationType);
     }
 
   return true;

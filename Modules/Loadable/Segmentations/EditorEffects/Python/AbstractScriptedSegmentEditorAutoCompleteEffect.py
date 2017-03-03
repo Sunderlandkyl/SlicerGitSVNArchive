@@ -428,6 +428,9 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
       # Write label to segment
       newSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
       if masterRepresentationIsFractionalLabelmap:
+        scalarRange = [-108, 108]
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentationNode.GetSegmentation(), scalarRange)
+
         resampleBinaryToFractionalFilter = vtkSegmentationCore.vtkResampleBinaryLabelmapToFractionalLabelmap()
         oversampledBinaryLabelmap = vtkSegmentationCore.vtkOrientedImageData()
         oversampledBinaryLabelmap.ShallowCopy(thresh.GetOutput())
@@ -435,33 +438,25 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
         self.mergedOversampledLabelmapGeometryImage.GetImageToWorldMatrix(oversampledImageToWorldMatrix)
         oversampledBinaryLabelmap.SetImageToWorldMatrix(oversampledImageToWorldMatrix)
         resampleBinaryToFractionalFilter.SetInputData(oversampledBinaryLabelmap)
-        #TODO: get parameters
+
         resampleBinaryToFractionalFilter.SetStepSize(stepSize)
         resampleBinaryToFractionalFilter.SetOversamplingFactor(oversamplingFactor)
-        resampleBinaryToFractionalFilter.SetOutputScalarType(vtk.VTK_CHAR)
-        resampleBinaryToFractionalFilter.SetOutputMinimumValue(-108)
+        resampleBinaryToFractionalFilter.SetOutputScalarType(vtkSegmentationCore.vtkFractionalOperations.GetScalarType(segmentationNode.GetSegmentation()))
+        resampleBinaryToFractionalFilter.SetOutputMinimumValue(scalarRange[0])
         resampleBinaryToFractionalFilter.Update()
 
         newSegmentLabelmap.DeepCopy(resampleBinaryToFractionalFilter.GetOutput())
 
         # Specify the scalar range of values in the labelmap
-        scalarRangeArray = vtk.vtkDoubleArray()
-        scalarRangeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName())
-        scalarRangeArray.InsertNextValue(-108)
-        scalarRangeArray.InsertNextValue(108)
-        newSegmentLabelmap.GetFieldData().AddArray(scalarRangeArray)
+        vtkSegmentationCore.vtkFractionalOperations.SetScalarRange(newSegmentLabelmap, scalarRange)
 
         # Specify the surface threshold value for visualization
-        thresholdValueArray = vtk.vtkDoubleArray()
-        thresholdValueArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetThresholdValueFieldName())
-        thresholdValueArray.InsertNextValue(0)
-        newSegmentLabelmap.GetFieldData().AddArray(thresholdValueArray)
+        vtkSegmentationCore.vtkFractionalOperations.SetThreshold(newSegmentLabelmap,
+          vtkSegmentationCore.vtkFractionalOperations.GetThreshold(segmentationNode.GetSegmentation()))
 
         # Specify the interpolation type for visualization
-        interpolationTypeArray = vtk.vtkIntArray()
-        interpolationTypeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetInterpolationTypeFieldName())
-        interpolationTypeArray.InsertNextValue(vtk.VTK_LINEAR_INTERPOLATION)
-        newSegmentLabelmap.GetFieldData().AddArray(interpolationTypeArray)
+        vtkSegmentationCore.vtkFractionalOperations.SetInterpolationType(newSegmentLabelmap,
+          vtkSegmentationCore.vtkFractionalOperations.GetInterpolationType(segmentationNode.GetSegmentation()))
       else:
         newSegmentLabelmap.ShallowCopy(thresh.GetOutput())
         newSegmentLabelmap.CopyDirections(mergedImage)

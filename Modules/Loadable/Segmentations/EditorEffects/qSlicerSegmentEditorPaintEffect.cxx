@@ -360,59 +360,18 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
   bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
   double scalarRange[2] = {0.0, 1.0};
-  double thresholdValue = 1.0;
+  double thresholdValue = 0.5;
   vtkIdType interpolationType = VTK_NEAREST_INTERPOLATION;
   vtkIdType scalarType = VTK_UNSIGNED_CHAR;
 
   if (masterRepresentationIsFractionalLabelmap)
     {
-    scalarRange[0] = -108.0;
-    scalarRange[1] = 108.0;
-    thresholdValue = 0.0;
-    interpolationType = VTK_LINEAR_INTERPOLATION;
-    scalarType = VTK_CHAR;
-
-    vtkOrientedImageData* fractionalLabelmap = vtkOrientedImageData::SafeDownCast(
-      segmentationNode->GetSegmentation()->GetSegmentRepresentation(
-        segmentationNode->GetSegmentation()->GetNthSegmentID(0),
-        vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName() )
-      );
-
-    int extent[6] = {0, -1, 0, -1, 0, -1};
-    fractionalLabelmap->GetExtent(extent);
-    if (fractionalLabelmap &&
-       (extent[1] > extent[0] ||
-        extent[3] > extent[2] ||
-        extent[5] > extent[4]))
-      {
-
-      vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-        fractionalLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-      if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-        {
-        scalarRange[0] = scalarRangeArray->GetValue(0);
-        scalarRange[1] = scalarRangeArray->GetValue(1);
-        }
-
-      vtkDoubleArray* thresholdValueArray = vtkDoubleArray::SafeDownCast(
-        fractionalLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
-      if (thresholdValueArray && thresholdValueArray->GetNumberOfValues() == 1)
-        {
-        thresholdValue = thresholdValueArray->GetValue(0);
-        }
-
-      vtkIntArray* interpolationTypeArray = vtkIntArray::SafeDownCast(
-        fractionalLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
-      if (interpolationTypeArray && interpolationTypeArray->GetNumberOfValues() == 1)
-        {
-        interpolationType = interpolationTypeArray->GetValue(0);
-        }
-
-      scalarType = fractionalLabelmap->GetScalarType();
-
-      }
-
+    vtkFractionalOperations::GetScalarRange(segmentationNode->GetSegmentation(), scalarRange);
+    thresholdValue = vtkFractionalOperations::GetThreshold(segmentationNode->GetSegmentation());
+    interpolationType = vtkFractionalOperations::GetInterpolationType(segmentationNode->GetSegmentation());
+    scalarType = vtkFractionalOperations::GetScalarType(segmentationNode->GetSegmentation());
     }
+
   if (q->integerParameter("BrushPixelMode"))
     {
     this->paintPixels(viewWidget, this->PaintCoordinates_World);
@@ -480,25 +439,23 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
     if (masterRepresentationIsFractionalLabelmap)
       {
+      vtkNew<vtkImageThreshold> imageThreshold;
+      imageThreshold->SetInputData(modifierLabelmap);
+      imageThreshold->SetInValue(scalarRange[0]);
+      imageThreshold->SetOutValue(scalarRange[0]);
+      imageThreshold->ThresholdBetween(0,0);
+      imageThreshold->Update();
+      modifierLabelmap->DeepCopy(imageThreshold->GetOutput());
 
-        vtkNew<vtkImageThreshold> imageThreshold;
-        imageThreshold->SetInputData(modifierLabelmap);
-        imageThreshold->SetInValue(scalarRange[0]);
-        imageThreshold->SetOutValue(scalarRange[0]);
-        imageThreshold->ThresholdBetween(0,0);
-        imageThreshold->Update();
-        modifierLabelmap->DeepCopy(imageThreshold->GetOutput());
+      stencilToImage->Update();
 
-        stencilToImage->Update();
-
-        vtkSmartPointer<vtkOrientedImageData> stencilToImageOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
-        stencilToImageOrientedImageData->ShallowCopy(stencilToImage->GetOutput());
-        vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryToFractional;
-        resampleBinaryToFractional->SetInputData(stencilToImageOrientedImageData);
-        resampleBinaryToFractional->SetOutputScalarType(scalarType);
-        resampleBinaryToFractional->SetOutputMinimumValue(scalarRange[0]);
-        brushPositioner->SetInputConnection(resampleBinaryToFractional->GetOutputPort());
-
+      vtkSmartPointer<vtkOrientedImageData> stencilToImageOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
+      stencilToImageOrientedImageData->ShallowCopy(stencilToImage->GetOutput());
+      vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryToFractional;
+      resampleBinaryToFractional->SetInputData(stencilToImageOrientedImageData);
+      resampleBinaryToFractional->SetOutputScalarType(scalarType);
+      resampleBinaryToFractional->SetOutputMinimumValue(scalarRange[0]);
+      brushPositioner->SetInputConnection(resampleBinaryToFractional->GetOutputPort());
       }
 
     vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
@@ -568,28 +525,17 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
     }
   this->PaintCoordinates_World->Reset();
-
+  vtkFractionalOperations::Write(modifierLabelmap, "E:\\test\\brush.nrrd");
   if (masterRepresentationIsFractionalLabelmap)
     {
     // Specify the scalar range of values in the labelmap
-    vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
-    scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
-    scalarRangeArray->InsertNextValue(scalarRange[0]);
-    scalarRangeArray->InsertNextValue(scalarRange[1]);
-    modifierLabelmap->GetFieldData()->AddArray(scalarRangeArray);
+    vtkFractionalOperations::SetScalarRange(modifierLabelmap, scalarRange);
 
     // Specify the surface threshold value for visualization
-    vtkSmartPointer<vtkDoubleArray> thresholdValueArray = vtkSmartPointer<vtkDoubleArray>::New();
-    thresholdValueArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
-    thresholdValueArray->InsertNextValue(thresholdValue);
-    modifierLabelmap->GetFieldData()->AddArray(thresholdValueArray);
+    vtkFractionalOperations::SetThreshold(modifierLabelmap, thresholdValue);
 
     // Specify the interpolation type for visualization
-    vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
-    interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
-    interpolationTypeArray->InsertNextValue(interpolationType);
-    modifierLabelmap->GetFieldData()->AddArray(interpolationTypeArray);
-
+    vtkFractionalOperations::SetInterpolationType(modifierLabelmap, interpolationType);
     }
 
   // Notify editor about changes

@@ -27,6 +27,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkCalculateOversamplingFactor.h"
+#include "vtkFractionalOperations.h"
 
 // VTK includes
 #include <vtkBoundingBox.h>
@@ -1484,13 +1485,7 @@ void vtkSegmentation::DetermineCommonLabelmapExtent(int commonGeometryExtent[6],
     double scalarRange[2] = {0.0, 1.0};
     if (masterRepresentationIsFractionalLabelmap)
       {
-      vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-        currentLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-      if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-        {
-        scalarRange[0] = scalarRangeArray->GetValue(0);
-        scalarRange[1] = scalarRangeArray->GetValue(1);
-        }
+      vtkFractionalOperations::GetScalarRange(currentLabelmap, scalarRange);
       }
 
     int currentLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };

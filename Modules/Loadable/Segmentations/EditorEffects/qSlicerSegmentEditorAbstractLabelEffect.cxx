@@ -137,7 +137,7 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageDat
   if (isFractional)
     {
     vtkFractionalOperations::CopyFractionalParameters(polyMaskImage, input);
-    polyMaskImage->AllocateScalars(input->GetScalarType(),1);
+    polyMaskImage->AllocateScalars(input->GetScalarType(),1); //TODO: change scalar type?
     }
 
   double scalarRange[2] = {0.0, 1.0};
@@ -175,13 +175,8 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* 
   double scalarRange[2] = {0.0, 1.0};
   if (isFractional)
     {
-    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(inputImage->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-      {
-      scalarRange[0] = scalarRangeArray->GetValue(0);
-      scalarRange[1] = scalarRangeArray->GetValue(1);
-      }
-  }
+    vtkFractionalOperations::GetScalarRange(inputImage, scalarRange);
+    }
 
   // Make sure appended image has the same lattice as the input image
   vtkSmartPointer<vtkOrientedImageData> resampledAppendedImage = vtkSmartPointer<vtkOrientedImageData>::New();
@@ -295,12 +290,7 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   if (isFractional)
     {
     double scalarRange[2] = {0.0, 1.0};
-    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(outputMask->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-    {
-    scalarRange[0] = scalarRangeArray->GetValue(0);
-    scalarRange[1] = scalarRangeArray->GetValue(1);
-    }
+    vtkFractionalOperations::GetScalarRange(outputMask, scalarRange);
 
     vtkSmartPointer<vtkOrientedImageData> oversampledBinaryImage = vtkSmartPointer<vtkOrientedImageData>::New();
     oversampledBinaryImage->ShallowCopy(fill->GetOutput());

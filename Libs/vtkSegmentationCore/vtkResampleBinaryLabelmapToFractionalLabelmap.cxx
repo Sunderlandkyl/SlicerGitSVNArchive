@@ -208,8 +208,6 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
   double ijkOrigin[4] = {offset, offset, offset, 1};
   double* rasOrigin = binaryImageToWorldMatrix->MultiplyDoublePoint(ijkOrigin);
 
-  //binaryLabelmap->GetOrigin(ijkOrigin);
-
   fractionalLabelmap->SetOrigin(rasOrigin);
   fractionalLabelmap->AllocateScalars(this->OutputScalarType, 1);
 

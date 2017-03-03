@@ -19,7 +19,8 @@
 ==============================================================================*/
 
 // SegmentationCore includes
-#include <vtkOrientedImageData.h>
+#include "vtkOrientedImageData.h"
+#include "vtkFractionalOperations.h"
 
 // VTK includes
 #include <vtkObjectFactory.h>
@@ -137,20 +138,11 @@ bool vtkFractionalLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* 
 
   // Get the range of the scalars in the image data from the ScalarRange field if it exists
   // Default to the scalar range of 0.0 to 1.0 otherwise
-  double minimumValue = 0.0;
-  double maximumValue = 1.0;
-  fractionalLabelmap->GetFieldData();
-  vtkDoubleArray* scalarRange = vtkDoubleArray::SafeDownCast(
-    fractionalLabelmap->GetFieldData()->GetAbstractArray( vtkSegmentationConverter::GetScalarRangeFieldName() )
-    );
-  if (scalarRange && scalarRange->GetNumberOfValues() == 2)
-    {
-    minimumValue = scalarRange->GetValue(0);
-    maximumValue = scalarRange->GetValue(1);
-    }
+  double scalarRange[2] = {0.0, 1.0};
+  vtkFractionalOperations::GetScalarRange(orientedFractionalLabelmap, scalarRange);
 
   // Pad labelmap if it has non-background border voxels
-  bool paddingNecessary = this->IsLabelmapPaddingNecessary(fractionalLabelmap, minimumValue);
+  bool paddingNecessary = this->IsLabelmapPaddingNecessary(fractionalLabelmap, scalarRange[0]);
   if (paddingNecessary)
     {
     vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
@@ -159,7 +151,7 @@ bool vtkFractionalLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* 
     fractionalLabelmap->GetExtent(extent);
     // Set the output extent to the new size
     padder->SetOutputWholeExtent(extent[0] - 1, extent[1] + 1, extent[2] - 1, extent[3] + 1, extent[4] - 1, extent[5] + 1);
-    padder->SetConstant(minimumValue);
+    padder->SetConstant(scalarRange[0]);
     padder->Update();
     fractionalLabelmap = padder->GetOutput();
     }
@@ -186,7 +178,7 @@ bool vtkFractionalLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* 
   // Run marching cubes
   vtkSmartPointer<vtkMarchingCubes> marchingCubes = vtkSmartPointer<vtkMarchingCubes>::New();
   marchingCubes->SetInputData(fractionalLabelmapWithIdentityGeometry);
-  double thresholdValue = (fractionalThreshold * (maximumValue - minimumValue)) + minimumValue;
+  double thresholdValue = (fractionalThreshold * (scalarRange[1] - scalarRange[0])) + scalarRange[0];
   marchingCubes->GenerateValues(1, thresholdValue, thresholdValue);
   marchingCubes->ComputeGradientsOff();
   marchingCubes->ComputeNormalsOff();

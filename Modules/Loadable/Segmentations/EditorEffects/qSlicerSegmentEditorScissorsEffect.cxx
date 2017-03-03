@@ -855,51 +855,10 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
 
   if (masterRepresentationIsFractionalLabelmap)
     {
-    scalarRange[0] = -108.0;
-    scalarRange[1] = 108.0;
-    thresholdValue = 0.0;
-    interpolationType = VTK_LINEAR_INTERPOLATION;
-    scalarType = VTK_CHAR;
-
-    int extent[6] = {0, -1, 0, -1, 0, -1};
-
-    vtkOrientedImageData* fractionalLabelmap = vtkOrientedImageData::SafeDownCast(
-      segmentationNode->GetSegmentation()->GetSegmentRepresentation(
-        segmentationNode->GetSegmentation()->GetNthSegmentID(0),
-        vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName() )
-      );
-    fractionalLabelmap->GetExtent(extent);
-
-    if (fractionalLabelmap &&
-       (extent[1] > extent[0] ||
-        extent[3] > extent[2] ||
-        extent[5] > extent[4]))
-      {
-
-      vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-        fractionalLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-      if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-        {
-        scalarRange[0] = scalarRangeArray->GetValue(0);
-        scalarRange[1] = scalarRangeArray->GetValue(1);
-        }
-
-      vtkDoubleArray* thresholdValueArray = vtkDoubleArray::SafeDownCast(
-        fractionalLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
-      if (thresholdValueArray && thresholdValueArray->GetNumberOfValues() == 1)
-        {
-        thresholdValue = thresholdValueArray->GetValue(0);
-        }
-
-      vtkIntArray* interpolationTypeArray = vtkIntArray::SafeDownCast(
-        fractionalLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
-      if (interpolationTypeArray && interpolationTypeArray->GetNumberOfValues() == 1)
-        {
-        interpolationType = interpolationTypeArray->GetValue(0);
-        }
-
-      scalarType = fractionalLabelmap->GetScalarType();
-      }
+    vtkFractionalOperations::GetScalarRange(segmentationNode->GetSegmentation(), scalarRange);
+    thresholdValue = vtkFractionalOperations::GetThreshold(segmentationNode->GetSegmentation());
+    interpolationType = vtkFractionalOperations::GetInterpolationType(segmentationNode->GetSegmentation());
+    scalarType = vtkFractionalOperations::GetScalarType(segmentationNode->GetSegmentation());
 
     int oversamplingFactor = 6;
 
@@ -1002,23 +961,13 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
   if (masterRepresentationIsFractionalLabelmap)
     {
     // Specify the scalar range of values in the labelmap
-    vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
-    scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
-    scalarRangeArray->InsertNextValue(scalarRange[0]);
-    scalarRangeArray->InsertNextValue(scalarRange[1]);
-    modifierLabelmap->GetFieldData()->AddArray(scalarRangeArray);
+    vtkFractionalOperations::SetScalarRange(modifierLabelmap, scalarRange);
 
     // Specify the surface threshold value for visualization
-    vtkSmartPointer<vtkDoubleArray> thresholdValueArray = vtkSmartPointer<vtkDoubleArray>::New();
-    thresholdValueArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
-    thresholdValueArray->InsertNextValue(thresholdValue);
-    modifierLabelmap->GetFieldData()->AddArray(thresholdValueArray);
+    vtkFractionalOperations::SetThreshold(modifierLabelmap, thresholdValue);
 
     // Specify the interpolation type for visualization
-    vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
-    interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
-    interpolationTypeArray->InsertNextValue(interpolationType);
-    modifierLabelmap->GetFieldData()->AddArray(interpolationTypeArray);
+    vtkFractionalOperations::SetInterpolationType(modifierLabelmap, interpolationType);
     }
 
   q->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode);

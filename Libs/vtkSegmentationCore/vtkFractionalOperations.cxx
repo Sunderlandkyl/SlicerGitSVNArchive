@@ -40,6 +40,11 @@
 
 vtkStandardNewMacro(vtkFractionalOperations);
 
+const double vtkFractionalOperations::DefaultScalarRange[2] = {-108, 108};
+const double vtkFractionalOperations::DefaultThreshold = 0.0;
+const vtkIdType vtkFractionalOperations::DefaultInterpolationType = VTK_LINEAR_INTERPOLATION;
+const vtkIdType vtkFractionalOperations::DefaultScalarType = VTK_CHAR;
+
 //----------------------------------------------------------------------------
 vtkFractionalOperations::vtkFractionalOperations()
 {
@@ -99,12 +104,12 @@ void vtkFractionalOperations::Invert(vtkOrientedImageData* labelmap)
 }
 
 //----------------------------------------------------------------------------
-template <class T>
-void vtkFractionalOperations::InvertGeneric(T* labelmapPointer, int dimensions[3], double scalarRange[2])
+template <class LabelmapScalarType>
+void vtkFractionalOperations::InvertGeneric(LabelmapScalarType* labelmapPointer, int dimensions[3], double scalarRange[2])
 {
   if (!labelmapPointer)
   {
-    std::cout << "InvertGeneric: invalid labelmap pointer" << std::endl;
+    std::cerr << "InvertGeneric: invalid labelmap pointer" << std::endl;
     return;
   }
 
@@ -122,47 +127,126 @@ void vtkFractionalOperations::InvertGeneric(T* labelmapPointer, int dimensions[3
 
 }
 
-//----------------------------------------------------------------------------
-void vtkFractionalOperations::Union(vtkOrientedImageData* output, vtkOrientedImageData* a, vtkOrientedImageData* b)
+void vtkFractionalOperations::ConvertFractionalImage(vtkOrientedImageData* input, vtkOrientedImageData* output, vtkSegmentation* segmentationTemplate)
 {
-  if (!output || !a || !b)
-  {
-    std::cerr << "Union: invalid vtkOrientedImageData" << std::endl;
-    return;
-  }
+  vtkOrientedImageData* templateLablemap = vtkOrientedImageData::SafeDownCast(
+    segmentationTemplate->GetNthSegment(0)->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
 
-  vtkOrientedImageDataResample::MergeImage(a, b, output, vtkOrientedImageDataResample::OPERATION_MAXIMUM);
+  if (!templateLablemap || !vtkFractionalOperations::ContainsFractionalParameters(templateLablemap))
+    {
+    // Voxels do not need to be recalculated
+    if (input != output)
+      {
+      output->DeepCopy(input);
+      }
+    return;
+    }
+
+  vtkFractionalOperations::ConvertFractionalImage(input, output, templateLablemap);
 }
 
-//----------------------------------------------------------------------------
-void vtkFractionalOperations::Union(vtkOrientedImageData* output, vtkSegmentation* segmentation, vtkStringArray* segmentIds)
+void vtkFractionalOperations::ConvertFractionalImage(vtkOrientedImageData* input, vtkOrientedImageData* output, vtkOrientedImageData* outputTemplate)
 {
-  if (!output)
-  {
-    std::cerr << "Union: invalid vtkOrientedImageData" << std::endl;
-    return;
-  }
-
-  if (!segmentation)
-  {
-    std::cerr << "Union: invalid vtkSegmentation" << std::endl;
-    return;
-  }
-
-  if (!segmentIds)
-  {
-    std::cerr << "Union: invalid vtkStringArray" << std::endl;
-    return;
-  }
-
-  for (int i = 0; i < segmentIds->GetNumberOfValues(); ++i)
+  if (!input || !output || !outputTemplate)
     {
-    vtkOrientedImageData* fractionalLabelmap = vtkOrientedImageData::SafeDownCast(
-      segmentation->GetSegmentRepresentation(segmentIds->GetValue(i), vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
-    if (fractionalLabelmap)
+    std::cerr << "ConvertFractionalImage: invalid vtkOrientedImageData!" << std::endl;
+    return;
+    }
+
+  double inputScalarRange[2] = {vtkFractionalOperations::DefaultScalarRange[0], vtkFractionalOperations::DefaultScalarRange[1]};
+  vtkFractionalOperations::GetScalarRange(input, inputScalarRange);
+  double outputScalarRange[2] = {vtkFractionalOperations::DefaultScalarRange[0], vtkFractionalOperations::DefaultScalarRange[1]};
+  vtkFractionalOperations::GetScalarRange(outputTemplate, inputScalarRange);
+
+  if (input->GetScalarType() == outputTemplate->GetScalarType() &&
+      inputScalarRange[0] == outputScalarRange[0] &&
+      inputScalarRange[1] == outputScalarRange[1])
+    {
+    // Voxels do not need to be recalculated
+    if (input != output)
       {
-      vtkOrientedImageDataResample::MergeImage(output, fractionalLabelmap, output, vtkOrientedImageDataResample::OPERATION_MAXIMUM);
+      output->DeepCopy(input);
       }
+    return;
+    }
+
+  vtkSmartPointer<vtkOrientedImageData> outputTemp;
+  if (input == output)
+    {
+    outputTemp = vtkSmartPointer<vtkOrientedImageData>::New();
+    }
+  else
+    {
+    outputTemp = output;
+    }
+
+  vtkFractionalOperations::CopyFractionalParameters(outputTemp, outputTemplate);
+
+  vtkSmartPointer<vtkMatrix4x4> imageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
+  input->GetImageToWorldMatrix(imageToWorldMatrix);
+  outputTemp->SetImageToWorldMatrix(imageToWorldMatrix);
+  outputTemp->SetExtent(input->GetExtent());
+  outputTemp->AllocateScalars(outputTemplate->GetScalarType(), 1);
+
+  int extent[6] = {0, -1, 0, -1, 0, -1};
+  output->GetExtent(extent);
+  if (extent[1] > extent[0] ||
+      extent[3] > extent[2] ||
+      extent[5] > extent[4])
+    {
+    // Labelmap is empty
+    return;
+    }
+
+  switch(input->GetScalarType())
+    {
+    vtkTemplateMacro(ConvertFractionalImageGeneric(input, outputTemp, (VTK_TT*)NULL));
+    default:
+      std::cerr << "ConvertFractionalImage: Unknown scalar type" << std::endl;
+      return;
+    }
+
+}
+
+template<class InputScalarType>
+void vtkFractionalOperations::ConvertFractionalImageGeneric(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer )
+{
+  vtkNotUsed(inputScalarTypePointer);
+
+    switch(output->GetScalarType())
+    {
+    vtkTemplateMacro(ConvertFractionalImageGeneric2(input, output, inputScalarTypePointer, (VTK_TT*)NULL));
+    default:
+      std::cerr << "ConvertFractionalImageGeneric: Unknown scalar type" << std::endl;
+      return;
+    }
+}
+
+template<class InputScalarType, class OutputScalarType>
+void vtkFractionalOperations::ConvertFractionalImageGeneric2(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer, OutputScalarType* outputScalarTypePointer )
+{
+  vtkNotUsed(inputScalarTypePointer);
+  vtkNotUsed(outputScalarTypePointer);
+
+  InputScalarType* inputPtr = (InputScalarType*)input->GetScalarPointerForExtent(input->GetExtent());
+  OutputScalarType* outputPtr = (OutputScalarType*)output->GetScalarPointerForExtent(output->GetExtent());
+
+  double inputScalarRange[2] = {0.0,1.0};
+  vtkFractionalOperations::GetScalarRange(input, inputScalarRange);
+
+  double outputScalarRange[2] = {0.0,1.0};
+  vtkFractionalOperations::GetScalarRange(output, outputScalarRange);
+
+  int dimensions[3] = {0,0,0};
+  input->GetDimensions(dimensions);
+
+  int numberOfVoxels = dimensions[0] + dimensions[1] + dimensions[3];
+  for (int i=0; i<numberOfVoxels; ++i)
+    {
+    double value = ((*inputPtr) - inputScalarRange[0]) / (inputScalarRange[1] - inputScalarRange[0]);
+    (*outputPtr) = static_cast<OutputScalarType>(value * (outputScalarRange[1] - outputScalarRange[0]) + outputScalarRange[0]);
+    ++inputPtr;
+    ++outputPtr;
     }
 }
 
@@ -219,55 +303,57 @@ void vtkFractionalOperations::SetDefaultFractionalParameters(vtkOrientedImageDat
 
   vtkFractionalOperations::ClearFractionalParameters(input);
 
-  double defaultScalarRange[2] = {-108.0, 108.0};
-  double defaultThreshold = 0.0;
-  vtkIdType defaultInterpolationType = VTK_LINEAR_INTERPOLATION;
-
-  // Specify the scalar range of values in the labelmap
-  vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
-  scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
-  scalarRangeArray->InsertNextValue(defaultScalarRange[0]);
-  scalarRangeArray->InsertNextValue(defaultScalarRange[1]);
-  input->GetFieldData()->AddArray(scalarRangeArray);
-
-  vtkSmartPointer<vtkDoubleArray> thresholdArray = vtkSmartPointer<vtkDoubleArray>::New();
-  thresholdArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
-  thresholdArray->InsertNextValue(defaultThreshold);
-  input->GetFieldData()->AddArray(thresholdArray);
-
-  vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
-  interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
-  interpolationTypeArray->InsertNextValue(defaultInterpolationType);
-  input->GetFieldData()->AddArray(interpolationTypeArray);
-
+  vtkFractionalOperations::SetScalarRange(input, vtkFractionalOperations::DefaultScalarRange);
+  vtkFractionalOperations::SetThreshold(input, vtkFractionalOperations::DefaultThreshold);
+  vtkFractionalOperations::SetInterpolationType(input, vtkFractionalOperations::DefaultInterpolationType);
 }
 
 //----------------------------------------------------------------------------
 void vtkFractionalOperations::CopyFractionalParameters(vtkOrientedImageData* input, vtkOrientedImageData* originalLabelmap)
 {
   if (!input || !originalLabelmap)
-  {
+    {
     std::cerr << "CopyFractionalParameters: invalid vtkOrientedImageData" << std::endl;
     return;
-  }
+    }
 
   vtkFractionalOperations::ClearFractionalParameters(input);
-  //vtkFractionalOperations::SetDefaultFractionalParameters(input);
 
   vtkFieldData* inputFieldData = input->GetFieldData();
   vtkFieldData* originalFieldData = originalLabelmap->GetFieldData();
 
-  /*vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+  if (inputFieldData && originalFieldData)
     {
-    input->GetFieldData()->RemoveArray(vtkSegmentationConverter::GetScalarRangeFieldName());
+    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+    if (scalarRangeArray && scalarRangeArray->GetNumberOfComponents() == 2)
+      {
+      inputFieldData->AddArray(scalarRangeArray);
+      }
+    else
+      {
+      vtkFractionalOperations::SetScalarRange(input, vtkFractionalOperations::DefaultScalarRange);
+      }
 
+    vtkDoubleArray* thresholdArray = vtkDoubleArray::SafeDownCast(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
+    if (thresholdArray && thresholdArray->GetNumberOfComponents() == 1)
+      {
+      inputFieldData->AddArray(thresholdArray);
+      }
+    else
+      {
+      vtkFractionalOperations::SetThreshold(input, vtkFractionalOperations::DefaultThreshold);
+      }
+
+    vtkIntArray* interpolationTypeArray = vtkIntArray::SafeDownCast(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
+    if (interpolationTypeArray && interpolationTypeArray->GetNumberOfComponents() == 1)
+      {
+      inputFieldData->AddArray(interpolationTypeArray);
+      }
+    else
+      {
+      vtkFractionalOperations::SetInterpolationType(input, vtkFractionalOperations::DefaultInterpolationType);
+      }
     }
-    */
-
-  inputFieldData->AddArray(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  inputFieldData->AddArray(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
-  inputFieldData->AddArray(originalFieldData->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
 }
 
 //----------------------------------------------------------------------------
@@ -337,7 +423,7 @@ void vtkFractionalOperations::CopyFractionalParameters(vtkOrientedImageData* inp
     }
 }
 
-/*//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
 void vtkFractionalOperations::GetScalarRange(vtkOrientedImageData* input, double scalarRange[2])
 {
   if (!input)
@@ -357,15 +443,60 @@ void vtkFractionalOperations::GetScalarRange(vtkOrientedImageData* input, double
     scalarRange[0] = scalarRangeArray->GetValue(0);
     scalarRange[1] = scalarRangeArray->GetValue(1);
     }
+  else
+    {
+    scalarRange[0] = DefaultScalarRange[0];
+    scalarRange[1] = DefaultScalarRange[1];
+    }
 
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalOperations::GetThreshold(vtkOrientedImageData* input, double threshold[1])
+double vtkFractionalOperations::GetThreshold(vtkOrientedImageData* input)
 {
   if (!input)
     {
-    std::cerr << "GetScalarRange: invalid vtkOrientedImageData" << std::endl;
+    std::cerr << "GetThreshold: invalid vtkOrientedImageData" << std::endl;
+    }
+
+  double threshold = DefaultThreshold;
+
+  vtkDoubleArray* thresholdArray = vtkDoubleArray::SafeDownCast(
+  input->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
+  if (thresholdArray && thresholdArray->GetNumberOfValues() == 1)
+    {
+    threshold = thresholdArray->GetValue(0);
+    }
+
+  return threshold;
+}
+
+//----------------------------------------------------------------------------
+vtkIdType vtkFractionalOperations::GetInterpolationType(vtkOrientedImageData* input)
+{
+  if (!input)
+    {
+    std::cerr << "GetInterpolationType: invalid vtkOrientedImageData" << std::endl;
+    }
+
+  vtkIdType interpolationType = DefaultInterpolationType;
+
+  vtkDoubleArray* interpolationTypeArray = vtkDoubleArray::SafeDownCast(
+  input->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
+  if (interpolationTypeArray && interpolationTypeArray->GetNumberOfValues() == 1)
+    {
+    interpolationType = interpolationTypeArray->GetValue(0);
+    }
+
+  return interpolationType;
+}
+
+//----------------------------------------------------------------------------
+void vtkFractionalOperations::GetScalarRange(vtkSegmentation* input, double scalarRange[2])
+{
+  if (!input)
+    {
+    std::cerr << "GetScalarRange: invalid vtkSegmentation" << std::endl;
     }
 
   if (!scalarRange)
@@ -373,84 +504,172 @@ void vtkFractionalOperations::GetThreshold(vtkOrientedImageData* input, double t
     std::cerr << "GetScalarRange: invalid double array" << std::endl;
     }
 
-  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-  input->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+  vtkOrientedImageData* templateLablemap = vtkOrientedImageData::SafeDownCast(
+    input->GetNthSegment(0)->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
+
+  if (!templateLablemap)
     {
-    scalarRange[0] = scalarRangeArray->GetValue(0);
-    scalarRange[1] = scalarRangeArray->GetValue(1);
+    scalarRange[0] = vtkFractionalOperations::DefaultScalarRange[0];
+    scalarRange[1] = vtkFractionalOperations::DefaultScalarRange[1];
+    return;
     }
 
-}*/
+  vtkFractionalOperations::GetScalarRange(templateLablemap, scalarRange);
 
-//----------------------------------------------------------------------------
-//TODO check
-template <class ImageScalarType, class MaskScalarType>
-void FractionalMaskGeneric(vtkOrientedImageData* input, vtkOrientedImageData* mask, const double scalarRange[2], ImageScalarType* inputTypePtr, MaskScalarType* maskTypePtr)
-{
-
-  vtkNotUsed(inputTypePtr);
-  vtkNotUsed(maskTypePtr);
-
-  ImageScalarType* inputPointer = (ImageScalarType*)input->GetScalarPointerForExtent(input->GetExtent());
-  MaskScalarType* maskPointer = (MaskScalarType*)input->GetScalarPointerForExtent(mask->GetExtent());
-
-  int dimensions[3] = {0,0,0};
-  input->GetDimensions(dimensions);
-
-  int numberOfVoxels = dimensions[0]*dimensions[1]*dimensions[2];
-
-  for (int i=0; i < numberOfVoxels; ++i)
-    {
-    double maskValue = (static_cast<double>(*maskPointer)-scalarRange[0]) / (scalarRange[1] - scalarRange[0]);
-    double imageValue = (static_cast<double>(*inputPointer)-scalarRange[0]) / (scalarRange[1] - scalarRange[0]);
-
-    (*inputPointer) = static_cast<ImageScalarType>((imageValue*maskValue)*(scalarRange[1]-scalarRange[0]) + scalarRange[0]);
-
-    ++inputPointer;
-    ++maskPointer;
-    }
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalOperations::FractionalMask(vtkOrientedImageData* input, vtkOrientedImageData* mask)
+double vtkFractionalOperations::GetThreshold(vtkSegmentation* input)
 {
-
-  double scalarRange[2] = {0.0, 1.0};
-  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-  mask->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+  if (!input)
     {
-    scalarRange[0] = scalarRangeArray->GetValue(0);
-    scalarRange[1] = scalarRangeArray->GetValue(1);
+    std::cerr << "GetThreshold: invalid vtkSegmentation" << std::endl;
     }
 
-  vtkSmartPointer<vtkOrientedImageData> paddedMask = vtkSmartPointer<vtkOrientedImageData>::New();
+  vtkOrientedImageData* templateLablemap = vtkOrientedImageData::SafeDownCast(
+    input->GetNthSegment(0)->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
 
-  vtkNew<vtkImageConstantPad> imageConstantPad;
-  imageConstantPad->SetInputData(mask);
-  imageConstantPad->SetConstant(scalarRange[0]);
-  imageConstantPad->SetOutputWholeExtent(input->GetExtent());
-  imageConstantPad->Update();
+  if (!templateLablemap)
+    {
+    return vtkFractionalOperations::DefaultThreshold;
+    }
 
-  paddedMask->DeepCopy(imageConstantPad->GetOutput());
+  return vtkFractionalOperations::GetThreshold(templateLablemap);
+}
 
-  Write(input, "E:\\test\\preInput.nrrd");
-  Write(paddedMask, "E:\\test\\paddedMask.nrrd");
+//----------------------------------------------------------------------------
+vtkIdType vtkFractionalOperations::GetInterpolationType(vtkSegmentation* input)
+{
+  if (!input)
+    {
+    std::cerr << "GetInterpolationType: invalid vtkSegmentation" << std::endl;
+    }
 
+  vtkOrientedImageData* templateLablemap = vtkOrientedImageData::SafeDownCast(
+    input->GetNthSegment(0)->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
 
-  switch (vtkTemplate2PackMacro(input->GetScalarType(), paddedMask->GetScalarType()))
+  if (!templateLablemap)
+    {
+    return vtkFractionalOperations::DefaultInterpolationType;
+    }
+
+  return vtkFractionalOperations::GetInterpolationType(templateLablemap);
+}
+
+//----------------------------------------------------------------------------
+void vtkFractionalOperations::SetScalarRange(vtkOrientedImageData* input, const double scalarRange[2])
+{
+  if (!input)
+    {
+    std::cerr << "SetScalarRange: invalid vtkOrientedImageData" << std::endl;
+    }
+
+  if (!scalarRange)
+    {
+    std::cerr << "SetScalarRange: invalid double array" << std::endl;
+    }
+
+  // Remove the existing array
+  input->GetFieldData()->RemoveArray(vtkSegmentationConverter::GetScalarRangeFieldName());
+
+  // Specify the scalar range of values in the labelmap
+  vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
+  scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
+  scalarRangeArray->InsertNextValue(scalarRange[0]);
+  scalarRangeArray->InsertNextValue(scalarRange[1]);
+  input->GetFieldData()->AddArray(scalarRangeArray);
+
+}
+
+//----------------------------------------------------------------------------
+void vtkFractionalOperations::SetThreshold(vtkOrientedImageData* input, const double threshold)
+{
+  if (!input)
+    {
+    std::cerr << "SetThreshold: invalid vtkOrientedImageData" << std::endl;
+    }
+
+  // Remove the existing array
+  input->GetFieldData()->RemoveArray(vtkSegmentationConverter::GetThresholdValueFieldName());
+
+  // Specify the scalar range of values in the labelmap
+  vtkSmartPointer<vtkDoubleArray> thresholdArray = vtkSmartPointer<vtkDoubleArray>::New();
+  thresholdArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
+  thresholdArray->InsertNextValue(threshold);
+  input->GetFieldData()->AddArray(thresholdArray);
+
+}
+
+//----------------------------------------------------------------------------
+void vtkFractionalOperations::SetInterpolationType(vtkOrientedImageData* input, const vtkIdType interpolationType)
+{
+  if (!input)
+    {
+    std::cerr << "SetInterpolationType: invalid vtkOrientedImageData" << std::endl;
+    }
+
+  // Remove the existing array
+  input->GetFieldData()->RemoveArray(vtkSegmentationConverter::GetInterpolationTypeFieldName());
+
+  // Specify the scalar range of values in the labelmap
+  vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
+  interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
+  interpolationTypeArray->InsertNextValue(interpolationType);
+  input->GetFieldData()->AddArray(interpolationTypeArray);
+}
+
+//----------------------------------------------------------------------------
+vtkIdType vtkFractionalOperations::GetScalarType(vtkSegmentation* input)
+{
+  if (!input)
+    {
+    std::cerr << "GetScalarType: invalid vtkSegmentation" << std::endl;
+    }
+
+  vtkOrientedImageData* templateLablemap = vtkOrientedImageData::SafeDownCast(
+    input->GetNthSegment(0)->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
+
+  if (!templateLablemap || !vtkFractionalOperations::ContainsFractionalParameters(templateLablemap))
+    {
+    std::cerr << "GetScalarType: No fractional labelmaps in segmentation!" << std::endl;
+    return vtkFractionalOperations::DefaultScalarType;
+    }
+
+    return templateLablemap->GetScalarType();
+
+}
+
+//----------------------------------------------------------------------------
+bool vtkFractionalOperations::ContainsFractionalParameters(vtkOrientedImageData* input)
+{
+  if (!input)
   {
-  vtkTemplate2Macro(FractionalMaskGeneric(input, paddedMask, scalarRange, static_cast<VTK_T1*>(NULL), static_cast<VTK_T2*>(NULL)));
-  default:
-    //TODO error
-    return;
+    return false;
   }
 
-  Write(input, "E:\\test\\postInput.nrrd");
+  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
+  input->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+  if (!scalarRangeArray || scalarRangeArray->GetNumberOfValues() != 2)
+    {
+    return false;
+    }
 
+  vtkDoubleArray* thresholdArray = vtkDoubleArray::SafeDownCast(
+  input->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
+  if (!thresholdArray || thresholdArray->GetNumberOfValues() != 1)
+    {
+    return false;
+    }
+
+  vtkIntArray* interpolationTypeArray = vtkIntArray::SafeDownCast(
+  input->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
+  if (!interpolationTypeArray || interpolationTypeArray->GetNumberOfValues() != 1)
+    {
+    return false;
+    }
+
+  return true;
 }
-
 
 //----------------------------------------------------------------------------
 void vtkFractionalOperations::Write(vtkImageData* image, const char* name)

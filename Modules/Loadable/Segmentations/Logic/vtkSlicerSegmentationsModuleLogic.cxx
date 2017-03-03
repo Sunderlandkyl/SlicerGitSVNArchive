@@ -824,14 +824,7 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(vtkMRMLSegm
   double scalarRange[2] = {0.0, 1.0};
   if (masterRepresentationIsFractionalLabelmap)
     {
-    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-      segmentationNode->GetSegmentation()->GetNthSegment(0)->GetRepresentation(
-      vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-      {
-      scalarRange[0] = scalarRangeArray->GetValue(0);
-      scalarRange[1] = scalarRangeArray->GetValue(1);
-      }
+    vtkFractionalOperations::GetScalarRange(segmentationNode->GetSegmentation(), scalarRange);
     }
 
   // Use reference volume's parent transform if available, otherwise put under the same transform as segmentation node
@@ -957,17 +950,6 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentsToLabelmapNode(vtkMRMLSegm
     colorTableNode->GetLookupTable()->SetValueRange(hsv[2], hsv[2]);
     colorTableNode->GetLookupTable()->SetAlphaRange(0.0, 1.0);
     colorTableNode->GetLookupTable()->ForceBuild();
-
-    /*int colorIndex = 0;
-    for (double currentValue = scalarRange[0]; currentValue <= scalarRange[1]; ++currentValue)
-      {
-        double percent = (currentValue-scalarRange[0])/(scalarRange[1]-scalarRange[0]);
-        std::stringstream percentString;
-        percentString << 100.0 * percent << "%";
-        colorTableNode->SetColor(colorIndex, percentString.str().c_str(), 1.0, 1.0, 1.0, percent);
-        ++colorIndex;
-      }
-    colorTableNode->SetColor(0, "Background", 0.0, 0.0, 0.0, 0.0);*/
 
     }
   else
@@ -1177,6 +1159,7 @@ bool vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(vtkOrie
 
   int segmentationNodeWasModified = segmentationNode->StartModify();
 
+  //TODO: use the update method in vtkFractionalOperations
   double scalarRange[2] = {0.0, 1.0};
   vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
     labelmapImage->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
@@ -1748,23 +1731,11 @@ bool vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(vtkOrient
 
   //TODO: What if they have different ranges?
   double scalarRange[2] = {-108.0, 108.0};
-  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-    segmentLabelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+  if (vtkFractionalOperations::ContainsFractionalParameters(segmentLabelmap))
     {
-    scalarRange[0] = scalarRangeArray->GetValue(0);
-    scalarRange[1] = scalarRangeArray->GetValue(1);
+    vtkFractionalOperations::ConvertFractionalImage(labelmap, labelmap, segmentLabelmap);
     }
-  else
-    {
-    scalarRangeArray = vtkDoubleArray::SafeDownCast(
-      labelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-      {
-      scalarRange[0] = scalarRangeArray->GetValue(0);
-      scalarRange[1] = scalarRangeArray->GetValue(1);
-      }
-    }
+  vtkFractionalOperations::GetScalarRange(labelmap, scalarRange);
 
   // 1. Append input labelmap to the segment labelmap if requested
   vtkSmartPointer<vtkOrientedImageData> newSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
