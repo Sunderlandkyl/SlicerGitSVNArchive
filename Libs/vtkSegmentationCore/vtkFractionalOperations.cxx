@@ -76,19 +76,11 @@ void vtkFractionalOperations::Invert(vtkOrientedImageData* labelmap)
       extent[4] > extent[5])
     {
     std::cerr << "Invert: invalid extent" << std::endl;
-    //vtkErrorMacro("Invert: invalid extent"); // TODO: static error macros?
     return;
     }
 
   double scalarRange[2] = {0.0, 1.0};
-  //vtkFractionalOperations::GetScalarRange(labelmap, scalarRange); //TODO
-  vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(
-  labelmap->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-  if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
-    {
-    scalarRange[0] = scalarRangeArray->GetValue(0);
-    scalarRange[1] = scalarRangeArray->GetValue(1);
-    }
+  vtkFractionalOperations::GetScalarRange(labelmap, scalarRange);
 
   void* labelmapPointer = labelmap->GetScalarPointerForExtent(extent);
 

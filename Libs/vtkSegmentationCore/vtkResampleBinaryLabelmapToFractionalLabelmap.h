@@ -43,9 +43,6 @@ public:
   vtkSetMacro(OutputScalarType, vtkIdType);
   vtkGetMacro(OutputScalarType, vtkIdType);
 
-  vtkSetVector6Macro(OutputExtent, int);
-  vtkGetVector6Macro(OutputExtent, int);
-
   vtkSetMacro(OutputMinimumValue, double);
   vtkGetMacro(OutputMinimumValue, double);
 
@@ -62,7 +59,6 @@ protected:
 
 private:
   int OversamplingFactor;
-  int OutputExtent[6];
   vtkIdType OutputScalarType;
   double OutputMinimumValue;
   double StepSize;

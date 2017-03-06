@@ -44,19 +44,11 @@ vtkResampleBinaryLabelmapToFractionalLabelmap::vtkResampleBinaryLabelmapToFracti
   this->OutputMinimumValue = 0.0;
   this->StepSize = 1.0;
 
-  for (int i = 0; i < 5; i += 2)
-    {
-    this->OutputExtent[i] = 0;
-    this->OutputExtent[i+1] = -1;
-    }
-
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
 
   vtkOrientedImageData* output = vtkOrientedImageData::New();
-
   this->GetExecutive()->SetOutputData(0, output);
-
   output->ReleaseData();
   output->Delete();
 }
@@ -101,23 +93,23 @@ void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fr
                                   BinaryImageType* binaryTypePtr, FractionalImageType* fractionalImageTypePtr )
 {
 
-  int binaryDimensions[3] = { 0, 0, 0 };
+  int binaryDimensions[3] = {0,0,0};
   binaryLabelmap->GetDimensions(binaryDimensions);
 
-  int binaryExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  int binaryExtent[6] = {0,-1,0,-1,0,-1};
   binaryLabelmap->GetExtent(binaryExtent);
 
-  int fractionalDimensions[3] = { 0, 0, 0 };
+  int fractionalDimensions[3] = {0,0,0};
   fractionalLabelmap->GetDimensions(fractionalDimensions);
 
-  int fractionalExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  int fractionalExtent[6] = {0,-1,0,-1,0,-1};
   fractionalLabelmap->GetExtent(fractionalExtent);
 
   fractionalLabelmap->AllocateScalars(outputScalarType, 1);
   FractionalImageType* fractionalLabelmapPtr = (FractionalImageType*)fractionalLabelmap->GetScalarPointerForExtent(fractionalExtent);
   if (!fractionalLabelmapPtr)
     {
-    //vtkErrorMacro("Convert: Failed to allocate memory for output labelmap image!"); TODO
+    //vtkErrorMacro("Convert: Failed to allocate memory for output labelmap image!");
     return;
     }
   else
@@ -222,9 +214,6 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
 
   output->ShallowCopy(fractionalLabelmap);
   output->SetExtent(fractionalLabelmap->GetExtent());
-
-  vtkFractionalOperations::Write(binaryLabelmap, "E:\\test\\input.nrrd");
-  vtkFractionalOperations::Write(fractionalLabelmap, "E:\\test\\output.nrrd");
 
   return 1;
 }
