@@ -25,7 +25,7 @@
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkOrientedImageData.h"
 #include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
-#include <vtkFractionalOperations.h>
+#include "vtkFractionalOperations.h"
 
 // Qt includes
 #include <QDebug>
@@ -98,6 +98,7 @@
 #include "vtkMRMLSliceLogic.h"
 #include "vtkMRMLSliceLayerLogic.h"
 #include "vtkOrientedImageDataResample.h"
+#include "vtkOpenGLTextureImage.h"
 
 //-----------------------------------------------------------------------------
 /// Visualization objects and pipeline for each slice view for the paint brush
@@ -355,6 +356,43 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
     }
 
   q->saveStateForUndo();
+
+  /*vtkSmartPointer<vtkImageData> imageData = vtkSmartPointer<vtkImageData>::New();
+  imageData->DeepCopy(modifierLabelmap);
+
+  vtkFractionalOperations::Write(modifierLabelmap, "E:\\test\\originalImage.nrrd");
+
+  vtkSmartPointer<vtkOpenGLShaderComputation> openGLShaderComputation = vtkSmartPointer<vtkOpenGLShaderComputation>::New();*/
+  //openGLShaderComputation->SetVertexShaderSource(
+  //  "#version 120\n"
+  //  "attribute vec3 vertexAttribute;\n"
+  //  "attribute vec2 textureCoordinateAttribute;\n"
+  //  "varying vec3 interpolatedTextureCoordinate;\n"
+  //  "void main()\n"
+  //  "{\n"
+  //      "interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, .5);\n"
+  //      "gl_Position = vec4(vertexAttribute, 1.);\n"
+  //    "}\n"
+  //  );
+  //openGLShaderComputation->SetFragmentShaderSource(
+  //  "#version 120\n"
+  //  "void main()\n"
+  //  "{\n"
+  //  "gl_FragColor = vec4(1.,1.,1.,1.)\n"
+  //  "}\n"
+  //  );
+
+  vtkSmartPointer<vtkOpenGLTextureImage> openGLTextureImage = vtkSmartPointer<vtkOpenGLTextureImage>::New();
+  //openGLTextureImage->SetImageData(imageData);
+  //openGLTextureImage->SetInterpolate(true);
+  //openGLTextureImage->SetShaderComputation(openGLShaderComputation);
+
+  //openGLShaderComputation->SetResultImageData(imageData);
+
+  //vtkFractionalOperations::Write(imageData, "E:\\test\\shaded.nrrd");
+
+  //this->PaintCoordinates_World->Reset(); //TODO
+  //return; //TODO
 
   QList<int> updateExtentList;
 
