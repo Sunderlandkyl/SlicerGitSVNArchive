@@ -14,6 +14,8 @@
 =========================================================================*/
 #include "vtkOpenGLShaderComputation.h"
 
+#include "vtkOpenGLTextureImage.h"
+
 #include "vtkDataArray.h"
 #include "vtkImageData.h"
 #include "vtkObjectFactory.h"
@@ -251,7 +253,8 @@ void vtkOpenGLShaderComputation::Initialize(vtkRenderWindow *renderWindow)
   extensions->LoadExtension("GL_ARB_fragment_shader");
   extensions->LoadExtension("GL_ARB_vertex_buffer_object");
   extensions->LoadExtension("GL_ARB_vertex_program");
-
+  extensions->LoadExtension("GL_VERSION_1_2");
+  extensions->LoadExtension("GL_ARB_multitexture");
 
   vtkOpenGLCheckErrorMacro("after extension load");
 
@@ -522,7 +525,24 @@ void vtkOpenGLShaderComputation::ReadResult()
   //
   // Collect the results of the calculation back into the image data
   //
-  glReadPixels(0, 0, resultDimensions[0], resultDimensions[1], GL_RGBA, GL_UNSIGNED_BYTE, resultPixels);
+  int componentCount = this->ResultImageData->GetNumberOfScalarComponents();
+  GLuint format;
+  if ( componentCount == 1 )
+    {
+    format = GL_LUMINANCE;
+    }
+  else if ( componentCount == 4 )
+    {
+    format = GL_RGBA;
+    }
+  else
+    {
+    vtkErrorMacro("Must have 1 or 4 component image data for texture");
+    return;
+    }
+
+  GLuint scalarType = vtkOpenGLTextureImage::vtkScalarTypeToGLType(this->ResultImageData->GetScalarType());
+  glReadPixels(0, 0, resultDimensions[0], resultDimensions[1], format, scalarType, resultPixels);
   pointData->Modified();
 
   vtkOpenGLCheckErrorMacro("after reading back");

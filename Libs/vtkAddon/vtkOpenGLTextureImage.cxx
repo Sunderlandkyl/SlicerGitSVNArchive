@@ -51,7 +51,7 @@ vtkOpenGLTextureImage::~vtkOpenGLTextureImage()
 
 //----------------------------------------------------------------------------
 // adapted from Rendering/OpenGL2/vtkTextureObject.cxx
-static GLenum vtkScalarTypeToGLType(int vtk_scalar_type)
+GLenum vtkOpenGLTextureImage::vtkScalarTypeToGLType(int vtk_scalar_type)
 {
   // DON'T DEAL with VTK_CHAR as this is platform dependent.
   switch (vtk_scalar_type)
@@ -150,7 +150,8 @@ bool vtkOpenGLTextureImage::UpdateTexture()
   glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_WRAP_S, vtkgl::CLAMP_TO_EDGE);
   glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_WRAP_T, vtkgl::CLAMP_TO_EDGE);
 
-  vtkgl::TexImage3D(/* target */            vtkgl::TEXTURE_3D,
+  vtkgl::TexImage3D(
+               /* target */            vtkgl::TEXTURE_3D,
                /* level */             0,
                /* internal format */   componentCount,
                /* width */             dimensions[0],
@@ -199,7 +200,7 @@ void vtkOpenGLTextureImage::Activate(vtkTypeUInt32 unit)
     }
 
   // TODO:
-  vtkgl::ActiveTexture(vtkgl::TEXTURE0 + unit);
+  vtkgl::ActiveTextureARB(vtkgl::TEXTURE0 + unit);
   glBindTexture(vtkgl::TEXTURE_3D, this->TextureName);
 
   vtkOpenGLCheckErrorMacro("after activating");

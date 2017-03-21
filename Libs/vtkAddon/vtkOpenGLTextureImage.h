@@ -25,6 +25,7 @@
 #define __vtkOpenGLTextureImage_h
 
 #include "vtkOpenGLShaderComputation.h"
+#include "vtkOpenGL.h"
 
 #include "vtkImageData.h"
 
@@ -108,6 +109,7 @@ public:
   // is the right size for the data).
   void ReadBack();
 
+  static GLenum vtkScalarTypeToGLType(int vtk_scalar_type);
   // Description:
   // TODO: options for min and mag filter, wrapping...
 
