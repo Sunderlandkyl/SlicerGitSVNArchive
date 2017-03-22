@@ -99,6 +99,7 @@
 #include "vtkMRMLSliceLayerLogic.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkOpenGLTextureImage.h"
+#include "vtkOpenGLShaderComputation.h"
 
 //-----------------------------------------------------------------------------
 /// Visualization objects and pipeline for each slice view for the paint brush
@@ -390,23 +391,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
     double originalBrushOrigin[3] = {0,0,0};
     this->BrushPolyDataToStencil->GetOutputOrigin(originalBrushOrigin);
 
-    if (masterRepresentationIsFractionalLabelmap)
-      {
-      int oversamplingFactor = 6;
-
-      vtkSmartPointer<vtkOrientedImageData> originalGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
-      originalGeometry->SetExtent(originalBrushExtent);
-      originalGeometry->SetOrigin(originalBrushOrigin);
-      originalGeometry->SetSpacing(originalBrushSpacing);
-      vtkSmartPointer<vtkOrientedImageData> oversampledGeometry = vtkSmartPointer<vtkOrientedImageData>::New();
-
-      vtkFractionalOperations::CalculateOversampledGeometry(originalGeometry, oversampledGeometry, oversamplingFactor);
-
-      this->BrushPolyDataToStencil->SetOutputWholeExtent(oversampledGeometry->GetExtent());
-      this->BrushPolyDataToStencil->SetOutputSpacing(oversampledGeometry->GetSpacing());
-      this->BrushPolyDataToStencil->SetOutputOrigin(oversampledGeometry->GetOrigin());
-      }
-
     if (modifierLabelmap->GetScalarType() != scalarType)
       {
       modifierLabelmap->AllocateScalars(scalarType, 1);
@@ -440,23 +424,84 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
     if (masterRepresentationIsFractionalLabelmap)
       {
-      vtkNew<vtkImageThreshold> imageThreshold;
-      imageThreshold->SetInputData(modifierLabelmap);
-      imageThreshold->SetInValue(scalarRange[0]);
-      imageThreshold->SetOutValue(scalarRange[0]);
-      imageThreshold->ThresholdBetween(0,0);
-      imageThreshold->Update();
-      modifierLabelmap->DeepCopy(imageThreshold->GetOutput());
 
-      stencilToImage->Update();
+      vtkSmartPointer<vtkOpenGLShaderComputation> shaderComputation = vtkSmartPointer<vtkOpenGLShaderComputation>::New();
 
-      vtkSmartPointer<vtkOrientedImageData> stencilToImageOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
-      stencilToImageOrientedImageData->ShallowCopy(stencilToImage->GetOutput());
-      vtkNew<vtkResampleBinaryLabelmapToFractionalLabelmap> resampleBinaryToFractional;
-      resampleBinaryToFractional->SetInputData(stencilToImageOrientedImageData);
-      resampleBinaryToFractional->SetOutputScalarType(scalarType);
-      resampleBinaryToFractional->SetOutputMinimumValue(scalarRange[0]);
-      brushPositioner->SetInputConnection(resampleBinaryToFractional->GetOutputPort());
+      vtkSmartPointer<vtkOrientedImageData> fractionalLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      fractionalLabelmap->SetOrigin(brushPositioner->GetOutputOrigin());
+      fractionalLabelmap->SetSpacing(brushPositioner->GetOutputSpacing());
+      fractionalLabelmap->SetExtent(this->BrushPolyDataToStencil->GetOutputWholeExtent());
+      fractionalLabelmap->AllocateScalars(VTK_UNSIGNED_SHORT, 1);
+
+      int dimensions[3] = {0,0,0};
+      fractionalLabelmap->GetDimensions(dimensions);
+
+      std::stringstream vertexSourceStream;
+      vertexSourceStream << "#version 120" << std::endl;
+      vertexSourceStream << "uniform float slice;" << std::endl;
+      vertexSourceStream << "attribute vec3 vertexAttribute;" << std::endl;
+      vertexSourceStream << "attribute vec2 textureCoordinateAttribute;" << std::endl;
+      vertexSourceStream << "varying vec3 interpolatedTextureCoordinate;" << std::endl;
+      vertexSourceStream << "void main()" << std::endl;
+      vertexSourceStream << "{" << std::endl;
+      vertexSourceStream << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << 0.5/dimensions[2] << ");" << std::endl;
+      vertexSourceStream << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl;
+      vertexSourceStream << "}" << std::endl;
+
+      int oversamplingFactor = 6;
+      std::stringstream fragmentSourceStream;
+      fragmentSourceStream << "#version 120" << std::endl;
+      fragmentSourceStream << "uniform float slice;" << std::endl;
+      fragmentSourceStream << "varying vec3 interpolatedTextureCoordinate;" << std::endl;
+      fragmentSourceStream << "uniform sampler3D textureUnit0; // output" << std::endl;
+      fragmentSourceStream << "uniform sampler3D textureUnit1; // input" << std::endl;
+      fragmentSourceStream << "void main()" << std::endl;
+      fragmentSourceStream << "{" << std::endl;
+      fragmentSourceStream << "if (%(oversamplingFactor)s > 0.0)" << std::endl;
+      fragmentSourceStream << "  {" << std::endl;
+      fragmentSourceStream << "  vec3 resolution = vec3("<<dimensions[0] << ".," << dimensions[1] << ".," << dimensions[2] << ".);" << std::endl;
+      fragmentSourceStream << "  float offsetStart = -(" << oversamplingFactor << " - 1.)/(2. * " << oversamplingFactor << ");" << std::endl;
+      fragmentSourceStream << "  float stepSize = 1./(" << oversamplingFactor << ");" << std::endl;
+      fragmentSourceStream << "  float sum = 0.;" << std::endl;
+      fragmentSourceStream << "  // Iterate over 216 offset points." << std::endl;
+      fragmentSourceStream << "  for (int k=0; k<" << oversamplingFactor << "; ++k)" << std::endl;
+      fragmentSourceStream << "    {" << std::endl;
+      fragmentSourceStream << "    for (int j=0; j<" << oversamplingFactor << "; ++j)" << std::endl;
+      fragmentSourceStream << "      {" << std::endl;
+      fragmentSourceStream << "      for (int i=0; i<" << oversamplingFactor << "; ++i)" << std::endl;
+      fragmentSourceStream << "        {" << std::endl;
+      fragmentSourceStream << "        // Calculate the current offset." << std::endl;
+      fragmentSourceStream << "        vec3 offset = vec3(" << std::endl;
+      fragmentSourceStream << "          (offsetStart + stepSize*i)/(resolution.x)," << std::endl;
+      fragmentSourceStream << "          (offsetStart + stepSize*j)/(resolution.y)," << std::endl;
+      fragmentSourceStream << "          (offsetStart + stepSize*k)/(resolution.z));" << std::endl;
+      fragmentSourceStream << "        vec3 offsetTextureCoordinate = interpolatedTextureCoordinate + offset;" << std::endl;
+      fragmentSourceStream << "        if (length(offsetTextureCoordinate - vec3("<< 0.5 << ")) < " << 0.5 << ")" << std::endl; //TODO!?!:!?
+      fragmentSourceStream << "          {" << std::endl;
+      fragmentSourceStream << "          sum++;" << std::endl;
+      fragmentSourceStream << "          }" << std::endl;
+      fragmentSourceStream << "        }" << std::endl;
+      fragmentSourceStream << "      }" << std::endl;
+      fragmentSourceStream << "    }" << std::endl;
+      fragmentSourceStream << "  // Calculate the fractional value of the pixel." << std::endl;
+      fragmentSourceStream << "  gl_FragColor = vec4( vec3(sum / pow(" << oversamplingFactor << ",3.)), 1.0 );" << std::endl;
+      fragmentSourceStream << "  }" << std::endl;
+      fragmentSourceStream << "else" << std::endl;
+      fragmentSourceStream << "  {" << std::endl;
+      fragmentSourceStream << "  gl_FragColor = vec4( 0.0 );" << std::endl;
+      fragmentSourceStream << "  }" << std::endl;
+      fragmentSourceStream << "}" << std::endl;
+
+      shaderComputation->SetVertexShaderSource(vertexSourceStream.str().c_str());
+      shaderComputation->SetFragmentShaderSource(fragmentSourceStream.str().c_str());
+      shaderComputation->SetResultImageData(fractionalLabelmap);
+
+      vtkSmartPointer<vtkOpenGLTextureImage> targetTextureImage = vtkSmartPointer<vtkOpenGLTextureImage>::New();
+      targetTextureImage->SetImageData(fractionalLabelmap);
+      targetTextureImage->SetInterpolate(true);
+      targetTextureImage->SetShaderComputation(shaderComputation);
+
+      brushPositioner->SetInputData(fractionalLabelmap);
       }
 
     vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
@@ -506,10 +551,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
           }
         }
 
-      if (masterRepresentationIsFractionalLabelmap)
-        {
-        vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(orientedBrushPositionerOutput.GetPointer(), modifierLabelmap, orientedBrushPositionerOutput.GetPointer(), true, false, NULL, scalarRange[0]);
-        }
       vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput.GetPointer(), vtkOrientedImageDataResample::OPERATION_MAXIMUM);
 
       }
