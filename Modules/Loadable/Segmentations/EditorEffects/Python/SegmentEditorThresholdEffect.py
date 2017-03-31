@@ -246,8 +246,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       #version 120
       uniform float slice;
       varying vec3 interpolatedTextureCoordinate;
-      uniform sampler3D textureUnit0; // output
-      uniform sampler3D textureUnit1; // input
+      uniform sampler3D textureUnit0;
       void main()
       {
 
@@ -281,7 +280,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
               vec4 referenceSample = texture3D(textureUnit0, offsetTextureCoordinate);
               if (referenceSample.r >= %(minThreshold)s && referenceSample.r <= %(maxThreshold)s )
                 {
-                sum++;
+                ++sum;
                 }
 
               }
@@ -290,8 +289,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
         // Calculate the fractional value of the pixel.
         gl_FragColor = vec4( vec3(sum / pow(%(oversamplingFactor)s,3.)), 1.0 );
-        //gl_FragColor = texture3D(textureUnit0, interpolatedTextureCoordinate);
-        //gl_FragColor = vec4( interpolatedTextureCoordinate, 1.0 );
         }
       else
         {
