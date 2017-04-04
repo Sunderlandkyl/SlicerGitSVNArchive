@@ -21,7 +21,10 @@ endif()
 #find_package(VTK REQUIRED)
 #include(${VTK_USE_FILE})
 
-
+#
+# OpenGL
+#
+find_package(OpenGL)
 
 # --------------------------------------------------------------------------
 # Configure headers
@@ -103,6 +106,7 @@ set(VTK_WRAP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${VTK_INCLUDE_DIRS}
 
 set(libs
   ${VTK_LIBRARIES}
+  ${OPENGL_LIBRARIES}
   )
 target_link_libraries(${lib_name} ${libs})
 
