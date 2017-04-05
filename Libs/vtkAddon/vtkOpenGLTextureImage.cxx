@@ -153,7 +153,7 @@ bool vtkOpenGLTextureImage::UpdateTexture()
   vtkgl::TexImage3D(
                /* target */            vtkgl::TEXTURE_3D,
                /* level */             0,
-               /* internal format */   componentCount,
+               /* internal format */   vtkgl::RGBA16F,
                /* width */             dimensions[0],
                /* height */            dimensions[1],
                /* depth */             dimensions[2],
