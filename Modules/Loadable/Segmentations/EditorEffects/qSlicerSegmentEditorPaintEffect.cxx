@@ -76,6 +76,7 @@
 #include <vtkDoubleArray.h>
 #include <vtkImageThreshold.h>
 #include <vtkStringArray.h>
+#include <vtkImageShiftScale.h>
 
 // CTK includes
 #include "ctkDoubleSlider.h"
@@ -98,6 +99,8 @@
 #include "vtkMRMLSliceLogic.h"
 #include "vtkMRMLSliceLayerLogic.h"
 #include "vtkOrientedImageDataResample.h"
+#include "vtkOpenGLShaderComputation.h"
+#include "vtkOpenGLTextureImage.h"
 
 //-----------------------------------------------------------------------------
 /// Visualization objects and pipeline for each slice view for the paint brush
@@ -359,6 +362,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
   QList<int> updateExtentList;
 
   bool masterRepresentationIsFractionalLabelmap = segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
+  if (masterRepresentationIsFractionalLabelmap && true) // returns false if opengl functions cannot be loaded
+  {
+    this->applyFractionalBrush(viewWidget, modifierLabelmap);
+    return;
+  }
+
   double scalarRange[2] = {0.0, 1.0};
   double thresholdValue = 0.5;
   vtkIdType interpolationType = VTK_NEAREST_INTERPOLATION;
@@ -525,7 +535,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
 
     }
   this->PaintCoordinates_World->Reset();
-  vtkFractionalOperations::Write(modifierLabelmap, "E:\\test\\brush.nrrd");
+
   if (masterRepresentationIsFractionalLabelmap)
     {
     // Specify the scalar range of values in the labelmap
@@ -546,6 +556,229 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
     {
       vtkFractionalOperations::ClearFractionalParameters(modifierLabelmap);
     }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* viewWidget, vtkOrientedImageData* modifierLabelmap)
+{
+  Q_Q(qSlicerSegmentEditorPaintEffect);
+  this->updateAbsoluteBrushDiameter();
+
+  vtkMRMLSegmentationNode* segmentationNode = q->parameterSetNode()->GetSegmentationNode();
+  if (!segmentationNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentationNode";
+    return;
+    }
+
+  double radiusMm = q->doubleParameter("BrushAbsoluteDiameter")/2.0;
+  double oversamplingFactor = 6.0;
+  double scalarRange[2] = {0.0, 1.0};
+  double thresholdValue = 0.5;
+  vtkIdType interpolationType = VTK_NEAREST_INTERPOLATION;
+  vtkIdType scalarType = VTK_UNSIGNED_CHAR;
+
+  double maxDistance = vtkMath::Norm(modifierLabelmap->GetSpacing());
+
+  vtkFractionalOperations::GetScalarRange(segmentationNode->GetSegmentation(), scalarRange);
+  thresholdValue = vtkFractionalOperations::GetThreshold(segmentationNode->GetSegmentation());
+  interpolationType = vtkFractionalOperations::GetInterpolationType(segmentationNode->GetSegmentation());
+  scalarType = vtkFractionalOperations::GetScalarType(segmentationNode->GetSegmentation());
+
+  vtkNew<vtkMatrix4x4> worldToImageMatrix;
+  modifierLabelmap->GetWorldToImageMatrix(worldToImageMatrix.GetPointer());
+
+  vtkSmartPointer<vtkMatrix4x4> imageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
+  modifierLabelmap->GetImageToWorldMatrix(imageToWorldMatrix);
+
+  int dimensions[3] = { std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[0])+10,
+                        std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10,
+                        std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10 };
+
+  vtkNew<vtkImageThreshold> threshold;
+  threshold->SetInputData(modifierLabelmap);
+  threshold->SetInValue(scalarRange[0]);
+  threshold->SetOutValue(scalarRange[0]);
+  threshold->ThresholdBetween(0.0, 0.0);
+  threshold->SetOutputScalarType(scalarType);
+  threshold->Update();
+  modifierLabelmap->DeepCopy(threshold->GetOutput());
+
+  std::stringstream fragmentSource;
+  fragmentSource << std::fixed;
+  fragmentSource << "#version 120" << std::endl;
+  fragmentSource << "varying vec3 interpolatedTextureCoordinate;" << std::endl;
+  fragmentSource << "varying mat4 matTexToRAS;" << std::endl;
+  fragmentSource << "varying vec3 brushCenterRAS;" << std::endl;
+  fragmentSource << "void main()" << std::endl;
+  fragmentSource << "{" << std::endl;
+  fragmentSource << "  vec4 voxelCenterRAS = matTexToRAS *  vec4(interpolatedTextureCoordinate, 1.0);" << std::endl;
+  fragmentSource << "  float centerDistance = distance(voxelCenterRAS.xyz, brushCenterRAS);" << std::endl;
+  fragmentSource << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
+  fragmentSource << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl;
+  fragmentSource << "    {" << std::endl;
+  fragmentSource << "    if (centerDistance > brushRadiusMm)" << std::endl;
+  fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[0] << ");" << std::endl;
+  fragmentSource << "    if (centerDistance < brushRadiusMm)" << std::endl;
+  fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[1] << ");" << std::endl;
+  fragmentSource << "    return;" << std::endl;
+  fragmentSource << "    }" << std::endl;
+  fragmentSource << "  vec3 resolution = vec3("<< dimensions[0] <<","<< dimensions[1] <<","<< dimensions[2] <<");" << std::endl;
+  fragmentSource << "  float offsetStart = -("<< oversamplingFactor << " - 1.)/(2. * "<<oversamplingFactor<<");" << std::endl;
+  fragmentSource << "  float stepSize = 1./"<< oversamplingFactor <<";" << std::endl;
+  fragmentSource << "  float sum = 0;" << std::endl;
+  fragmentSource << "  // Iterate over 216 offset points." << std::endl;
+  fragmentSource << "  for (int k=0; k<"<<oversamplingFactor<<"; ++k)" << std::endl;
+  fragmentSource << "    {" << std::endl;
+  fragmentSource << "    for (int j=0; j<"<<oversamplingFactor<<"; ++j)" << std::endl;
+  fragmentSource << "      {" << std::endl;
+  fragmentSource << "      for (int i=0; i<"<<oversamplingFactor<<"; ++i)" << std::endl;
+  fragmentSource << "        {" << std::endl;
+  fragmentSource << "        // Calculate the current offset." << std::endl;
+  fragmentSource << "        vec3 offset = vec3(" << std::endl;
+  fragmentSource << "          (offsetStart + stepSize*i)/(resolution.x)," << std::endl;
+  fragmentSource << "          (offsetStart + stepSize*j)/(resolution.y)," << std::endl;
+  fragmentSource << "          (offsetStart + stepSize*k)/(resolution.z));" << std::endl;
+  fragmentSource << "        vec4 offsetTextureCoordinate = vec4(interpolatedTextureCoordinate + offset, 1.0);" << std::endl;
+  fragmentSource << "        vec4 rasCoordinate = matTexToRAS * offsetTextureCoordinate;" << std::endl;
+  fragmentSource << "        if (distance(rasCoordinate.xyz, brushCenterRAS) <= brushRadiusMm)" << std::endl;
+  fragmentSource << "          {" << std::endl;
+  fragmentSource << "          ++sum;" << std::endl;
+  fragmentSource << "          }" << std::endl;
+  fragmentSource << "        }" << std::endl;
+  fragmentSource << "      }" << std::endl;
+  fragmentSource << "    }" << std::endl;
+  fragmentSource << "  gl_FragColor = vec4( "<< scalarRange[0] << " + sum );" << std::endl;
+  fragmentSource << "}" << std::endl;
+
+  vtkNew<vtkImageShiftScale> shiftScale;
+
+  vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
+  int updateExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  for (int pointIndex = 0; pointIndex < numberOfPoints; pointIndex++)
+    {
+
+    double currentPoint[4] = {0,0,0,1.0};
+    this->PaintCoordinates_World->GetPoint(pointIndex, currentPoint);
+
+    double* paintCoordinateIJK = worldToImageMatrix->MultiplyDoublePoint(currentPoint);
+    int brushExtent[6] = {0, -1, 0, -1, 0, -1};
+    brushExtent[0] = std::floor(paintCoordinateIJK[0] - dimensions[0]/2.0);
+    brushExtent[1] = brushExtent[0] + dimensions[0];
+    brushExtent[2] = std::floor(paintCoordinateIJK[1] - dimensions[1]/2.0);
+    brushExtent[3] = brushExtent[2] + dimensions[1];
+    brushExtent[4] = std::floor(paintCoordinateIJK[2] - dimensions[2]/2.0);
+    brushExtent[5] = brushExtent[4] + dimensions[2];
+
+    vtkSmartPointer<vtkTransform> transformRASToTex = vtkSmartPointer<vtkTransform>::New();
+    transformRASToTex->SetMatrix(worldToImageMatrix.GetPointer());
+    transformRASToTex->PostMultiply();
+    transformRASToTex->Translate(0.5-brushExtent[0], 0.5-brushExtent[2], 0.5-brushExtent[4]);
+    transformRASToTex->Scale(1./(dimensions[0]+1), 1./(dimensions[1]+1),  1./(dimensions[2]+1));
+    vtkNew<vtkMatrix4x4> matrixTexToRAS;
+    transformRASToTex->GetMatrix(matrixTexToRAS.GetPointer());
+    matrixTexToRAS->Invert();
+
+    std::stringstream vertexSource;
+    vertexSource << std::fixed;
+    vertexSource << "#version 120" << std::endl;
+    vertexSource << "uniform float slice;" << std::endl;
+    vertexSource << "attribute vec3 vertexAttribute;" << std::endl;
+    vertexSource << "attribute vec2 textureCoordinateAttribute;" << std::endl;
+    vertexSource << "varying mat4 matTexToRAS;" << std::endl;
+    vertexSource << "varying vec3 interpolatedTextureCoordinate;" << std::endl;
+    vertexSource << "varying vec3 brushCenterRAS;" << std::endl;
+    vertexSource << "void main()" << std::endl;
+    vertexSource << "{" << std::endl;
+    vertexSource << "  matTexToRAS = mat4(";
+    vertexSource << matrixTexToRAS->GetElement(0,0) << ", " << matrixTexToRAS->GetElement(1,0) << ", " << matrixTexToRAS->GetElement(2,0) << ", " << matrixTexToRAS->GetElement(3,0) << ", ";
+    vertexSource << matrixTexToRAS->GetElement(0,1) << ", " << matrixTexToRAS->GetElement(1,1) << ", " << matrixTexToRAS->GetElement(2,1) << ", " << matrixTexToRAS->GetElement(3,1) << ", ";
+    vertexSource << matrixTexToRAS->GetElement(0,2) << ", " << matrixTexToRAS->GetElement(1,2) << ", " << matrixTexToRAS->GetElement(2,2) << ", " << matrixTexToRAS->GetElement(3,2) << ", ";
+    vertexSource << matrixTexToRAS->GetElement(0,3) << ", " << matrixTexToRAS->GetElement(1,3) << ", " << matrixTexToRAS->GetElement(2,3) << ", " << matrixTexToRAS->GetElement(3,3) << ");" << std::endl;
+    vertexSource << "  brushCenterRAS = vec3("<< currentPoint[0] <<", "<< currentPoint[1] <<", "<< currentPoint[2] <<");" << std::endl;
+    vertexSource << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice );" << std::endl;
+    vertexSource << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl;
+    vertexSource << "}" << std::endl;
+
+    vtkSmartPointer<vtkOrientedImageData> orientedBrushPositionerOutput = vtkSmartPointer<vtkOrientedImageData>::New();
+    orientedBrushPositionerOutput->SetExtent(brushExtent);
+    orientedBrushPositionerOutput->SetImageToWorldMatrix(imageToWorldMatrix);
+    orientedBrushPositionerOutput->AllocateScalars(VTK_FLOAT, 1);
+
+    vtkNew<vtkOpenGLShaderComputation> shaderComputation;
+    shaderComputation->SetFragmentShaderSource(fragmentSource.str().c_str());
+    shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
+    shaderComputation->SetResultImageData(orientedBrushPositionerOutput);
+
+    vtkNew<vtkOpenGLTextureImage> targetTextureImage;
+    targetTextureImage->SetInterpolate(true);
+    targetTextureImage->SetShaderComputation(shaderComputation.GetPointer());
+    targetTextureImage->SetImageData(orientedBrushPositionerOutput);
+
+    shaderComputation->AcquireResultRenderbuffer();
+    for (float slice=0; slice <= dimensions[2]; ++slice)
+      {
+      targetTextureImage->AttachAsDrawTarget(0, slice);
+      shaderComputation->Compute((slice) / (1. * dimensions[2]));
+      }
+    targetTextureImage->ReadBack();
+    shaderComputation->ReleaseResultRenderbuffer();
+
+    if (pointIndex == 0)
+      {
+      orientedBrushPositionerOutput->GetExtent(updateExtent);
+      }
+    else
+      {
+      int* brushExtent = orientedBrushPositionerOutput->GetExtent();
+      for (int i = 0; i < 3; i++)
+        {
+        if (brushExtent[i * 2] < updateExtent[i * 2])
+        {
+          updateExtent[i * 2] = brushExtent[i * 2];
+          }
+        if (brushExtent[i * 2 + 1] > updateExtent[i * 2 + 1])
+          {
+          updateExtent[i * 2 + 1] = brushExtent[i * 2 + 1];
+          }
+        }
+      }
+
+    shiftScale->SetInputData(orientedBrushPositionerOutput);
+    shiftScale->SetOutputScalarType(scalarType);
+    shiftScale->Update();
+    orientedBrushPositionerOutput->DeepCopy(shiftScale->GetOutput());
+    vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput, vtkOrientedImageDataResample::OPERATION_MAXIMUM, NULL, 0, scalarRange[0]);
+    }
+  modifierLabelmap->Modified();
+
+  // Specify the scalar range of values in the labelmap
+  vtkSmartPointer<vtkDoubleArray> scalarRangeArray = vtkSmartPointer<vtkDoubleArray>::New();
+  scalarRangeArray->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
+  scalarRangeArray->InsertNextValue(scalarRange[0]);
+  scalarRangeArray->InsertNextValue(scalarRange[1]);
+  modifierLabelmap->GetFieldData()->AddArray(scalarRangeArray);
+
+  // Specify the surface threshold value for visualization
+  vtkSmartPointer<vtkDoubleArray> thresholdValueArray = vtkSmartPointer<vtkDoubleArray>::New();
+  thresholdValueArray->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
+  thresholdValueArray->InsertNextValue(thresholdValue);
+  modifierLabelmap->GetFieldData()->AddArray(thresholdValueArray);
+
+  // Specify the interpolation type for visualization
+  vtkSmartPointer<vtkIntArray> interpolationTypeArray = vtkSmartPointer<vtkIntArray>::New();
+  interpolationTypeArray->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
+  interpolationTypeArray->InsertNextValue(interpolationType);
+  modifierLabelmap->GetFieldData()->AddArray(interpolationTypeArray);
+
+    // Notify editor about changes
+  qSlicerSegmentEditorAbstractEffect::ModificationMode modificationMode = (q->m_Erase ? qSlicerSegmentEditorAbstractEffect::ModificationModeRemove : qSlicerSegmentEditorAbstractEffect::ModificationModeAdd);
+  q->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, updateExtent);
+
+  vtkFractionalOperations::ClearFractionalParameters(modifierLabelmap);
+
+  this->PaintCoordinates_World->Reset();
+
 }
 
 //-----------------------------------------------------------------------------

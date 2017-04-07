@@ -623,7 +623,7 @@ vtkIdType vtkFractionalOperations::GetScalarType(vtkSegmentation* input)
 
   if (!templateLablemap || !vtkFractionalOperations::ContainsFractionalParameters(templateLablemap))
     {
-    std::cerr << "GetScalarType: No fractional labelmaps in segmentation!" << std::endl;
+    //No fractional labelmaps in segmentation!
     return vtkFractionalOperations::DefaultScalarType;
     }
 
