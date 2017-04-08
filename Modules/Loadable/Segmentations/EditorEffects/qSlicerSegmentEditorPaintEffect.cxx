@@ -595,6 +595,24 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
                         std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10,
                         std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10 };
 
+  int planeNormalAxis = 0;
+  qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
+  bool useCylinderBrush = sliceWidget && !q->integerParameter("BrushSphere");
+  if ( useCylinderBrush )
+    {
+    double brushPlaneNormal[4] = {0, 1, 0, 1};
+    this->BrushToWorldOriginTransform->MultiplyPoint(brushPlaneNormal, brushPlaneNormal);
+
+    for (int i=0; i<3; ++i)
+      {
+      if (std::abs(std::abs(brushPlaneNormal[i]) - 1.0) < VTK_DBL_EPSILON)
+        {
+        planeNormalAxis = i;
+        dimensions[i] = 2;
+        }
+      }
+    }
+
   vtkNew<vtkImageThreshold> threshold;
   threshold->SetInputData(modifierLabelmap);
   threshold->SetInValue(scalarRange[0]);
@@ -615,6 +633,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   fragmentSource << "  vec4 voxelCenterRAS = matTexToRAS *  vec4(interpolatedTextureCoordinate, 1.0);" << std::endl;
   fragmentSource << "  float centerDistance = distance(voxelCenterRAS.xyz, brushCenterRAS);" << std::endl;
   fragmentSource << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
+  if (useCylinderBrush)
+    {
+  // TODO: fix for correct mid-slice behavior
+  fragmentSource << "  float sliceSpacing = "<< qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0<<";"<< std::endl;
+    }
+  else
+    {
   fragmentSource << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl;
   fragmentSource << "    {" << std::endl;
   fragmentSource << "    if (centerDistance > brushRadiusMm)" << std::endl;
@@ -623,6 +648,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[1] << ");" << std::endl;
   fragmentSource << "    return;" << std::endl;
   fragmentSource << "    }" << std::endl;
+    }
   fragmentSource << "  vec3 resolution = vec3("<< dimensions[0] <<","<< dimensions[1] <<","<< dimensions[2] <<");" << std::endl;
   fragmentSource << "  float offsetStart = -("<< oversamplingFactor << " - 1.)/(2. * "<<oversamplingFactor<<");" << std::endl;
   fragmentSource << "  float stepSize = 1./"<< oversamplingFactor <<";" << std::endl;
@@ -641,7 +667,29 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   fragmentSource << "          (offsetStart + stepSize*k)/(resolution.z));" << std::endl;
   fragmentSource << "        vec4 offsetTextureCoordinate = vec4(interpolatedTextureCoordinate + offset, 1.0);" << std::endl;
   fragmentSource << "        vec4 rasCoordinate = matTexToRAS * offsetTextureCoordinate;" << std::endl;
-  fragmentSource << "        if (distance(rasCoordinate.xyz, brushCenterRAS) <= brushRadiusMm)" << std::endl;
+  if (useCylinderBrush)
+    {
+    //TODO: using dot products on transformed axis would allow this to be used for arbitrary slice orientation
+    if (planeNormalAxis == 0)
+      {
+      fragmentSource << "        if (distance(rasCoordinate.yz, brushCenterRAS.yz) <= brushRadiusMm ";
+      fragmentSource <<          "&& abs(rasCoordinate.x - brushCenterRAS.x) <= sliceSpacing)" << std::endl;
+      }
+    else if (planeNormalAxis == 1)
+      {
+      fragmentSource << "        if (distance(rasCoordinate.xz, brushCenterRAS.xz) <= brushRadiusMm " << std::endl;
+      fragmentSource <<          "&& abs(rasCoordinate.y - brushCenterRAS.y) <= sliceSpacing)" << std::endl;
+      }
+    else if (planeNormalAxis == 2)
+      {
+      fragmentSource << "        if (distance(rasCoordinate.xy, brushCenterRAS.xy) <= brushRadiusMm " << std::endl;
+      fragmentSource <<          "&& abs(rasCoordinate.z - brushCenterRAS.z) <= sliceSpacing)" << std::endl;
+      }
+    }
+  else
+    {
+    fragmentSource << "        if (distance(rasCoordinate.xyz, brushCenterRAS) <= brushRadiusMm)" << std::endl;
+    }
   fragmentSource << "          {" << std::endl;
   fragmentSource << "          ++sum;" << std::endl;
   fragmentSource << "          }" << std::endl;
@@ -663,18 +711,18 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
 
     double* paintCoordinateIJK = worldToImageMatrix->MultiplyDoublePoint(currentPoint);
     int brushExtent[6] = {0, -1, 0, -1, 0, -1};
-    brushExtent[0] = std::floor(paintCoordinateIJK[0] - dimensions[0]/2.0);
-    brushExtent[1] = brushExtent[0] + dimensions[0];
-    brushExtent[2] = std::floor(paintCoordinateIJK[1] - dimensions[1]/2.0);
-    brushExtent[3] = brushExtent[2] + dimensions[1];
-    brushExtent[4] = std::floor(paintCoordinateIJK[2] - dimensions[2]/2.0);
-    brushExtent[5] = brushExtent[4] + dimensions[2];
+    brushExtent[0] = std::floor(paintCoordinateIJK[0] - std::floor(dimensions[0]/2.0));
+    brushExtent[1] = brushExtent[0] + dimensions[0] - 1;
+    brushExtent[2] = std::floor(paintCoordinateIJK[1] - std::floor(dimensions[1]/2.0));
+    brushExtent[3] = brushExtent[2] + dimensions[1] - 1;
+    brushExtent[4] = std::floor(paintCoordinateIJK[2] - std::floor(dimensions[2]/2.0));
+    brushExtent[5] = brushExtent[4] + dimensions[2] - 1;
 
     vtkSmartPointer<vtkTransform> transformRASToTex = vtkSmartPointer<vtkTransform>::New();
     transformRASToTex->SetMatrix(worldToImageMatrix.GetPointer());
     transformRASToTex->PostMultiply();
     transformRASToTex->Translate(0.5-brushExtent[0], 0.5-brushExtent[2], 0.5-brushExtent[4]);
-    transformRASToTex->Scale(1./(dimensions[0]+1), 1./(dimensions[1]+1),  1./(dimensions[2]+1));
+    transformRASToTex->Scale(1./(dimensions[0]), 1./(dimensions[1]),  1./(dimensions[2]));
     vtkNew<vtkMatrix4x4> matrixTexToRAS;
     transformRASToTex->GetMatrix(matrixTexToRAS.GetPointer());
     matrixTexToRAS->Invert();
@@ -716,7 +764,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     targetTextureImage->SetImageData(orientedBrushPositionerOutput);
 
     shaderComputation->AcquireResultRenderbuffer();
-    for (float slice=0; slice <= dimensions[2]; ++slice)
+    for (float slice=0; slice < dimensions[2]; ++slice)
       {
       targetTextureImage->AttachAsDrawTarget(0, slice);
       shaderComputation->Compute((slice) / (1. * dimensions[2]));
