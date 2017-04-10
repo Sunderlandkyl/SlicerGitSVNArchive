@@ -624,80 +624,89 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   modifierLabelmap->DeepCopy(threshold->GetOutput());
 
   std::stringstream fragmentSource;
-  fragmentSource << std::fixed;
-  fragmentSource << "#version 120" << std::endl;
-  fragmentSource << "varying vec3 interpolatedTextureCoordinate;" << std::endl;
-  fragmentSource << "varying mat4 matTexToRAS;" << std::endl;
-  fragmentSource << "varying vec3 brushCenterRAS;" << std::endl;
-  fragmentSource << "void main()" << std::endl;
-  fragmentSource << "{" << std::endl;
-  fragmentSource << "  vec4 voxelCenterRAS = matTexToRAS *  vec4(interpolatedTextureCoordinate, 1.0);" << std::endl;
-  fragmentSource << "  float centerDistance = distance(voxelCenterRAS.xyz, brushCenterRAS);" << std::endl;
-  fragmentSource << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
+  fragmentSource
+    << std::fixed
+    << "#version 120" << std::endl
+    << "varying vec3 interpolatedTextureCoordinate;" << std::endl
+    << "varying mat4 matTexToRAS;" << std::endl
+    << "varying vec3 brushCenterRAS;" << std::endl
+    << "void main()" << std::endl
+    << "{" << std::endl
+    << "  vec2 scalarRange = vec2(" << scalarRange[0] << ", " << scalarRange[1] << ");" <<std::endl
+    << "  vec4 voxelCenterRAS = matTexToRAS *  vec4(interpolatedTextureCoordinate, 1.0);" << std::endl
+    << "  float centerDistance = distance(voxelCenterRAS.xyz, brushCenterRAS);" << std::endl
+    << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
   if (useCylinderBrush)
     {
     fragmentSource << "  float sliceSpacing = "<< qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0<<";"<< std::endl;
     }
   else
     {
-    fragmentSource << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl;
-    fragmentSource << "    {" << std::endl;
-    fragmentSource << "    if (centerDistance > brushRadiusMm)" << std::endl;
-    fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[0] << ");" << std::endl;
-    fragmentSource << "    if (centerDistance < brushRadiusMm)" << std::endl;
-    fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[1] << ");" << std::endl;
-    fragmentSource << "    return;" << std::endl;
-    fragmentSource << "    }" << std::endl;
+    fragmentSource
+      << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl
+      << "    {" << std::endl
+      << "    if (centerDistance > brushRadiusMm)" << std::endl
+      << "      gl_FragColor = vec4( scalarRange.x );" << std::endl
+      << "    if (centerDistance < brushRadiusMm)" << std::endl
+      << "      gl_FragColor = vec4( scalarRange.y );" << std::endl
+      << "    return;" << std::endl
+      << "    }" << std::endl;
     }
-  fragmentSource << "  vec3 resolution = vec3("<< dimensions[0] <<","<< dimensions[1] <<","<< dimensions[2] <<");" << std::endl;
-  fragmentSource << "  float offsetStart = -("<< oversamplingFactor << " - 1.)/(2. * "<<oversamplingFactor<<");" << std::endl;
-  fragmentSource << "  float stepSize = 1./"<< oversamplingFactor <<";" << std::endl;
-  fragmentSource << "  float sum = 0;" << std::endl;
-  fragmentSource << "  // Iterate over 216 offset points." << std::endl;
-  fragmentSource << "  for (int k=0; k<"<<oversamplingFactor<<"; ++k)" << std::endl;
-  fragmentSource << "    {" << std::endl;
-  fragmentSource << "    for (int j=0; j<"<<oversamplingFactor<<"; ++j)" << std::endl;
-  fragmentSource << "      {" << std::endl;
-  fragmentSource << "      for (int i=0; i<"<<oversamplingFactor<<"; ++i)" << std::endl;
-  fragmentSource << "        {" << std::endl;
-  fragmentSource << "        // Calculate the current offset." << std::endl;
-  fragmentSource << "        vec3 offset = vec3(" << std::endl;
-  fragmentSource << "          (offsetStart + stepSize*i)/(resolution.x)," << std::endl;
-  fragmentSource << "          (offsetStart + stepSize*j)/(resolution.y)," << std::endl;
-  fragmentSource << "          (offsetStart + stepSize*k)/(resolution.z));" << std::endl;
-  fragmentSource << "        vec4 offsetTextureCoordinate = vec4(interpolatedTextureCoordinate + offset, 1.0);" << std::endl;
-  fragmentSource << "        vec4 rasCoordinate = matTexToRAS * offsetTextureCoordinate;" << std::endl;
+  fragmentSource
+    << "  float oversamplingFactor = " << oversamplingFactor << ";" << std::endl
+    << "  float offsetStart = -(oversamplingFactor - 1.)/(2. * oversamplingFactor);" << std::endl
+    << "  float stepSize = 1./oversamplingFactor;" << std::endl
+    << "  float sum = 0.;" << std::endl
+    << "  vec3 resolution = vec3("<< dimensions[0] <<","<< dimensions[1] <<","<< dimensions[2] <<");" << std::endl
+    << "  // Iterate over 216 offset points." << std::endl
+    << "  for (int k=0; k<oversamplingFactor; ++k)" << std::endl
+    << "    {" << std::endl
+    << "    for (int j=0; j<oversamplingFactor; ++j)" << std::endl
+    << "      {" << std::endl
+    << "      for (int i=0; i<oversamplingFactor; ++i)" << std::endl
+    << "        {" << std::endl
+    << "        // Calculate the current offset." << std::endl
+    << "        vec3 offset = vec3(" << std::endl
+    << "          (offsetStart + stepSize*i)/(resolution.x)," << std::endl
+    << "          (offsetStart + stepSize*j)/(resolution.y)," << std::endl
+    << "          (offsetStart + stepSize*k)/(resolution.z));" << std::endl
+    << "        vec4 offsetTextureCoordinate = vec4(interpolatedTextureCoordinate + offset, 1.0);" << std::endl
+    << "        vec4 rasCoordinate = matTexToRAS * offsetTextureCoordinate;" << std::endl;
   if (useCylinderBrush)
     {
     //TODO: Using dot products on transformed axis would allow this to be used for arbitrary slice orientation
     if (planeNormalAxis == 0)
       {
-      fragmentSource << "        if (distance(rasCoordinate.yz, brushCenterRAS.yz) <= brushRadiusMm ";
-      fragmentSource <<          "&& abs(rasCoordinate.x - brushCenterRAS.x) <= sliceSpacing)" << std::endl;
+      fragmentSource
+        << "        if (distance(rasCoordinate.yz, brushCenterRAS.yz) <= brushRadiusMm "
+        <<          "&& abs(rasCoordinate.x - brushCenterRAS.x) <= sliceSpacing)" << std::endl;
       }
     else if (planeNormalAxis == 1)
       {
-      fragmentSource << "        if (distance(rasCoordinate.xz, brushCenterRAS.xz) <= brushRadiusMm " << std::endl;
-      fragmentSource <<          "&& abs(rasCoordinate.y - brushCenterRAS.y) <= sliceSpacing)" << std::endl;
+      fragmentSource
+        << "        if (distance(rasCoordinate.xz, brushCenterRAS.xz) <= brushRadiusMm " << std::endl
+        <<          "&& abs(rasCoordinate.y - brushCenterRAS.y) <= sliceSpacing)" << std::endl;
       }
     else if (planeNormalAxis == 2)
       {
-      fragmentSource << "        if (distance(rasCoordinate.xy, brushCenterRAS.xy) <= brushRadiusMm " << std::endl;
-      fragmentSource <<          "&& abs(rasCoordinate.z - brushCenterRAS.z) <= sliceSpacing)" << std::endl;
+      fragmentSource
+        << "        if (distance(rasCoordinate.xy, brushCenterRAS.xy) <= brushRadiusMm " << std::endl
+        <<          "&& abs(rasCoordinate.z - brushCenterRAS.z) <= sliceSpacing)" << std::endl;
       }
     }
   else
     {
     fragmentSource << "        if (distance(rasCoordinate.xyz, brushCenterRAS) <= brushRadiusMm)" << std::endl;
     }
-  fragmentSource << "          {" << std::endl;
-  fragmentSource << "          ++sum;" << std::endl;
-  fragmentSource << "          }" << std::endl;
-  fragmentSource << "        }" << std::endl;
-  fragmentSource << "      }" << std::endl;
-  fragmentSource << "    }" << std::endl;
-  fragmentSource << "  gl_FragColor = vec4( "<< scalarRange[0] << " + sum );" << std::endl;
-  fragmentSource << "}" << std::endl;
+  fragmentSource
+    << "          {" << std::endl
+    << "          ++sum;" << std::endl
+    << "          }" << std::endl
+    << "        }" << std::endl
+    << "      }" << std::endl
+    << "    }" << std::endl
+    << "  gl_FragColor = vec4( scalarRange.x + sum );" << std::endl
+    << "}" << std::endl;
 
   vtkNew<vtkImageShiftScale> shiftScale;
 
@@ -736,25 +745,26 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     matrixTexToRAS->Invert();
 
     std::stringstream vertexSource;
-    vertexSource << std::fixed;
-    vertexSource << "#version 120" << std::endl;
-    vertexSource << "uniform float slice;" << std::endl;
-    vertexSource << "attribute vec3 vertexAttribute;" << std::endl;
-    vertexSource << "attribute vec2 textureCoordinateAttribute;" << std::endl;
-    vertexSource << "varying mat4 matTexToRAS;" << std::endl;
-    vertexSource << "varying vec3 interpolatedTextureCoordinate;" << std::endl;
-    vertexSource << "varying vec3 brushCenterRAS;" << std::endl;
-    vertexSource << "void main()" << std::endl;
-    vertexSource << "{" << std::endl;
-    vertexSource << "  matTexToRAS = mat4(";
-    vertexSource << matrixTexToRAS->GetElement(0,0) << ", " << matrixTexToRAS->GetElement(1,0) << ", " << matrixTexToRAS->GetElement(2,0) << ", " << matrixTexToRAS->GetElement(3,0) << ", ";
-    vertexSource << matrixTexToRAS->GetElement(0,1) << ", " << matrixTexToRAS->GetElement(1,1) << ", " << matrixTexToRAS->GetElement(2,1) << ", " << matrixTexToRAS->GetElement(3,1) << ", ";
-    vertexSource << matrixTexToRAS->GetElement(0,2) << ", " << matrixTexToRAS->GetElement(1,2) << ", " << matrixTexToRAS->GetElement(2,2) << ", " << matrixTexToRAS->GetElement(3,2) << ", ";
-    vertexSource << matrixTexToRAS->GetElement(0,3) << ", " << matrixTexToRAS->GetElement(1,3) << ", " << matrixTexToRAS->GetElement(2,3) << ", " << matrixTexToRAS->GetElement(3,3) << ");" << std::endl;
-    vertexSource << "  brushCenterRAS = vec3("<< currentPoint[0] <<", "<< currentPoint[1] <<", "<< currentPoint[2] <<");" << std::endl;
-    vertexSource << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << + 0.5/dimensions[2] << ");" << std::endl;
-    vertexSource << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl;
-    vertexSource << "}" << std::endl;
+    vertexSource
+      << std::fixed
+      << "#version 120" << std::endl
+      << "uniform float slice;" << std::endl
+      << "attribute vec3 vertexAttribute;" << std::endl
+      << "attribute vec2 textureCoordinateAttribute;" << std::endl
+      << "varying mat4 matTexToRAS;" << std::endl
+      << "varying vec3 interpolatedTextureCoordinate;" << std::endl
+      << "varying vec3 brushCenterRAS;" << std::endl
+      << "void main()" << std::endl
+      << "{" << std::endl
+      << "  matTexToRAS = mat4("
+      << matrixTexToRAS->GetElement(0,0) << ", " << matrixTexToRAS->GetElement(1,0) << ", " << matrixTexToRAS->GetElement(2,0) << ", " << matrixTexToRAS->GetElement(3,0) << ", "
+      << matrixTexToRAS->GetElement(0,1) << ", " << matrixTexToRAS->GetElement(1,1) << ", " << matrixTexToRAS->GetElement(2,1) << ", " << matrixTexToRAS->GetElement(3,1) << ", "
+      << matrixTexToRAS->GetElement(0,2) << ", " << matrixTexToRAS->GetElement(1,2) << ", " << matrixTexToRAS->GetElement(2,2) << ", " << matrixTexToRAS->GetElement(3,2) << ", "
+      << matrixTexToRAS->GetElement(0,3) << ", " << matrixTexToRAS->GetElement(1,3) << ", " << matrixTexToRAS->GetElement(2,3) << ", " << matrixTexToRAS->GetElement(3,3) << ");" << std::endl
+      << "  brushCenterRAS = vec3("<< currentPoint[0] <<", "<< currentPoint[1] <<", "<< currentPoint[2] <<");" << std::endl
+      << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << + 0.5/dimensions[2] << ");" << std::endl
+      << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl
+      << "}" << std::endl;
 
     vtkSmartPointer<vtkOrientedImageData> orientedBrushPositionerOutput = vtkSmartPointer<vtkOrientedImageData>::New();
     orientedBrushPositionerOutput->SetExtent(brushExtent);
@@ -775,7 +785,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     for (float slice=0; slice < dimensions[2]; ++slice)
       {
       targetTextureImage->AttachAsDrawTarget(0, slice);
-      shaderComputation->Compute((slice) / (1. * dimensions[2]));
+      shaderComputation->Compute(slice / dimensions[2]);
       }
     targetTextureImage->ReadBack();
     shaderComputation->ReleaseResultRenderbuffer();
