@@ -603,12 +603,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     double brushPlaneNormal[4] = {0, 1, 0, 1};
     this->BrushToWorldOriginTransform->MultiplyPoint(brushPlaneNormal, brushPlaneNormal);
 
+    // TODO: Currently only supports ijk aligned slice planes
     for (int i=0; i<3; ++i)
       {
       if (std::abs(std::abs(brushPlaneNormal[i]) - 1.0) < VTK_DBL_EPSILON)
         {
         planeNormalAxis = i;
-        dimensions[i] = 2;
+        dimensions[i] = 3;
         }
       }
     }
@@ -635,19 +636,18 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   fragmentSource << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
   if (useCylinderBrush)
     {
-  // TODO: fix for correct mid-slice behavior
-  fragmentSource << "  float sliceSpacing = "<< qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0<<";"<< std::endl;
+    fragmentSource << "  float sliceSpacing = "<< qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0<<";"<< std::endl;
     }
   else
     {
-  fragmentSource << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl;
-  fragmentSource << "    {" << std::endl;
-  fragmentSource << "    if (centerDistance > brushRadiusMm)" << std::endl;
-  fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[0] << ");" << std::endl;
-  fragmentSource << "    if (centerDistance < brushRadiusMm)" << std::endl;
-  fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[1] << ");" << std::endl;
-  fragmentSource << "    return;" << std::endl;
-  fragmentSource << "    }" << std::endl;
+    fragmentSource << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl;
+    fragmentSource << "    {" << std::endl;
+    fragmentSource << "    if (centerDistance > brushRadiusMm)" << std::endl;
+    fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[0] << ");" << std::endl;
+    fragmentSource << "    if (centerDistance < brushRadiusMm)" << std::endl;
+    fragmentSource << "      gl_FragColor = vec4( "<< scalarRange[1] << ");" << std::endl;
+    fragmentSource << "    return;" << std::endl;
+    fragmentSource << "    }" << std::endl;
     }
   fragmentSource << "  vec3 resolution = vec3("<< dimensions[0] <<","<< dimensions[1] <<","<< dimensions[2] <<");" << std::endl;
   fragmentSource << "  float offsetStart = -("<< oversamplingFactor << " - 1.)/(2. * "<<oversamplingFactor<<");" << std::endl;
@@ -669,7 +669,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   fragmentSource << "        vec4 rasCoordinate = matTexToRAS * offsetTextureCoordinate;" << std::endl;
   if (useCylinderBrush)
     {
-    //TODO: using dot products on transformed axis would allow this to be used for arbitrary slice orientation
+    //TODO: Using dot products on transformed axis would allow this to be used for arbitrary slice orientation
     if (planeNormalAxis == 0)
       {
       fragmentSource << "        if (distance(rasCoordinate.yz, brushCenterRAS.yz) <= brushRadiusMm ";
@@ -708,6 +708,14 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
 
     double currentPoint[4] = {0,0,0,1.0};
     this->PaintCoordinates_World->GetPoint(pointIndex, currentPoint);
+    this->updateBrushModel(viewWidget, currentPoint);
+    double brushOrigin[4] = {0,0,0,1};
+    if (useCylinderBrush)
+      {
+      brushOrigin[2] = qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0;
+      }
+    this->BrushToWorldOriginTransform->MultiplyPoint(brushOrigin, brushOrigin);
+    this->WorldOriginToWorldTransform->MultiplyPoint(brushOrigin, currentPoint);
 
     double* paintCoordinateIJK = worldToImageMatrix->MultiplyDoublePoint(currentPoint);
     int brushExtent[6] = {0, -1, 0, -1, 0, -1};
@@ -744,7 +752,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     vertexSource << matrixTexToRAS->GetElement(0,2) << ", " << matrixTexToRAS->GetElement(1,2) << ", " << matrixTexToRAS->GetElement(2,2) << ", " << matrixTexToRAS->GetElement(3,2) << ", ";
     vertexSource << matrixTexToRAS->GetElement(0,3) << ", " << matrixTexToRAS->GetElement(1,3) << ", " << matrixTexToRAS->GetElement(2,3) << ", " << matrixTexToRAS->GetElement(3,3) << ");" << std::endl;
     vertexSource << "  brushCenterRAS = vec3("<< currentPoint[0] <<", "<< currentPoint[1] <<", "<< currentPoint[2] <<");" << std::endl;
-    vertexSource << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice );" << std::endl;
+    vertexSource << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << + 0.5/dimensions[2] << ");" << std::endl;
     vertexSource << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl;
     vertexSource << "}" << std::endl;
 
@@ -778,16 +786,16 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       }
     else
       {
-      int* brushExtent = orientedBrushPositionerOutput->GetExtent();
+      int* updateBrushExtent = orientedBrushPositionerOutput->GetExtent();
       for (int i = 0; i < 3; i++)
         {
-        if (brushExtent[i * 2] < updateExtent[i * 2])
+        if (updateBrushExtent[i * 2] < updateExtent[i * 2])
         {
-          updateExtent[i * 2] = brushExtent[i * 2];
+          updateExtent[i * 2] = updateBrushExtent[i * 2];
           }
-        if (brushExtent[i * 2 + 1] > updateExtent[i * 2 + 1])
+        if (updateBrushExtent[i * 2 + 1] > updateExtent[i * 2 + 1])
           {
-          updateExtent[i * 2 + 1] = brushExtent[i * 2 + 1];
+          updateExtent[i * 2 + 1] = updateBrushExtent[i * 2 + 1];
           }
         }
       }
