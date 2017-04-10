@@ -165,7 +165,7 @@ bool vtkOpenGLShaderComputation::UpdateProgram()
     {
     if (this->ProgramObject != 0)
       {
-      vtkgl::DeleteProgram ( this->ProgramObject );
+      vtkgl::DeleteObjectARB ( this->ProgramObject );
       }
     this->ProgramObjectMTime = 0;
     }

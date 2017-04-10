@@ -708,6 +708,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "  gl_FragColor = vec4( scalarRange.x + sum );" << std::endl
     << "}" << std::endl;
 
+  vtkNew<vtkOpenGLShaderComputation> shaderComputation;
+  shaderComputation->SetFragmentShaderSource(fragmentSource.str().c_str());
+
+  vtkNew<vtkOpenGLTextureImage> targetTextureImage;
+  targetTextureImage->SetInterpolate(true);
+  targetTextureImage->SetShaderComputation(shaderComputation.GetPointer());
+
   vtkNew<vtkImageShiftScale> shiftScale;
 
   vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
@@ -771,14 +778,8 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     orientedBrushPositionerOutput->SetImageToWorldMatrix(imageToWorldMatrix);
     orientedBrushPositionerOutput->AllocateScalars(VTK_FLOAT, 1);
 
-    vtkNew<vtkOpenGLShaderComputation> shaderComputation;
-    shaderComputation->SetFragmentShaderSource(fragmentSource.str().c_str());
     shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
     shaderComputation->SetResultImageData(orientedBrushPositionerOutput);
-
-    vtkNew<vtkOpenGLTextureImage> targetTextureImage;
-    targetTextureImage->SetInterpolate(true);
-    targetTextureImage->SetShaderComputation(shaderComputation.GetPointer());
     targetTextureImage->SetImageData(orientedBrushPositionerOutput);
 
     shaderComputation->AcquireResultRenderbuffer();
