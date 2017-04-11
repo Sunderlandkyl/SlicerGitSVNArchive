@@ -632,7 +632,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "varying vec3 brushCenterRAS;" << std::endl
     << "void main()" << std::endl
     << "{" << std::endl
-    << "  vec2 scalarRange = vec2(" << scalarRange[0] << ", " << scalarRange[1] << ");" <<std::endl
     << "  vec4 voxelCenterRAS = matTexToRAS *  vec4(interpolatedTextureCoordinate, 1.0);" << std::endl
     << "  float centerDistance = distance(voxelCenterRAS.xyz, brushCenterRAS);" << std::endl
     << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
@@ -646,9 +645,9 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl
       << "    {" << std::endl
       << "    if (centerDistance > brushRadiusMm)" << std::endl
-      << "      gl_FragColor = vec4( scalarRange.x );" << std::endl
+      << "      gl_FragColor = vec4( 0. );" << std::endl
       << "    if (centerDistance < brushRadiusMm)" << std::endl
-      << "      gl_FragColor = vec4( scalarRange.y );" << std::endl
+      << "      gl_FragColor = vec4( 1. );" << std::endl
       << "    return;" << std::endl
       << "    }" << std::endl;
     }
@@ -814,9 +813,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
 
     scale->SetInputData(orientedBrushPositionerOutput);
     scale->SetScale( (scalarRange[1]-scalarRange[0]) / (VTK_SHORT_MAX) );
-    scale->SetOutputScalarType(scalarType);
-    scale->Update();
-
     shift->SetShift( scalarRange[0] );
     shift->SetInputConnection(scale->GetOutputPort());
     shift->SetOutputScalarType(scalarType);

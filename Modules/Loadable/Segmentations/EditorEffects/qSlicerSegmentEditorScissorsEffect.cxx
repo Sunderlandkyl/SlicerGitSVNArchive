@@ -838,7 +838,7 @@ void qSlicerSegmentEditorScissorsEffectPrivate::paintApply(qMRMLWidget* viewWidg
 
   ////////////////////////////////////////////////
 
-  int originalBrushExtent[6] = {-1, 0, -1, 0, -1, 0}; // TODO name is the same as variable farther down
+  int originalBrushExtent[6] = {-1, 0, -1, 0, -1, 0};
   this->BrushPolyDataToStencil->GetOutputWholeExtent(originalBrushExtent);
 
   double originalBrushSpacing[3] = {0,0,0};
