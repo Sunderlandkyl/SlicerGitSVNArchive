@@ -705,7 +705,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "        }" << std::endl
     << "      }" << std::endl
     << "    }" << std::endl
-    << "  gl_FragColor = vec4( scalarRange.x + sum );" << std::endl
+    << "  gl_FragColor = vec4( sum / pow(oversamplingFactor, 3) );" << std::endl
     << "}" << std::endl;
 
   vtkNew<vtkOpenGLShaderComputation> shaderComputation;
@@ -715,7 +715,8 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   targetTextureImage->SetInterpolate(true);
   targetTextureImage->SetShaderComputation(shaderComputation.GetPointer());
 
-  vtkNew<vtkImageShiftScale> shiftScale;
+  vtkNew<vtkImageShiftScale> scale;
+  vtkNew<vtkImageShiftScale> shift;
 
   vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
   int updateExtent[6] = { 0, -1, 0, -1, 0, -1 };
@@ -776,7 +777,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     vtkSmartPointer<vtkOrientedImageData> orientedBrushPositionerOutput = vtkSmartPointer<vtkOrientedImageData>::New();
     orientedBrushPositionerOutput->SetExtent(brushExtent);
     orientedBrushPositionerOutput->SetImageToWorldMatrix(imageToWorldMatrix);
-    orientedBrushPositionerOutput->AllocateScalars(VTK_FLOAT, 1);
+    orientedBrushPositionerOutput->AllocateScalars(VTK_SHORT, 1);
 
     shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
     shaderComputation->SetResultImageData(orientedBrushPositionerOutput);
@@ -811,10 +812,17 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
         }
       }
 
-    shiftScale->SetInputData(orientedBrushPositionerOutput);
-    shiftScale->SetOutputScalarType(scalarType);
-    shiftScale->Update();
-    orientedBrushPositionerOutput->DeepCopy(shiftScale->GetOutput());
+    scale->SetInputData(orientedBrushPositionerOutput);
+    scale->SetScale( (scalarRange[1]-scalarRange[0]) / (VTK_SHORT_MAX) );
+    scale->SetOutputScalarType(scalarType);
+    scale->Update();
+
+    shift->SetShift( scalarRange[0] );
+    shift->SetInputConnection(scale->GetOutputPort());
+    shift->SetOutputScalarType(scalarType);
+    shift->Update();
+    orientedBrushPositionerOutput->DeepCopy(shift->GetOutput());
+
     vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput, vtkOrientedImageDataResample::OPERATION_MAXIMUM, NULL, 0, scalarRange[0]);
     }
   modifierLabelmap->Modified();
