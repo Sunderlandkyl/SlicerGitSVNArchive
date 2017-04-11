@@ -595,7 +595,9 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
                         std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10,
                         std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10 };
 
-  int planeNormalAxis = 0;
+  double xAxisSlice[4] = {1, 0, 0, 0};
+  double yAxisSlice[4] = {0, 1, 0, 0};
+  double zAxisSlice[4] = {0, 0, 1, 0};
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   bool useCylinderBrush = sliceWidget && !q->integerParameter("BrushSphere");
   if ( useCylinderBrush )
@@ -608,9 +610,16 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       {
       if (std::abs(std::abs(brushPlaneNormal[i]) - 1.0) < VTK_DBL_EPSILON)
         {
-        planeNormalAxis = i;
         dimensions[i] = 3;
         }
+      }
+
+    if (sliceWidget)
+      {
+      vtkMatrix4x4* sliceToRASMat = sliceWidget->sliceLogic()->GetSliceNode()->GetSliceToRAS();
+      sliceToRASMat->MultiplyPoint(xAxisSlice, xAxisSlice);
+      sliceToRASMat->MultiplyPoint(yAxisSlice, yAxisSlice);
+      sliceToRASMat->MultiplyPoint(zAxisSlice, zAxisSlice);
       }
     }
 
@@ -637,7 +646,11 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "  float brushRadiusMm = "<< radiusMm <<";"<< std::endl;
   if (useCylinderBrush)
     {
-    fragmentSource << "  float sliceSpacing = "<< qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0<<";"<< std::endl;
+    fragmentSource
+      << "  float sliceSpacing = "<< qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget)/2.0 << ";" << std::endl
+      << " vec3 xAxis = vec3(" << xAxisSlice[0] << ", " << xAxisSlice[1] << ", " << xAxisSlice[2] << ");" << std::endl
+      << " vec3 yAxis = vec3(" << yAxisSlice[0] << ", " << yAxisSlice[1] << ", " << yAxisSlice[2] << ");" << std::endl
+      << " vec3 zAxis = vec3(" << zAxisSlice[0] << ", " << zAxisSlice[1] << ", " << zAxisSlice[2] << ");" << std::endl;
     }
   else
     {
@@ -673,25 +686,12 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "        vec4 rasCoordinate = matTexToRAS * offsetTextureCoordinate;" << std::endl;
   if (useCylinderBrush)
     {
-    //TODO: Using dot products on transformed axis would allow this to be used for arbitrary slice orientation
-    if (planeNormalAxis == 0)
-      {
-      fragmentSource
-        << "        if (distance(rasCoordinate.yz, brushCenterRAS.yz) <= brushRadiusMm "
-        <<          "&& abs(rasCoordinate.x - brushCenterRAS.x) <= sliceSpacing)" << std::endl;
-      }
-    else if (planeNormalAxis == 1)
-      {
-      fragmentSource
-        << "        if (distance(rasCoordinate.xz, brushCenterRAS.xz) <= brushRadiusMm " << std::endl
-        <<          "&& abs(rasCoordinate.y - brushCenterRAS.y) <= sliceSpacing)" << std::endl;
-      }
-    else if (planeNormalAxis == 2)
-      {
-      fragmentSource
-        << "        if (distance(rasCoordinate.xy, brushCenterRAS.xy) <= brushRadiusMm " << std::endl
-        <<          "&& abs(rasCoordinate.z - brushCenterRAS.z) <= sliceSpacing)" << std::endl;
-      }
+    fragmentSource
+      << "        vec3 directionVector = rasCoordinate.xyz - brushCenterRAS;" << std::endl
+      << "        float xProj = abs(dot(directionVector, xAxis));" << std::endl
+      << "        float yProj = abs(dot(directionVector, yAxis));" << std::endl
+      << "        float zProj = abs(dot(directionVector, zAxis));" << std::endl
+      << "        if (length(vec2(xProj, yProj)) <= brushRadiusMm && zProj <= sliceSpacing)" << std::endl;
     }
   else
     {
