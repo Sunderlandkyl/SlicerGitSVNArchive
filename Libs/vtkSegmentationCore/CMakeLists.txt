@@ -89,7 +89,6 @@ set(vtkSegmentationCore_INCLUDE_DIRS
 
 set(vtkSegmentationCore_LIBS
   ${VTK_LIBRARIES}
-  vtkAddon
   vtkTeem
   )
 

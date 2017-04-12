@@ -56,7 +56,6 @@ protected:
   int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
   virtual int FillOutputPortInformation(int, vtkInformation*);
   virtual int FillInputPortInformation(int, vtkInformation*);
-  void OpenGLResampleBinaryToFractional(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* fractionalLabelmap, double minimumValue);
 
 private:
   int OversamplingFactor;
