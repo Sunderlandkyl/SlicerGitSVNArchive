@@ -30,9 +30,17 @@
 #include <vtkSmartPointer.h>
 #include <vtkMatrix4x4.h>
 #include <vtkNew.h>
+#include <vtkImageShiftScale.h>
 
 // Segmentation includes
 #include "vtkFractionalOperations.h"
+
+// Slicer includes
+#include "vtkOpenGLShaderComputation.h"
+#include "vtkOpenGLTextureImage.h"
+
+// std includes
+#include <sstream>
 
 vtkStandardNewMacro(vtkResampleBinaryLabelmapToFractionalLabelmap);
 
@@ -120,6 +128,8 @@ void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fr
                                                        fractionalLabelmap->GetScalarSize() * fractionalLabelmap->GetNumberOfScalarComponents()));
     }
 
+  int jDimensionStep = fractionalDimensions[0];
+  int kDimensionStep = fractionalDimensions[0] * fractionalDimensions[1];
   BinaryImageType* binaryLabelmapPtr = (BinaryImageType*)binaryLabelmap->GetScalarPointerForExtent(binaryExtent);
   for (int k = 0; k < binaryDimensions[2]; ++k)
     {
@@ -129,8 +139,8 @@ void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fr
         {
         FractionalImageType* fractionalVoxelPtr = fractionalLabelmapPtr
           + (i / oversamplingFactor)
-          + (j / oversamplingFactor) * fractionalDimensions[0]
-          + (k / oversamplingFactor) * fractionalDimensions[0] * fractionalDimensions[1];
+          + (j / oversamplingFactor) * jDimensionStep
+          + (k / oversamplingFactor) * kDimensionStep;
 
         if ((*binaryLabelmapPtr) > 0)
           {
@@ -203,19 +213,135 @@ int vtkResampleBinaryLabelmapToFractionalLabelmap::RequestData(vtkInformation *v
   fractionalLabelmap->SetOrigin(rasOrigin);
   fractionalLabelmap->AllocateScalars(this->OutputScalarType, 1);
 
-  switch (binaryLabelmap->GetScalarType())
-  {
-    vtkTemplateMacro(ResampleBinaryToFractional( binaryLabelmap, fractionalLabelmap, this->OversamplingFactor, this->OutputMinimumValue, this->StepSize, this->OutputScalarType, (VTK_TT*)NULL ));
+  if (false) //TODO
+    {
+    this->OpenGLResampleBinaryToFractional( binaryLabelmap, fractionalLabelmap, this->OutputMinimumValue );
+    }
+  else
+    {
+    switch (binaryLabelmap->GetScalarType())
+      {
+      vtkTemplateMacro(ResampleBinaryToFractional( binaryLabelmap, fractionalLabelmap, this->OversamplingFactor, this->OutputMinimumValue, this->StepSize, this->OutputScalarType, (VTK_TT*)NULL ));
 
-    default:
-      vtkErrorMacro(<< "Execute: Unknown scalar type");
-      return 1;
-  }
-
+      default:
+        vtkErrorMacro(<< "Execute: Unknown scalar type");
+        return 1;
+      }
+    }
   output->ShallowCopy(fractionalLabelmap);
   output->SetExtent(fractionalLabelmap->GetExtent());
 
   return 1;
+}
+
+void vtkResampleBinaryLabelmapToFractionalLabelmap::OpenGLResampleBinaryToFractional(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* fractionalLabelmap, double minimumValue)
+{
+
+  int dimensions[3] = {0,0,0};
+  fractionalLabelmap->GetDimensions(dimensions);
+  std::cout << dimensions[0] << " | " << dimensions[1] << " | " << dimensions[2] << std::endl;
+  std::stringstream vertexSource;
+  vertexSource
+    << std::fixed
+    << "#version 120" << std::endl
+    << "uniform float slice;" << std::endl
+    << "attribute vec3 vertexAttribute;" << std::endl
+    << "attribute vec2 textureCoordinateAttribute;" << std::endl
+    << "varying vec3 interpolatedTextureCoordinate;" << std::endl
+    << "void main()" << std::endl
+    << "{" << std::endl
+    << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << + 0.5/dimensions[2] << ");" << std::endl
+    << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl
+    << "}" << std::endl;
+
+  std::stringstream fragmentSource;
+  fragmentSource
+    << std::fixed
+    << "#version 120" << std::endl
+    << "varying vec3 interpolatedTextureCoordinate;" << std::endl
+    << "uniform sampler3D textureUnit0;" << std::endl
+    << "void main()" << std::endl
+    << "{" << std::endl
+    << "  float oversamplingFactor = " << (double)this->OversamplingFactor << ";" << std::endl
+    << "  float sum = 0.;" << std::endl
+    << "  vec3 resolution = vec3("<< dimensions[0] <<","<< dimensions[1] <<","<< dimensions[2] <<");" << std::endl
+    << "  float offsetStart = -(oversamplingFactor - 1.)/(2. * oversamplingFactor);" << std::endl
+    << "  float stepSize = 1./(oversamplingFactor);" << std::endl
+    << "  // Iterate over 216 offset points." << std::endl
+    << "  for (int k=0; k<oversamplingFactor; ++k)" << std::endl
+    << "    {" << std::endl
+    << "    for (int j=0; j<oversamplingFactor; ++j)" << std::endl
+    << "      {" << std::endl
+    << "      for (int i=0; i<oversamplingFactor; ++i)" << std::endl
+    << "        {" << std::endl
+    << "        // Calculate the current offset." << std::endl
+    << "        vec3 offset = vec3(" << std::endl
+    << "          (offsetStart + stepSize*i)/(resolution.x)," << std::endl
+    << "          (offsetStart + stepSize*j)/(resolution.y)," << std::endl
+    << "          (offsetStart + stepSize*k)/(resolution.z));" << std::endl
+    << "        vec3 offsetTextureCoordinate = interpolatedTextureCoordinate + offset;" << std::endl
+    << "        vec4 referenceSample = texture3D(textureUnit0, offsetTextureCoordinate);" << std::endl
+    << "        if (referenceSample.r > 0. )" << std::endl
+    << "          {" << std::endl
+    << "          ++sum;" << std::endl
+    << "          }" << std::endl
+    << "        }" << std::endl
+    << "      }" << std::endl
+    << "    }" << std::endl
+    << "  gl_FragColor = vec4( sum / pow(oversamplingFactor, 3.) );" << std::endl
+    << "}" << std::endl;
+
+  vtkNew<vtkImageData> resultImage;
+  resultImage->SetExtent(fractionalLabelmap->GetExtent());
+  resultImage->AllocateScalars(VTK_UNSIGNED_SHORT, 1);
+
+  vtkNew<vtkOpenGLShaderComputation> shaderComputation;
+  shaderComputation->SetResultImageData(resultImage.GetPointer());
+  shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
+  shaderComputation->SetFragmentShaderSource(fragmentSource.str().c_str());
+
+  vtkNew<vtkOpenGLTextureImage> resultTexture;
+  resultTexture->SetImageData(resultImage.GetPointer());
+  resultTexture->SetInterpolate(true);
+  resultTexture->SetShaderComputation(shaderComputation.GetPointer());
+
+  double* binaryScalarRange = binaryLabelmap->GetScalarRange();
+  vtkNew<vtkImageShiftScale> binaryShiftScale;
+  binaryShiftScale->SetInputData(binaryLabelmap);
+  binaryShiftScale->SetScale(VTK_UNSIGNED_CHAR_MAX / (binaryScalarRange[1]-binaryScalarRange[0]) );
+  binaryShiftScale->SetOutputScalarTypeToUnsignedChar();
+  binaryShiftScale->Update();
+
+  vtkNew<vtkOpenGLTextureImage> binaryLabelmapTexture;
+  binaryLabelmapTexture->SetImageData(binaryShiftScale->GetOutput());
+  binaryLabelmapTexture->SetInterpolate(false);
+  binaryLabelmapTexture->SetShaderComputation(shaderComputation.GetPointer());
+  binaryLabelmapTexture->Activate(1);
+
+  shaderComputation->AcquireResultRenderbuffer();
+  for (float slice=0; slice < dimensions[2]; ++slice)
+    {
+    resultTexture->AttachAsDrawTarget(0, slice);
+    shaderComputation->Compute(slice / dimensions[2]);
+    }
+  resultTexture->ReadBack();
+
+  //TODO: -> fix
+  double scalarRange[2] = {-108, 108};
+
+  vtkNew<vtkImageShiftScale> fractionalScale;
+  vtkNew<vtkImageShiftScale> fractionalShift;
+  fractionalScale->SetScale((scalarRange[1]-scalarRange[0]) / VTK_UNSIGNED_SHORT_MAX);
+  fractionalScale->SetInputData(resultImage.GetPointer());
+  fractionalShift->SetInputConnection(fractionalScale->GetOutputPort());
+  fractionalShift->SetShift(scalarRange[0]);
+  fractionalShift->SetOutputScalarType(this->OutputScalarType);
+  fractionalShift->Update();
+  fractionalLabelmap->DeepCopy(fractionalShift->GetOutput());
+
+  vtkFractionalOperations::Write(binaryShiftScale->GetOutput(), "E:\\test\\bin.nrrd");
+  vtkFractionalOperations::Write(fractionalShift->GetOutput(), "E:\\test\\frac.nrrd");
+
 }
 
 //----------------------------------------------------------------------------
