@@ -25,7 +25,7 @@
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkOrientedImageData.h"
 #include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
-#include <vtkFractionalOperations.h>
+#include "vtkFractionalOperations.h"
 
 // Qt includes
 #include <QDebug>
@@ -695,7 +695,8 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     }
   else
     {
-    fragmentSource << "        if (distance(rasCoordinate.xyz, brushCenterRAS) <= brushRadiusMm)" << std::endl;
+    fragmentSource
+      << "        if (distance(rasCoordinate.xyz, brushCenterRAS) <= brushRadiusMm)" << std::endl;
     }
   fragmentSource
     << "          {" << std::endl
@@ -756,6 +757,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       << std::fixed
       << "#version 120" << std::endl
       << "uniform float slice;" << std::endl
+      << "//uniform mat4 ortho;" << std::endl
       << "attribute vec3 vertexAttribute;" << std::endl
       << "attribute vec2 textureCoordinateAttribute;" << std::endl
       << "varying mat4 matTexToRAS;" << std::endl
@@ -769,7 +771,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       << matrixTexToRAS->GetElement(0,2) << ", " << matrixTexToRAS->GetElement(1,2) << ", " << matrixTexToRAS->GetElement(2,2) << ", " << matrixTexToRAS->GetElement(3,2) << ", "
       << matrixTexToRAS->GetElement(0,3) << ", " << matrixTexToRAS->GetElement(1,3) << ", " << matrixTexToRAS->GetElement(2,3) << ", " << matrixTexToRAS->GetElement(3,3) << ");" << std::endl
       << "  brushCenterRAS = vec3("<< currentPoint[0] <<", "<< currentPoint[1] <<", "<< currentPoint[2] <<");" << std::endl
-      << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << + 0.5/dimensions[2] << ");" << std::endl
+      << "  interpolatedTextureCoordinate = vec3( textureCoordinateAttribute, slice + " << + 0.5/dimensions[2] << ");" << std::endl
       << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl
       << "}" << std::endl;
 

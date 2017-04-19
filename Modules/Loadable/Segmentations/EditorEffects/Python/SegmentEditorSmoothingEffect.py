@@ -187,13 +187,12 @@ If segments overlap, segment higher in the segments table will have priority. <b
     try:
 
       # Get master volume image data
-      import vtkSegmentationCorePython
+      import vtkSegmentationCorePython as vtkSegmentationCore
 
       # Get modifier labelmap
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
       selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
 
-      import vtkSegmentationCorePython as vtkSegmentationCore
       segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
       masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
 

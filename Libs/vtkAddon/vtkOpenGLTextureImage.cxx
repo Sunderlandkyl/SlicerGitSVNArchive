@@ -112,13 +112,16 @@ bool vtkOpenGLTextureImage::UpdateTexture()
     }
   int componentCount = this->ImageData->GetNumberOfScalarComponents();
   GLenum format;
+  GLenum internalFormat;
   if ( componentCount == 1 )
     {
-    format = GL_LUMINANCE;
+    format = GL_RED;
+    internalFormat = GL_R16F;
     }
   else if ( componentCount == 4 )
     {
     format = GL_RGBA;
+    internalFormat = GL_RGBA16F;
     }
   else
     {
@@ -135,25 +138,25 @@ bool vtkOpenGLTextureImage::UpdateTexture()
   vtkOpenGLCheckErrorMacro("before uploading");
 
   glGenTextures(1, &(this->TextureName));
-  glBindTexture(vtkgl::TEXTURE_3D, this->TextureName);
+  glBindTexture(GL_TEXTURE_3D, this->TextureName);
   if (this->Interpolate)
     {
-    glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     }
   else
     {
-    glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
-  glTexParameteri(vtkgl::TEXTURE_3D, vtkgl::TEXTURE_WRAP_R, vtkgl::CLAMP_TO_EDGE);
-  glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_WRAP_S, vtkgl::CLAMP_TO_EDGE);
-  glTexParameteri(vtkgl::TEXTURE_3D, GL_TEXTURE_WRAP_T, vtkgl::CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  vtkgl::TexImage3D(
-               /* target */            vtkgl::TEXTURE_3D,
+  glTexImage3D(
+               /* target */            GL_TEXTURE_3D,
                /* level */             0,
-               /* internal format */   vtkgl::RGBA16F,
+               /* internal format */   internalFormat,
                /* width */             dimensions[0],
                /* height */            dimensions[1],
                /* depth */             dimensions[2],
@@ -171,7 +174,6 @@ bool vtkOpenGLTextureImage::UpdateTexture()
 //----------------------------------------------------------------------------
 void vtkOpenGLTextureImage::Activate(vtkTypeUInt32 unit)
 {
-
   vtkOpenGLCheckErrorMacro("before activating");
 
   if (!this->ShaderComputation || !this->ShaderComputation->GetInitialized())
@@ -200,8 +202,8 @@ void vtkOpenGLTextureImage::Activate(vtkTypeUInt32 unit)
     }
 
   // TODO:
-  vtkgl::ActiveTextureARB(vtkgl::TEXTURE0 + unit);
-  glBindTexture(vtkgl::TEXTURE_3D, this->TextureName);
+  glActiveTextureARB(GL_TEXTURE0 + unit);
+  glBindTexture(GL_TEXTURE_3D, this->TextureName);
 
   vtkOpenGLCheckErrorMacro("after activating");
 }
@@ -209,14 +211,14 @@ void vtkOpenGLTextureImage::Activate(vtkTypeUInt32 unit)
 //----------------------------------------------------------------------------
 void vtkOpenGLTextureImage::AttachAsDrawTarget(int attachmentIndex, int layer, int attachment)
 {
-  vtkOpenGLCheckErrorMacro("before attaching");
-
   if (!this->ShaderComputation || !this->ShaderComputation->GetInitialized())
     {
     vtkErrorMacro("No initialized ShaderComputation instance is set.");
     return;
     }
   this->ShaderComputation->MakeCurrent();
+
+  vtkOpenGLCheckErrorMacro("before attaching");
 
   // attachment is 0 (color), 1 (depth), 2 (stencil), 3 (depth-stencil)
   if (attachmentIndex != 0 || attachment != 0)
@@ -236,11 +238,11 @@ void vtkOpenGLTextureImage::AttachAsDrawTarget(int attachmentIndex, int layer, i
 
   vtkOpenGLClearErrorMacro();
 
-  glBindTexture(vtkgl::TEXTURE_3D, this->TextureName);
-  vtkgl::FramebufferTexture3D(
-    /* target */      vtkgl::FRAMEBUFFER,
-    /* attachment */  vtkgl::COLOR_ATTACHMENT0,
-    /* textarget */   vtkgl::TEXTURE_3D,
+  glBindTexture(GL_TEXTURE_3D, this->TextureName);
+  glFramebufferTexture3D(
+    /* target */      GL_FRAMEBUFFER,
+    /* attachment */  GL_COLOR_ATTACHMENT0,
+    /* textarget */   GL_TEXTURE_3D,
     /* texture */     this->TextureName,
     /* level */       0,
     /* layer */       layer);
@@ -251,10 +253,10 @@ void vtkOpenGLTextureImage::AttachAsDrawTarget(int attachmentIndex, int layer, i
   // Does the GPU support current Framebuffer configuration?
   //
   GLenum status;
-  status = vtkgl::CheckFramebufferStatus(vtkgl::FRAMEBUFFER);
+  status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
   switch(status)
     {
-    case vtkgl::FRAMEBUFFER_COMPLETE:
+    case GL_FRAMEBUFFER_COMPLETE:
       break;
     default:
       vtkOpenGLCheckErrorMacro("after bad framebuffer status");
@@ -280,7 +282,7 @@ void vtkOpenGLTextureImage::ReadBack()
   GLenum format;
   if ( componentCount == 1 )
     {
-    format = GL_LUMINANCE;
+    format = GL_RED;
     }
   else if ( componentCount == 4 )
     {
@@ -297,17 +299,16 @@ void vtkOpenGLTextureImage::ReadBack()
   void *pixels = scalars->GetVoidPointer(0);
 
   // TODO:
-  glBindTexture(vtkgl::TEXTURE_3D, this->TextureName);
+  glBindTexture(GL_TEXTURE_3D, this->TextureName);
 
   glGetTexImage(
-    /* target */ vtkgl::TEXTURE_3D,
+    /* target */ GL_TEXTURE_3D,
     /* level */  0,
     /* format */ format,
     /* type */   vtkScalarTypeToGLType(this->ImageData->GetScalarType()),
     /* pixels */ pixels);
 
   pointData->Modified();
-
   vtkOpenGLCheckErrorMacro("after getting");
 }
 

@@ -20,6 +20,8 @@
 #ifndef __vtkOpenGLShaderComputation_h
 #define __vtkOpenGLShaderComputation_h
 
+#include "vtk_glew.h"
+
 #include "vtkImageData.h"
 #include "vtkRenderWindow.h"
 

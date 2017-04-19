@@ -24,6 +24,8 @@
 #ifndef __vtkOpenGLTextureImage_h
 #define __vtkOpenGLTextureImage_h
 
+#include "vtk_glew.h"
+
 #include "vtkOpenGLShaderComputation.h"
 #include "vtkOpenGL.h"
 
