@@ -227,11 +227,11 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     inputDimensions = masterImageData.GetDimensions()
 
     vertexSource = """
-      #version 120
+      #version 330
       uniform float slice;
-      attribute vec3 vertexAttribute;
-      attribute vec2 textureCoordinateAttribute;
-      varying vec3 interpolatedTextureCoordinate;
+      in vec3 vertexAttribute;
+      in vec2 textureCoordinateAttribute;
+      out vec3 interpolatedTextureCoordinate;
       void main()
       {
         interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + %(sliceThickness)s);
@@ -243,10 +243,11 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     shaderComputation.SetVertexShaderSource(vertexSource)
 
     fragmentSource = """
-      #version 120
+      #version 330
       uniform float slice;
-      varying vec3 interpolatedTextureCoordinate;
       uniform sampler3D textureUnit0;
+      in vec3 interpolatedTextureCoordinate;
+      out vec4 fragColor;
       void main()
       {
 
@@ -277,7 +278,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
               // If the value of the interpolated offset pixel is greater than the threshold, then
               // increment the fractional sum.
-              vec4 referenceSample = texture3D(textureUnit0, offsetTextureCoordinate);
+              vec4 referenceSample = texture(textureUnit0, offsetTextureCoordinate);
               if (referenceSample.r >= %(minThreshold)s && referenceSample.r <= %(maxThreshold)s )
                 {
                 ++sum;
@@ -288,11 +289,11 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
           }
 
         // Calculate the fractional value of the pixel.
-        gl_FragColor = vec4( vec3(sum / pow(%(oversamplingFactor)s,3.)), 1.0 );
+        fragColor = vec4( vec3(sum / pow(%(oversamplingFactor)s,3.)), 1.0 );
         }
       else
         {
-        gl_FragColor = vec4(0.);
+        fragColor = vec4(0.);
         }
       }
     """ % {

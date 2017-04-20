@@ -635,10 +635,11 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   std::stringstream fragmentSource;
   fragmentSource
     << std::fixed
-    << "#version 120" << std::endl
-    << "varying vec3 interpolatedTextureCoordinate;" << std::endl
-    << "varying mat4 matTexToRAS;" << std::endl
-    << "varying vec3 brushCenterRAS;" << std::endl
+    << "#version 330" << std::endl
+    << "in vec3 interpolatedTextureCoordinate;" << std::endl
+    << "in mat4 matTexToRAS;" << std::endl
+    << "in vec3 brushCenterRAS;" << std::endl
+    << "out vec4 fragColor;" << std::endl
     << "void main()" << std::endl
     << "{" << std::endl
     << "  vec4 voxelCenterRAS = matTexToRAS *  vec4(interpolatedTextureCoordinate, 1.0);" << std::endl
@@ -658,9 +659,9 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       << "  if (abs(centerDistance-brushRadiusMm) >= " << maxDistance <<")" << std::endl
       << "    {" << std::endl
       << "    if (centerDistance > brushRadiusMm)" << std::endl
-      << "      gl_FragColor = vec4( 0. );" << std::endl
+      << "      fragColor = vec4( 0. );" << std::endl
       << "    if (centerDistance < brushRadiusMm)" << std::endl
-      << "      gl_FragColor = vec4( 1. );" << std::endl
+      << "      fragColor = vec4( 1. );" << std::endl
       << "    return;" << std::endl
       << "    }" << std::endl;
     }
@@ -705,7 +706,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "        }" << std::endl
     << "      }" << std::endl
     << "    }" << std::endl
-    << "  gl_FragColor = vec4( sum / pow(oversamplingFactor, 3) );" << std::endl
+    << "  fragColor = vec4( sum / pow(oversamplingFactor, 3) );" << std::endl
     << "}" << std::endl;
 
   vtkNew<vtkOpenGLShaderComputation> shaderComputation;
@@ -755,14 +756,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     std::stringstream vertexSource;
     vertexSource
       << std::fixed
-      << "#version 120" << std::endl
+      << "#version 330" << std::endl
       << "uniform float slice;" << std::endl
-      << "//uniform mat4 ortho;" << std::endl
-      << "attribute vec3 vertexAttribute;" << std::endl
-      << "attribute vec2 textureCoordinateAttribute;" << std::endl
-      << "varying mat4 matTexToRAS;" << std::endl
-      << "varying vec3 interpolatedTextureCoordinate;" << std::endl
-      << "varying vec3 brushCenterRAS;" << std::endl
+      << "in vec3 vertexAttribute;" << std::endl
+      << "in vec2 textureCoordinateAttribute;" << std::endl
+      << "out mat4 matTexToRAS;" << std::endl
+      << "out vec3 interpolatedTextureCoordinate;" << std::endl
+      << "out vec3 brushCenterRAS;" << std::endl
       << "void main()" << std::endl
       << "{" << std::endl
       << "  matTexToRAS = mat4("
