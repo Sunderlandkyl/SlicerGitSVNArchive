@@ -831,7 +831,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       // Set the range of the scalars in the image data from the ScalarRange field if it exists
       // Default to the scalar range of 0.0 to 1.0 otherwise
       double scalarRange[2] = {0.0, 1.0};
-      if (vtkFractionalOperations::ContainsFractionalParameters)
+      if (vtkFractionalOperations::ContainsFractionalParameters(imageData))
         {
         vtkFractionalOperations::GetScalarRange(imageData, scalarRange);
         }
