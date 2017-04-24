@@ -116,12 +116,12 @@ bool vtkOpenGLTextureImage::UpdateTexture()
   if ( componentCount == 1 )
     {
     format = GL_RED;
-    internalFormat = GL_R16F;
+    internalFormat = GL_RED;
     }
   else if ( componentCount == 4 )
     {
     format = GL_RGBA;
-    internalFormat = GL_RGBA16F;
+    internalFormat = GL_RGBA;
     }
   else
     {
@@ -202,7 +202,7 @@ void vtkOpenGLTextureImage::Activate(vtkTypeUInt32 unit)
     }
 
   // TODO:
-  glActiveTextureARB(GL_TEXTURE0 + unit);
+  glActiveTexture(GL_TEXTURE0 + unit);
   glBindTexture(GL_TEXTURE_3D, this->TextureName);
 
   vtkOpenGLCheckErrorMacro("after activating");
