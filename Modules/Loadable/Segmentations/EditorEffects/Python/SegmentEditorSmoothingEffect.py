@@ -284,6 +284,7 @@ If segments overlap, segment higher in the segments table will have priority. <b
     segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
     masterRepresentationIsFractionalLabelmap = segmentation.GetMasterRepresentationName() == vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
 
+    #TODO: Fractional implementation is not yet complete
     if (masterRepresentationIsFractionalLabelmap):
       logging.error('This smoothing is currently not supported for fractional labelmaps')
       return
@@ -316,6 +317,9 @@ If segments overlap, segment higher in the segments table will have priority. <b
 
     # Convert labelmap to combined polydata
     convertToPolyData = vtk.vtkDiscreteMarchingCubes()
+    if (masterRepresentationIsFractionalLabelmap):
+      #TODO: Fractional implementation is not yet complete
+      convertToPolyData = vtk.vtkMarchingCubes()
     convertToPolyData.SetInputConnection(ici.GetOutputPort())
     convertToPolyData.SetNumberOfContours(len(segmentLabelValues))
     contourIndex = 0

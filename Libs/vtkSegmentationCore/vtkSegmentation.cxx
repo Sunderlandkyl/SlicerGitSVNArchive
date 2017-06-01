@@ -49,7 +49,7 @@
 #include <sstream>
 #include <algorithm>
 #include <functional>
-
+#include <vtkTimerLog.h>
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSegmentation);
 
@@ -942,9 +942,25 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
         currentConversionRule->ConstructRepresentationObjectByRepresentation(currentConversionRule->GetTargetRepresentationName()) );
       }
 
+    double volume= 0.;
+    int numTriangles = 0;
+    vtkNew<vtkMassProperties> mass;
+    if (currentConversionRule->GetSourceRepresentationName() == vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName())
+    {
+      mass->SetInputData(sourceRepresentation);
+      mass->Update();
+      volume = mass->GetVolume();
+      numTriangles = vtkPolyData::SafeDownCast(sourceRepresentation)->GetNumberOfPolys();
+    }
+    //massProperties = vtk.vtkMassProperties()
+    //massProperties.SetInputData(closedSurface)
+    //massProperties.Update()
+    //surfaceVolume = massProperties.GetVolume()
+    vtkNew<vtkTimerLog> timerlog;
+    double start = timerlog->GetUniversalTime();
     // Perform conversion step
     currentConversionRule->Convert(sourceRepresentation, targetRepresentation);
-
+    std::cout << segment->GetName() << ", " << volume << ", " << numTriangles << ", " << timerlog->GetUniversalTime() - start << std::endl;
     // Add representation to segment
     segment->AddRepresentation(currentConversionRule->GetTargetRepresentationName(), targetRepresentation);
     }

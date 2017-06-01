@@ -307,7 +307,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     outputImage = vtk.vtkImageData()
     outputImage.SetExtent(masterImageData.GetExtent())
     outputImage.AllocateScalars(shiftScale.GetOutput().GetScalarType(), 1)
-    shaderComputation.SetResultImageData(outputImage)
+    #shaderComputation.SetResultImageData(outputImage)
 
     targetTextureImage = vtkAddon.vtkOpenGLTextureImage()
     targetTextureImage.SetImageData(outputImage)
@@ -322,16 +322,13 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     inputTextureImage.SetShaderComputation(shaderComputation)
     inputTextureImage.Activate(1)
 
-    shaderComputation.AcquireResultRenderbuffer()
-
     for slice in range(inputDimensions[2]):
       # draw into output texture
       targetTextureImage.AttachAsDrawTarget(0, slice)
       # perform the computation for this slice
-      shaderComputation.Compute((slice) / (1. * inputDimensions[2]))
+      shaderComputation.Compute(slice / (1. * inputDimensions[2]))
 
     targetTextureImage.ReadBack()
-    shaderComputation.ReleaseResultRenderbuffer()
 
     #Convert to expected scalar range
     scale = vtk.vtkImageShiftScale()

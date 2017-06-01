@@ -591,9 +591,18 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   vtkSmartPointer<vtkMatrix4x4> imageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
   modifierLabelmap->GetImageToWorldMatrix(imageToWorldMatrix);
 
-  int dimensions[3] = { std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[0])+10,
-                        std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10,
-                        std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10 };
+  int masterDimensions[3] = {0,0,0};
+  q->masterVolumeImageData()->GetDimensions(masterDimensions);
+
+  int dimensions[3] = { std::min( (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[0])+10, masterDimensions[0]),
+                        std::min( (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10, masterDimensions[1]),
+                        std::min( (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10, masterDimensions[2]) };
+
+  if (dimensions[0] <= 0 || dimensions[1] <= 0 || dimensions[2] <= 0)
+  {
+    qCritical() << Q_FUNC_INFO << ": Invalid brush dimensions";
+    return;
+  }
 
   double xAxisSlice[4] = {1, 0, 0, 0};
   double yAxisSlice[4] = {0, 1, 0, 0};
@@ -784,14 +793,12 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     shaderComputation->SetResultImageData(orientedBrushPositionerOutput);
     targetTextureImage->SetImageData(orientedBrushPositionerOutput);
 
-    shaderComputation->AcquireResultRenderbuffer();
     for (float slice=0; slice < dimensions[2]; ++slice)
       {
       targetTextureImage->AttachAsDrawTarget(0, slice);
       shaderComputation->Compute(slice / dimensions[2]);
       }
     targetTextureImage->ReadBack();
-    shaderComputation->ReleaseResultRenderbuffer();
 
     if (pointIndex == 0)
       {

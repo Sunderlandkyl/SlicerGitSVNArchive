@@ -109,7 +109,7 @@ void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fr
   FractionalImageType* fractionalLabelmapPtr = (FractionalImageType*)fractionalLabelmap->GetScalarPointerForExtent(fractionalExtent);
   if (!fractionalLabelmapPtr)
     {
-    //vtkErrorMacro("Convert: Failed to allocate memory for output labelmap image!");
+    //vtkErrorMacro("ResampleBinaryToFractional: Failed to allocate memory for output labelmap image!");
     return;
     }
   else
@@ -123,6 +123,12 @@ void ResampleBinaryToFractional2( vtkImageData* binaryLabelmap, vtkImageData* fr
   int jDimensionStep = fractionalDimensions[0];
   int kDimensionStep = fractionalDimensions[0] * fractionalDimensions[1];
   BinaryImageType* binaryLabelmapPtr = (BinaryImageType*)binaryLabelmap->GetScalarPointerForExtent(binaryExtent);
+  if (!binaryLabelmapPtr)
+    {
+    //vtkErrorMacro("ResampleBinaryToFractional2: Binary image pointer is NULL!");
+    return;
+    }
+
   for (int k = 0; k < binaryDimensions[2]; ++k)
     {
     for (int j = 0; j < binaryDimensions[1]; ++j)

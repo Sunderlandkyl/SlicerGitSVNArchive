@@ -97,7 +97,7 @@ bool vtkOpenGLTextureImage::UpdateTexture()
     {
     if (this->TextureName != 0)
       {
-      glDeleteTextures (1, &(this->TextureName) );
+      glDeleteTextures(1, &(this->TextureName) );
       }
     this->TextureMTime = 0;
     }
@@ -238,11 +238,20 @@ void vtkOpenGLTextureImage::AttachAsDrawTarget(int attachmentIndex, int layer, i
 
   vtkOpenGLClearErrorMacro();
 
+  int dimensions[3] = {0,0,0};
+  this->ImageData->GetDimensions(dimensions);
+
+  //
+  // Set up a normalized rendering environment
+  //
+  glViewport(0, 0, dimensions[0], dimensions[1]);
+  glDisable(GL_BLEND);
+  glEnable(GL_DEPTH_TEST);
+
   glBindTexture(GL_TEXTURE_3D, this->TextureName);
-  glFramebufferTexture3D(
+  glFramebufferTextureLayer(
     /* target */      GL_FRAMEBUFFER,
     /* attachment */  GL_COLOR_ATTACHMENT0,
-    /* textarget */   GL_TEXTURE_3D,
     /* texture */     this->TextureName,
     /* level */       0,
     /* layer */       layer);
@@ -300,7 +309,6 @@ void vtkOpenGLTextureImage::ReadBack()
 
   // TODO:
   glBindTexture(GL_TEXTURE_3D, this->TextureName);
-
   glGetTexImage(
     /* target */ GL_TEXTURE_3D,
     /* level */  0,

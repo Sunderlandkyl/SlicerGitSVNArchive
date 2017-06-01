@@ -65,6 +65,8 @@ set(vtkSegmentationCore_SRCS
   vtkResampleBinaryLabelmapToFractionalLabelmap.cxx
   vtkFractionalOperations.cxx
   vtkFractionalOperations.h
+  vtkFractionalImageAccumulate.cxx
+  vtkFractionalImageAccumulate.h
   )
 
 # Abstract/pure virtual classes
@@ -89,6 +91,7 @@ set(vtkSegmentationCore_INCLUDE_DIRS
 
 set(vtkSegmentationCore_LIBS
   ${VTK_LIBRARIES}
+  vtkAddon
   vtkTeem
   )
 
