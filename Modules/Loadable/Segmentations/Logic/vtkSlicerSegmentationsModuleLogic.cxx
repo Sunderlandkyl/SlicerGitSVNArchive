@@ -1148,8 +1148,6 @@ bool vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(vtkOrie
     return false;
     }
 
-  if ((!isFractional && segmentationNode->GetSegmentation()->GetMasterRepresentationName() != vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) ||
-      (isFractional && segmentationNode->GetSegmentation()->GetMasterRepresentationName() != vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()))
   // Note: Splitting code ported from EditorLib/HelperBox.py:split
 
   // Split labelmap node into per-label image data
