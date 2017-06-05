@@ -342,7 +342,18 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       maskedModifierLabelmap->DeepCopy(modifierLabelmap);
       modifierLabelmap = maskedModifierLabelmap.GetPointer();
       }
-    this->applyImageMask(modifierLabelmap.GetPointer(), thresholdMask, this->m_EraseValue);
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      vtkSmartPointer<vtkOrientedImageData> fractionalMask = vtkSmartPointer<vtkOrientedImageData>::New();
+      double intensityRange[2] = { parameterSetNode->GetMasterVolumeIntensityMaskRange()[0], parameterSetNode->GetMasterVolumeIntensityMaskRange()[1] };
+      vtkSlicerSegmentationsModuleLogic::CreateFractionalThreshold(masterVolumeOrientedImageData, fractionalMask, intensityRange);
+      vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(fractionalMask, modifierLabelmap, fractionalMask, true, false, NULL, scalarRange[0]);
+      vtkOrientedImageDataResample::MergeImage(modifierLabelmap, fractionalMask, modifierLabelmap, vtkOrientedImageDataResample::OPERATION_MINIMUM, modifierLabelmap->GetExtent(), scalarRange[0], scalarRange[1], NULL, scalarRange[0]);
+      }
+    else
+      {
+      this->applyImageMask(modifierLabelmap.GetPointer(), thresholdMask, this->m_EraseValue);
+      }
     }
 
   if (!d->ParameterSetNode)

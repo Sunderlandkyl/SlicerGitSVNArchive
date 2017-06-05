@@ -263,6 +263,12 @@ public:
   static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=0);
   static bool SetFractionalLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=0);
 
+  /// Threshold an image into a fractional labelmap representation
+  /// \param inputImageData The image that will be thresholded
+  /// \param outputImageData The output fractional labelmap
+  /// \param thresholdRange The range of values to be thresholded
+  static bool CreateFractionalThreshold(vtkOrientedImageData* inputImageData, vtkOrientedImageData* outputImageData, double thresholdRange[2]);
+
 protected:
   virtual void SetMRMLSceneInternal(vtkMRMLScene * newScene);
 
