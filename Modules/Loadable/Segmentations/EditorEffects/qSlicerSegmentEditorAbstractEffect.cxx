@@ -517,12 +517,32 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
         {
         if (masterRepresentationIsFractionalLabelmap)
           {
-          invertedModifierLabelmap->DeepCopy(modifierLabelmap);
-          vtkFractionalOperations::Invert(invertedModifierLabelmap.GetPointer());
-          if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
-            invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+          if (true) // TODO
             {
-            qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+              vtkNew<vtkOrientedImageData> mergedLabelmap;
+              vtkSmartPointer<vtkOrientedImageData> segmentLabelmap = vtkOrientedImageData::SafeDownCast(segmentationNode->GetSegmentation()->GetSegmentRepresentation(
+                                                                        *segmentIDIt, vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
+              vtkNew<vtkOrientedImageData> outputLabelmap;
+              outputLabelmap->DeepCopy(segmentLabelmap);
+              segmentationNode->GenerateMergedLabelmap(mergedLabelmap.GetPointer(), vtkSegmentation::EXTENT_UNION_OF_EFFECTIVE_SEGMENTS, NULL, segmentIDsToOverwrite);
+              vtkFractionalOperations::CopyFractionalParameters(mergedLabelmap.GetPointer(), segmentLabelmap);
+              vtkFractionalOperations::VoxelContentsConstraintMask(modifierLabelmap, mergedLabelmap.GetPointer(), segmentLabelmap, outputLabelmap.GetPointer());
+              if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+                outputLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_REPLACE, outputLabelmap->GetExtent()))
+              {
+                qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+              }
+          }
+          else
+            {
+            // TODO: labelmap should not just be inverse if there is a voxel contents contraint for 100% total occupancy
+            invertedModifierLabelmap->DeepCopy(modifierLabelmap);
+            vtkFractionalOperations::Invert(invertedModifierLabelmap.GetPointer());
+            if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+              invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+              {
+                qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+              }
             }
           }
         else

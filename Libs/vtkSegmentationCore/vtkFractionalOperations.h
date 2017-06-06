@@ -158,6 +158,15 @@ public:
   /// \return The scalar type of the segmentation
   static vtkIdType GetScalarType(vtkSegmentation* input);
 
+  static double GetScalarComponentAsFraction(vtkOrientedImageData* labelmap, int x, int y, int z, int component);
+
+  /// TODO
+  static double GetValueAsFraction(vtkOrientedImageData* labelmap, double value);
+  static double GetValueAsFraction(double scalarRange[2], double value);
+
+  /// TODO
+  static void VoxelContentsConstraintMask(vtkOrientedImageData* modifierLabelmap, vtkOrientedImageData* mergedLabelmap, vtkOrientedImageData* segmentLabelmap, vtkOrientedImageData* outputLabelmap);
+
   /// TODO: remove, only used for testing
   static void Write(vtkImageData* image, const char* name);
 

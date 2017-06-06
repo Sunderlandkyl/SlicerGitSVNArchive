@@ -201,7 +201,7 @@ void vtkFractionalOperations::ConvertFractionalImage(vtkOrientedImageData* input
 }
 
 template<class InputScalarType>
-void vtkFractionalOperations::ConvertFractionalImageGeneric(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer )
+void vtkFractionalOperations::ConvertFractionalImageGeneric(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer)
 {
   vtkNotUsed(inputScalarTypePointer);
 
@@ -215,7 +215,7 @@ void vtkFractionalOperations::ConvertFractionalImageGeneric(vtkOrientedImageData
 }
 
 template<class InputScalarType, class OutputScalarType>
-void vtkFractionalOperations::ConvertFractionalImageGeneric2(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer, OutputScalarType* outputScalarTypePointer )
+void vtkFractionalOperations::ConvertFractionalImageGeneric2(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer, OutputScalarType* outputScalarTypePointer)
 {
   vtkNotUsed(inputScalarTypePointer);
   vtkNotUsed(outputScalarTypePointer);
@@ -661,6 +661,82 @@ bool vtkFractionalOperations::ContainsFractionalParameters(vtkOrientedImageData*
     }
 
   return true;
+}
+
+//----------------------------------------------------------------------------
+void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* modifierLabelmap, vtkOrientedImageData* mergedLabelmap, vtkOrientedImageData* segmentLabelmap, vtkOrientedImageData* outputLabelmap)
+{
+  int segmentLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  segmentLabelmap->GetExtent(segmentLabelmapExtent);
+
+  double segmentScalarRange[2] = { 0, 1 };
+  vtkFractionalOperations::GetScalarRange(segmentLabelmap, segmentScalarRange);
+
+  for (int k = segmentLabelmapExtent[4]; k <= segmentLabelmapExtent[5]; ++k)
+    {
+    for (int j = segmentLabelmapExtent[2]; j <= segmentLabelmapExtent[3]; ++j)
+      {
+      for (int i = segmentLabelmapExtent[0]; i <= segmentLabelmapExtent[1]; ++i)
+        {
+
+          double modifierValue = vtkFractionalOperations::GetScalarComponentAsFraction(modifierLabelmap, i, j, k, 0);
+          double mergedSum = vtkFractionalOperations::GetScalarComponentAsFraction(mergedLabelmap, i, j, k, 0);
+          double segmentValue = vtkFractionalOperations::GetScalarComponentAsFraction(segmentLabelmap, i, j, k, 0);
+
+          if (mergedSum == 0.0)
+            continue;
+
+          double totalSum = modifierValue + mergedSum;
+
+          double flag1 = std::floor(std::min(totalSum, 1.0));
+          double flag2 = -(flag1 - 1);
+
+          double outputValue = 0.0;
+          if (totalSum > 1.0)
+            {
+            outputValue = (segmentValue / mergedSum)*(1.0 - modifierValue);
+            }
+          else
+            {
+            outputValue = segmentValue;
+            }
+
+          //std::cout << modifierValue << " " << mergedSum << " " << segmentValue << " " << outputValue << std::endl;
+          outputValue = std::floor(outputValue * (segmentScalarRange[1] - segmentScalarRange[0]) + segmentScalarRange[0]);
+          outputLabelmap->SetScalarComponentFromDouble(i, j, k, 0, outputValue);
+        }
+      }
+    }
+
+}
+
+double vtkFractionalOperations::GetScalarComponentAsFraction(vtkOrientedImageData* labelmap, int x, int y, int z, int component)
+{
+  int extent[6] = { -1, 0, -1, 0, -1, 0 };
+  labelmap->GetExtent(extent);
+
+  if (x < extent[0] || x > extent[1] ||
+      y < extent[2] || y > extent[3] ||
+      z < extent[4] || z > extent[5])
+    {
+    return 0.0;
+    }
+
+  double value = labelmap->GetScalarComponentAsDouble(x, y, z, component);
+  return vtkFractionalOperations::GetValueAsFraction(labelmap, value);
+}
+
+double vtkFractionalOperations::GetValueAsFraction(vtkOrientedImageData* labelmap, double value)
+{
+  double scalarRange[2] = { 0.0, 1.0 };
+  vtkFractionalOperations::GetScalarRange(labelmap, scalarRange);
+
+  return (value-scalarRange[0])/(scalarRange[1]-scalarRange[0]);
+}
+
+double vtkFractionalOperations::GetValueAsFraction(double scalarRange[2], double value)
+{
+  return (value - scalarRange[0]) / (scalarRange[1] - scalarRange[0]);
 }
 
 //----------------------------------------------------------------------------
