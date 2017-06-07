@@ -165,7 +165,7 @@ public:
   static double GetValueAsFraction(double scalarRange[2], double value);
 
   /// TODO
-  static void VoxelContentsConstraintMask(vtkOrientedImageData* modifierLabelmap, vtkOrientedImageData* mergedLabelmap, vtkOrientedImageData* segmentLabelmap, vtkOrientedImageData* outputLabelmap);
+  static void VoxelContentsConstraintMask(vtkOrientedImageData* modifierLabelmap, vtkOrientedImageData* mergedLabelmap, vtkOrientedImageData* segmentLabelmap, vtkOrientedImageData* outputLabelmap, int effectiveExtent[6]=NULL);
 
   /// TODO: remove, only used for testing
   static void Write(vtkImageData* image, const char* name);

@@ -113,7 +113,7 @@ void vtkFractionalOperations::InvertGeneric(LabelmapScalarType* labelmapPointer,
   for (int i = 0; i < numberOfVoxels; ++i)
     {
     double invertedValue = max - (*labelmapPointer) + min;
-    *labelmapPointer = invertedValue;
+    *labelmapPointer = static_cast<LabelmapScalarType>(invertedValue);
     ++labelmapPointer;
     }
 
@@ -664,19 +664,49 @@ bool vtkFractionalOperations::ContainsFractionalParameters(vtkOrientedImageData*
 }
 
 //----------------------------------------------------------------------------
-void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* modifierLabelmap, vtkOrientedImageData* mergedLabelmap, vtkOrientedImageData* segmentLabelmap, vtkOrientedImageData* outputLabelmap)
+void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* modifierLabelmap, vtkOrientedImageData* mergedLabelmap, vtkOrientedImageData* segmentLabelmap, vtkOrientedImageData* outputLabelmap, int effectiveExtent[6]/*=NULL*/)
 {
   int segmentLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
   segmentLabelmap->GetExtent(segmentLabelmapExtent);
 
+  int modifierLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  if (!effectiveExtent ||
+    effectiveExtent[0] > effectiveExtent[1] ||
+    effectiveExtent[2] > effectiveExtent[3] ||
+    effectiveExtent[4] > effectiveExtent[5])
+    {
+    modifierLabelmap->GetExtent(modifierLabelmapExtent);
+    }
+  else
+    {
+    for (int i = 0; i<6; ++i)
+      modifierLabelmapExtent[i] = effectiveExtent[i];
+    }
+
+  int extent[6] = {
+    std::max(segmentLabelmapExtent[0], modifierLabelmapExtent[0]),
+    std::min(segmentLabelmapExtent[1], modifierLabelmapExtent[1]),
+    std::max(segmentLabelmapExtent[2], modifierLabelmapExtent[2]),
+    std::min(segmentLabelmapExtent[3], modifierLabelmapExtent[3]),
+    std::max(segmentLabelmapExtent[4], modifierLabelmapExtent[4]),
+    std::min(segmentLabelmapExtent[5], modifierLabelmapExtent[5])
+  };
+
+  if (extent[0] > extent[1] ||
+      extent[2] > extent[3] ||
+      extent[4] > extent[5])
+  {
+    return;
+  }
+
   double segmentScalarRange[2] = { 0, 1 };
   vtkFractionalOperations::GetScalarRange(segmentLabelmap, segmentScalarRange);
 
-  for (int k = segmentLabelmapExtent[4]; k <= segmentLabelmapExtent[5]; ++k)
+  for (int k = extent[4]; k <= extent[5]; ++k)
     {
-    for (int j = segmentLabelmapExtent[2]; j <= segmentLabelmapExtent[3]; ++j)
+      for (int j = extent[2]; j <= extent[3]; ++j)
       {
-      for (int i = segmentLabelmapExtent[0]; i <= segmentLabelmapExtent[1]; ++i)
+        for (int i = extent[0]; i <= extent[1]; ++i)
         {
 
           double modifierValue = vtkFractionalOperations::GetScalarComponentAsFraction(modifierLabelmap, i, j, k, 0);
@@ -684,13 +714,11 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
           double segmentValue = vtkFractionalOperations::GetScalarComponentAsFraction(segmentLabelmap, i, j, k, 0);
 
           if (mergedSum == 0.0)
+            {
             continue;
+            }
 
           double totalSum = modifierValue + mergedSum;
-
-          double flag1 = std::floor(std::min(totalSum, 1.0));
-          double flag2 = -(flag1 - 1);
-
           double outputValue = 0.0;
           if (totalSum > 1.0)
             {
@@ -700,8 +728,6 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
             {
             outputValue = segmentValue;
             }
-
-          //std::cout << modifierValue << " " << mergedSum << " " << segmentValue << " " << outputValue << std::endl;
           outputValue = std::floor(outputValue * (segmentScalarRange[1] - segmentScalarRange[0]) + segmentScalarRange[0]);
           outputLabelmap->SetScalarComponentFromDouble(i, j, k, 0, outputValue);
         }
