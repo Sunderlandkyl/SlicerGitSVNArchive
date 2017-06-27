@@ -843,6 +843,15 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->LookupTableFill->SetRampToLinear();
       pipeline->LookupTableFill->SetTableRange(0, 1);
 
+      char* fractionalEdgeName = displayNode->GetFractionalEdgeName();
+      if (fractionalEdgeName)
+        {
+        if (strcmp(fractionalEdgeName,"Smooth"))
+          this->SmoothFractionalLabelMapBorder = true;
+        if (strcmp(fractionalEdgeName, "Hard"))
+          this->SmoothFractionalLabelMapBorder = false;
+        }
+
       if (!this->SmoothFractionalLabelMapBorder)
         {
         //TODO: this works for labelmaps that are int or char type, but would need to be changed for floating point representations since it only creates table values in integer increments

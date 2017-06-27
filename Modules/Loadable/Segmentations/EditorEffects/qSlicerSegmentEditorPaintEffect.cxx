@@ -594,9 +594,9 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
   int masterDimensions[3] = {0,0,0};
   q->masterVolumeImageData()->GetDimensions(masterDimensions);
 
-  int dimensions[3] = { std::min( (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[0])+10, masterDimensions[0]),
-                        std::min( (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10, masterDimensions[1]),
-                        std::min( (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10, masterDimensions[2]) };
+  int dimensions[3] = { (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[0])+10,
+                        (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[1])+10,
+                        (int)std::ceil(2*radiusMm/modifierLabelmap->GetSpacing()[2])+10 };
 
   if (dimensions[0] <= 0 || dimensions[1] <= 0 || dimensions[2] <= 0)
   {
@@ -827,7 +827,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     shift->SetOutputScalarType(scalarType);
     shift->Update();
     orientedBrushPositionerOutput->DeepCopy(shift->GetOutput());
-
+    vtkFractionalOperations::Write(orientedBrushPositionerOutput, "E:\\test\\whafrac.nrrd");
     vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput, vtkOrientedImageDataResample::OPERATION_MAXIMUM, NULL, 0, scalarRange[0]);
     }
   modifierLabelmap->Modified();
