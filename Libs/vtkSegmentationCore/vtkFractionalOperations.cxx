@@ -29,6 +29,7 @@
 #include <vtkStringArray.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageMathematics.h>
+#include <vtkImageIterator.h>
 
 // Segmentation includes
 #include <vtkOrientedImageData.h>
@@ -669,6 +670,9 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
   int segmentLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
   segmentLabelmap->GetExtent(segmentLabelmapExtent);
 
+  int mergedLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  mergedLabelmap->GetExtent(mergedLabelmapExtent);
+
   int modifierLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
   if (!effectiveExtent ||
     effectiveExtent[0] > effectiveExtent[1] ||
@@ -684,12 +688,12 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
     }
 
   int extent[6] = {
-    std::max(segmentLabelmapExtent[0], modifierLabelmapExtent[0]),
-    std::min(segmentLabelmapExtent[1], modifierLabelmapExtent[1]),
-    std::max(segmentLabelmapExtent[2], modifierLabelmapExtent[2]),
-    std::min(segmentLabelmapExtent[3], modifierLabelmapExtent[3]),
-    std::max(segmentLabelmapExtent[4], modifierLabelmapExtent[4]),
-    std::min(segmentLabelmapExtent[5], modifierLabelmapExtent[5])
+    std::max(segmentLabelmapExtent[0], std::max(modifierLabelmapExtent[0], mergedLabelmapExtent[0])),
+    std::min(segmentLabelmapExtent[1], std::min(modifierLabelmapExtent[1], mergedLabelmapExtent[1])),
+    std::max(segmentLabelmapExtent[2], std::max(modifierLabelmapExtent[2], mergedLabelmapExtent[2])),
+    std::min(segmentLabelmapExtent[3], std::min(modifierLabelmapExtent[3], mergedLabelmapExtent[3])),
+    std::max(segmentLabelmapExtent[4], std::max(modifierLabelmapExtent[4], mergedLabelmapExtent[4])),
+    std::min(segmentLabelmapExtent[5], std::min(modifierLabelmapExtent[5], mergedLabelmapExtent[5]))
   };
 
   if (extent[0] > extent[1] ||
@@ -702,6 +706,12 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
   double segmentScalarRange[2] = { 0, 1 };
   vtkFractionalOperations::GetScalarRange(segmentLabelmap, segmentScalarRange);
 
+  double mergedScalarRange[2] = { 0, 1 };
+  vtkFractionalOperations::GetScalarRange(mergedLabelmap, mergedScalarRange);
+
+  double modifierScalarRange[2] = { 0, 1 };
+  vtkFractionalOperations::GetScalarRange(modifierLabelmap, modifierScalarRange);
+
   for (int k = extent[4]; k <= extent[5]; ++k)
     {
       for (int j = extent[2]; j <= extent[3]; ++j)
@@ -709,9 +719,9 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
         for (int i = extent[0]; i <= extent[1]; ++i)
         {
 
-          double modifierValue = vtkFractionalOperations::GetScalarComponentAsFraction(modifierLabelmap, i, j, k, 0);
-          double mergedSum = vtkFractionalOperations::GetScalarComponentAsFraction(mergedLabelmap, i, j, k, 0);
-          double segmentValue = vtkFractionalOperations::GetScalarComponentAsFraction(segmentLabelmap, i, j, k, 0);
+          double modifierValue = vtkFractionalOperations::GetValueAsFraction(modifierScalarRange, modifierLabelmap->GetScalarComponentAsDouble(i, j, k, 0));
+          double mergedSum = vtkFractionalOperations::GetValueAsFraction(mergedScalarRange, mergedLabelmap->GetScalarComponentAsDouble(i, j, k, 0));
+          double segmentValue = vtkFractionalOperations::GetValueAsFraction(segmentScalarRange, segmentLabelmap->GetScalarComponentAsDouble(i, j, k, 0));
 
           if (mergedSum == 0.0)
             {
@@ -733,6 +743,44 @@ void vtkFractionalOperations::VoxelContentsConstraintMask(vtkOrientedImageData* 
         }
       }
     }
+
+  //vtkImageIterator<double> modifierIterator = vtkImageIterator<double>::vtkImageIterator(modifierLabelmap, extent);
+  //vtkImageIterator<double> segmentIterator = vtkImageIterator<double>::vtkImageIterator(segmentLabelmap, extent);
+  //vtkImageIterator<double> mergedIterator = vtkImageIterator<double>::vtkImageIterator(mergedLabelmap, extent);
+  //vtkImageIterator<double> outputIterator = vtkImageIterator<double>::vtkImageIterator(outputLabelmap, extent);
+
+  //while (!modifierIterator.IsAtEnd())
+  //{
+  //  double* modifierIt = modifierIterator.BeginSpan();
+  //  double *modifierEnd = modifierIterator.EndSpan();
+
+  //  double* segmentIt = segmentIterator.BeginSpan();
+  //  double* mergedIt = mergedIterator.BeginSpan();
+  //  double* outputIt = outputIterator.BeginSpan();
+
+  //  while (modifierIt != modifierEnd)
+  //  {
+  //    double modifierValue = vtkFractionalOperations::GetValueAsFraction(modifierScalarRange, *modifierIt++);
+  //    double segmentValue = vtkFractionalOperations::GetValueAsFraction(segmentScalarRange, *segmentIt++);
+  //    double mergedSum = vtkFractionalOperations::GetValueAsFraction(mergedScalarRange, *mergedIt++);
+  //    double totalSum = modifierValue + mergedSum;
+  //    double outputValue = 0.0;
+  //    if (totalSum > 1.0)
+  //      {
+  //      outputValue = (segmentValue / mergedSum)*(1.0 - modifierValue);
+  //      }
+  //    else
+  //      {
+  //      outputValue = segmentValue;
+  //      }
+  //    outputValue = std::floor(outputValue * (segmentScalarRange[1] - segmentScalarRange[0]) + segmentScalarRange[0]);
+  //    (*outputIt++) = outputValue;
+  //  }
+  //  modifierIterator.NextSpan();
+  //  segmentIterator.NextSpan();
+  //  mergedIterator.NextSpan();
+  //  outputIterator.NextSpan();
+  //}
 
 }
 

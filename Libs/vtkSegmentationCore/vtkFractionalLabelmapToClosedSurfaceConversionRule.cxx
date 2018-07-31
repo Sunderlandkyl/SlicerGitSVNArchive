@@ -181,6 +181,8 @@ bool vtkFractionalLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* 
   double thresholdValue = (fractionalThreshold * (scalarRange[1] - scalarRange[0])) + scalarRange[0];
   marchingCubes->GenerateValues(1, thresholdValue, thresholdValue);
   marchingCubes->ComputeGradientsOff();
+  marchingCubes->ComputeGradientsOn();
+  marchingCubes->ComputeScalarsOn();
   marchingCubes->ComputeNormalsOff();
   marchingCubes->ComputeScalarsOff();
   marchingCubes->Update();

@@ -827,7 +827,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     shift->SetOutputScalarType(scalarType);
     shift->Update();
     orientedBrushPositionerOutput->DeepCopy(shift->GetOutput());
-    vtkFractionalOperations::Write(orientedBrushPositionerOutput, "E:\\test\\whafrac.nrrd");
+
     vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput, vtkOrientedImageDataResample::OPERATION_MAXIMUM, NULL, 0, scalarRange[0]);
     }
   modifierLabelmap->Modified();
