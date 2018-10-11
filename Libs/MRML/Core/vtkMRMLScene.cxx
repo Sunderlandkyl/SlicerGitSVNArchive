@@ -78,7 +78,6 @@ Version:   $Revision: 1.18 $
 #include "vtkMRMLDiffusionTensorVolumeSliceDisplayNode.h"
 #include "vtkMRMLVectorVolumeNode.h"
 #include "vtkMRMLStreamingVolumeNode.h"
-#include "vtkStreamingVolumeCodec.h"
 #endif
 
 // VTK includes

@@ -223,8 +223,10 @@ if(MRML_USE_vtkTeem)
     vtkMRMLNRRDStorageNode.cxx
     vtkMRMLTensorVolumeNode.cxx
     vtkMRMLVectorVolumeNode.cxx
-    vtkMRMLStreamingVolumeNode.cxx
     vtkStreamingVolumeCodec.cxx
+    vtkStreamingVolumeFrame.cxx
+    vtkMRMLStreamingVolumeNode.cxx
+    vtkStreamingVolumeCodecFactory.cxx
     )
 endif()
 

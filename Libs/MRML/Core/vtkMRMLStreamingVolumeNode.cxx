@@ -1,35 +1,48 @@
+/*=auto=========================================================================
+
+  Portions (c) Copyright 2005 Brigham and Women's Hospital (BWH) All Rights Reserved.
+
+  See COPYRIGHT.txt
+  or http://www.slicer.org/copyright/copyright.txt for details.
+
+  Program:   3D Slicer
+  Module:    $RCSfile: vtkMRMLStreamingVolumeNode.cxx,v $
+  Date:      $Date: 2006/03/19 17:12:29 $
+  Version:   $Revision: 1.13 $
+
+=========================================================================auto=*/
+
 #include "vtkMRMLStreamingVolumeNode.h"
 
-// MRML includes
-#include "vtkMRMLScene.h"
-#include "vtkMRMLNRRDStorageNode.h"
-
 // VTK includes
-#include <vtkCollection.h>
-#include <vtkMatrix4x4.h>
-#include <vtkNew.h>
-#include <vtkObjectFactory.h>
-#include <vtkXMLUtilities.h>
-#include <vtkDataArray.h>
+#include <vtkAlgorithm.h>
+#include <vtkAlgorithmOutput.h>
+#include <vtkCallbackCommand.h>
+#include <vtkCommand.h>
+
+// MRML includes
+#include <vtkStreamingVolumeCodecFactory.h>
 
 //----------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLStreamingVolumeNode);
+
+const int DEFAULT_NUMBER_OF_IMAGEDATACONNECTION_OBSERVERS = 1;
+const int DEFAULT_NUMBER_OF_IMAGEDATA_OBSERVERS = 2;
 
 //----------------------------------------------------------------------------
 // vtkMRMLStreamingVolumeNode methods
 
 //-----------------------------------------------------------------------------
 vtkMRMLStreamingVolumeNode::vtkMRMLStreamingVolumeNode()
+  : Codec(NULL)
+  , Frame(NULL)
+  , ImageAllocationInProgress(false)
+  , ImageDataModified(false)
+  , FrameDecoded(false)
+  , FrameModifiedCallbackCommand(vtkSmartPointer<vtkCallbackCommand>::New())
 {
-  this->CompressionCodec = NULL;
-  this->FrameUpdated = false;
-  this->KeyFrameDecoded = false;
-  this->KeyFrameUpdated = false;
-  this->KeyFrame = vtkSmartPointer<vtkUnsignedCharArray>::New();
-  this->Frame = vtkSmartPointer<vtkUnsignedCharArray>::New();
-  this->CodecName = NULL;
-  this->CodecType = NULL;
-  this->CodecClassName = NULL;
+  this->FrameModifiedCallbackCommand->SetClientData(reinterpret_cast<void *>(this));
+  this->FrameModifiedCallbackCommand->SetCallback(vtkMRMLStreamingVolumeNode::FrameModifiedCallback);
 }
 
 //-----------------------------------------------------------------------------
@@ -37,229 +50,240 @@ vtkMRMLStreamingVolumeNode::~vtkMRMLStreamingVolumeNode()
 {
 }
 
-//-----------------------------------------------------------------------------
-int vtkMRMLStreamingVolumeNode::SetCodecNameToCompressor(std::string name)
-{
-  if(this->CompressionCodec)
-    {
-    this->CompressionCodec->SetContentCodecName(name);
-    return 1;
-    }
-  return 0;
-}
-
-//-----------------------------------------------------------------------------
-std::string vtkMRMLStreamingVolumeNode::GetCodecNameFromCompressor()
-{
-  if (this->CompressionCodec)
-    {
-    return this->CompressionCodec->GetContentCodecName();
-    }
-  return "";
-}
-
 //---------------------------------------------------------------------------
-std::string vtkMRMLStreamingVolumeNode::GetCodecTypeFromCompressor()
+void vtkMRMLStreamingVolumeNode::FrameModifiedCallback(vtkObject *caller, unsigned long eid, void* clientData, void* callData)
 {
-  vtkSmartPointer<vtkStreamingVolumeCodec> codec = this->GetCompressionCodec();
-  if (codec)
-    {
-    return codec->GetContentCodecType();
-    }
-  return "";
-}
-
-//---------------------------------------------------------------------------
-int vtkMRMLStreamingVolumeNode::SetCodecTypeToCompressor(std::string name)
-{
-  vtkSmartPointer<vtkStreamingVolumeCodec> codec = this->GetCompressionCodec();
-  if(codec)
-  {
-    codec->SetContentCodecType(name);
-    return 1;
-  }
-  return 0;
-}
-
-//---------------------------------------------------------------------------
-int vtkMRMLStreamingVolumeNode::ObserveOutsideCompressionCodec( vtkStreamingVolumeCodec* codec)
-{
-  if (codec)
-    {
-    codec->AddObserver(codec->GetCodecContentModifiedEvent(), this, &vtkMRMLStreamingVolumeNode::ProcessCodecModifiedEvents);
-    //------
-    if (codec->GetContent().frame != NULL && codec->GetContent().keyFrame != NULL)
-      {
-      vtkSmartPointer<vtkUnsignedCharArray> bitStream = codec->GetContent().frame;
-      this->UpdateFrameByDeepCopy(bitStream);
-      vtkSmartPointer<vtkUnsignedCharArray> bitKeyStream = codec->GetContent().keyFrame;
-      this->UpdateKeyFrameByDeepCopy(bitKeyStream);
-      if (codec->GetContent().image != NULL)
-        {
-        this->SetAndObserveImageData(codec->GetContent().image);
-        }
-      }
-    this->SetCodecClassName(codec->GetClassName());
-    this->SetCodecName(codec->GetContentCodecName().c_str());
-    this->SetCodecType(codec->GetContentCodecType().c_str());
-    this->CompressionCodec = codec; // should the interal video codec point to the external video codec?
-    //-------
-    return 1;
-    }
-  return 0;
-}
-
-void vtkMRMLStreamingVolumeNode::CopySrcArrayToDestArray(vtkSmartPointer<vtkUnsignedCharArray> srcString, vtkSmartPointer<vtkUnsignedCharArray> destString)
-{
-  destString->SetNumberOfTuples(srcString->GetNumberOfValues());
-  destString->DeepCopy(srcString);
-}
-
-int vtkMRMLStreamingVolumeNode::UpdateFrameByDeepCopy(vtkSmartPointer<vtkUnsignedCharArray> buffer)
-{
-  if(this->Frame == NULL)
-    {
-    this->Frame = vtkSmartPointer<vtkUnsignedCharArray>::New();
-    this->Frame->SetNumberOfComponents(1);
-    }
-  if(buffer == NULL)
-    {
-    vtkWarningMacro("Souce frame not valid.")
-    return 0;
-    }
-  this->CopySrcArrayToDestArray(buffer, this->Frame);
-  this->SetFrameUpdated(true);
-  return 1;
-};
-
-
-int vtkMRMLStreamingVolumeNode::UpdateKeyFrameByDeepCopy(vtkSmartPointer<vtkUnsignedCharArray> buffer)
-{
-  if(this->KeyFrame == NULL)
-    {
-    this->KeyFrame = vtkSmartPointer<vtkUnsignedCharArray>::New();
-    this->KeyFrame->SetNumberOfComponents(1);
-    }
-  if(buffer == NULL)
-    {
-    vtkWarningMacro("Souce key frame not valid.")
-    return 0;
-    }
-  this->CopySrcArrayToDestArray(buffer, this->KeyFrame);
-  this->SetKeyFrameUpdated(true);
-  return 1;
-};
-
-
-//---------------------------------------------------------------------------
-int vtkMRMLStreamingVolumeNode::DecodeFrame(vtkUnsignedCharArray*  frame)
-{
-  if (this->CompressionCodec == NULL)
-  {
-    vtkWarningMacro("No compression codec available, use the ObserveOutsideCompressionCodec() to set up the compression codec.")
-    return 0;
-  }
-  this->UpdateFrameByDeepCopy(frame);
-  if (this->CompressionCodec->UncompressedDataFromStream(frame, true))
-    {
-    if (this->GetImageData() != this->CompressionCodec->GetContent().image)
-      {
-      this->SetAndObserveImageData(this->CompressionCodec->GetContent().image);
-      }
-    this->Modified();
-    return 1;
-    }
-  return 0;
-}
-
-
-//---------------------------------------------------------------------------
-int vtkMRMLStreamingVolumeNode::DecodeKeyFrame(vtkUnsignedCharArray*  keyFrame)
-{
-  if (this->CompressionCodec == NULL)
-  {
-    vtkWarningMacro("No compression codec available, use the ObserveOutsideCompressionCodec() to set up the compression codec.")
-    return 0;
-  }
-  this->UpdateKeyFrameByDeepCopy(keyFrame);
-  if (this->CompressionCodec->UncompressedDataFromStream(keyFrame, true))
-    {
-    if (this->GetImageData() != this->CompressionCodec->GetContent().image)
-      {
-      this->SetAndObserveImageData(this->CompressionCodec->GetContent().image);
-      }
-    this->SetKeyFrameDecoded(true);
-    this->Modified();
-    return 1;
-    }
-  return 0;
-}
-
-//---------------------------------------------------------------------------
-int vtkMRMLStreamingVolumeNode::EncodeImageData()
-{
-  if (this->CompressionCodec == NULL)
-    {
-    vtkWarningMacro("No compression codec available, use the ObserveOutsideCompressionCodec() to set up the compression codec.")
-    return 0;
-    }
-  if (this->GetImageData() != this->CompressionCodec->GetContent().image)
-    {
-    this->CompressionCodec->SetContentImage(this->GetImageData());
-    }
-  vtkSmartPointer<vtkUnsignedCharArray> compressedStream = this->CompressionCodec->GetCompressedStreamFromData();
-  if (compressedStream != NULL)
-    {
-    if (compressedStream->GetNumberOfValues()>0)
-      {
-      this->UpdateFrameByDeepCopy(compressedStream);
-      bool keyFrameStatus = this->CompressionCodec->GetContent().keyFrameUpdated;
-      this->SetKeyFrameUpdated(keyFrameStatus);
-      if(keyFrameStatus)
-        {
-        this->UpdateKeyFrameByDeepCopy(compressedStream);
-        }
-        return 1;
-      }
-    }
-  return 0;
-}
-
-void vtkMRMLStreamingVolumeNode::ProcessMRMLEvents(vtkObject *caller, unsigned long event, void *callData )
-{
-  this->vtkMRMLNode::ProcessMRMLEvents(caller, event, callData);
-  this->InvokeEvent(ImageDataModifiedEvent);
-}
-
-void vtkMRMLStreamingVolumeNode::ProcessCodecModifiedEvents( vtkObject *caller, unsigned long event, void *callData )
-{
-  vtkSmartPointer<vtkStreamingVolumeCodec> modifiedCodec = reinterpret_cast<vtkStreamingVolumeCodec*>(caller);
-  if (modifiedCodec == NULL)
-    {
-    // we are only interested in proxy node modified events
-    return;
-    }
-  if (event != modifiedCodec->GetCodecContentModifiedEvent())
+  vtkMRMLStreamingVolumeNode* self = reinterpret_cast<vtkMRMLStreamingVolumeNode*>(clientData);
+  if (!self)
     {
     return;
     }
-  this->SetKeyFrameUpdated(false);
-  this->UpdateFrameByDeepCopy(modifiedCodec->GetContent().frame);
-  if(modifiedCodec->GetContent().keyFrameUpdated)
+
+  if (vtkStreamingVolumeFrame::SafeDownCast(caller) == self->Frame)
     {
-    this->UpdateKeyFrameByDeepCopy(modifiedCodec->GetContent().keyFrame);
+    if (self->IsImageObserved())
+      {
+      self->DecodeFrame();
+      }
+    self->InvokeCustomModifiedEvent(vtkMRMLStreamingVolumeNode::FrameModifiedEvent);
+    }
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLStreamingVolumeNode::ProcessMRMLEvents(vtkObject *caller,
+  unsigned long event,
+  void *callData)
+{
+  Superclass::ProcessMRMLEvents(caller, event, callData);
+}
+
+//---------------------------------------------------------------------------
+bool vtkMRMLStreamingVolumeNode::IsKeyFrame()
+{
+  if (this->Frame)
+    {
+    return this->Frame->IsKeyFrame();
+    }
+  return false;
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLStreamingVolumeNode::SetAndObserveImageData(vtkImageData* imageData)
+{
+  this->ImageAllocationInProgress = true;
+  if (imageData)
+    {
+    this->ImageDataModified = true;
+    }
+  else
+    {
+    this->ImageDataModified = false;
+    }
+  Superclass::SetAndObserveImageData(imageData);
+  this->ImageAllocationInProgress = false;
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLStreamingVolumeNode::AllocateImageForFrame()
+{
+  if (!this->ImageAllocationInProgress && !this->ImageDataModified)
+    {
+    this->ImageAllocationInProgress = true;
+    vtkSmartPointer<vtkImageData> imageData = Superclass::GetImageData();
+    if (!imageData)
+      {
+      if (this->Frame)
+        {
+        vtkSmartPointer<vtkImageData> newImageData = vtkSmartPointer<vtkImageData>::New();
+        this->SetAndObserveImageData(newImageData);
+        imageData = newImageData;
+        this->FrameDecoded = false;
+        }
+      }
+
+    if (imageData && this->Frame)
+      {
+      int frameDimensions[3] = { 0,0,0 };
+      this->Frame->GetFrameDimensions(frameDimensions);
+      imageData->SetDimensions(frameDimensions);
+      imageData->AllocateScalars(VTK_UNSIGNED_CHAR, this->Frame->GetNumberOfComponents());
+      }
+    this->ImageDataModified = false;
+    this->ImageAllocationInProgress = false;
+    }
+}
+
+//---------------------------------------------------------------------------
+vtkImageData* vtkMRMLStreamingVolumeNode::GetImageData()
+{
+  if (!this->ImageDataModified && this->Frame)
+    {
+    this->DecodeFrame();
+    }
+
+  vtkImageData* imageData = Superclass::GetImageData();
+  return imageData;
+}
+
+//---------------------------------------------------------------------------
+vtkAlgorithmOutput* vtkMRMLStreamingVolumeNode::GetImageDataConnection()
+{
+  if (!this->ImageAllocationInProgress && !this->ImageDataModified)
+    {
+    this->DecodeFrame();
+    }
+  return Superclass::GetImageDataConnection();
+}
+
+//---------------------------------------------------------------------------
+vtkStreamingVolumeCodec* vtkMRMLStreamingVolumeNode::GetCodec()
+{
+  if (!this->Codec ||
+      (this->Codec &&
+       this->Codec->GetFourCC() != this->GetCodecFourCC()))
+    {
+    this->Codec = vtkStreamingVolumeCodecFactory::GetInstance()->CreateCodecByFourCC(this->GetCodecFourCC());
+    }
+  return this->Codec;
+}
+
+//---------------------------------------------------------------------------
+bool vtkMRMLStreamingVolumeNode::IsImageObserved()
+{
+  vtkImageData* imageData = Superclass::GetImageData();
+  if ((this->ImageDataConnection != NULL &&
+       this->ImageDataConnection->GetReferenceCount() > DEFAULT_NUMBER_OF_IMAGEDATACONNECTION_OBSERVERS) ||
+      (imageData && imageData->GetReferenceCount() > DEFAULT_NUMBER_OF_IMAGEDATA_OBSERVERS))
+    {
+    return true;
+    }
+  return false;
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLStreamingVolumeNode::SetAndObserveFrame(vtkStreamingVolumeFrame* frame)
+{
+  if (this->Frame == frame)
+    {
+    return;
+    }
+
+  if (this->Frame)
+    {
+    this->Frame->RemoveObservers(vtkCommand::ModifiedEvent, this->FrameModifiedCallbackCommand);
+    }
+
+  this->Frame = frame;
+  this->FrameDecoded = false;
+
+  if (this->Frame)
+    {
+    this->Frame->AddObserver(vtkCommand::ModifiedEvent, this->FrameModifiedCallbackCommand);
+    }
+
+  if (this->Frame && !this->ImageDataModified)
+    {
+    this->CodecFourCC = this->Frame->GetCodecFourCC();
+
+    // If the image is being observed beyond the default internal observations of the volume node, then the frame should be decoded
+    // since some external class is observing the image data.
+    if (this->IsImageObserved())
+      {
+      this->DecodeFrame();
+      }
     }
   this->Modified();
 }
 
-//----------------------------------------------------------------------------
-vtkStreamingVolumeCodec* vtkMRMLStreamingVolumeNode::GetCompressionCodec()
+//---------------------------------------------------------------------------
+bool vtkMRMLStreamingVolumeNode::DecodeFrame()
 {
-  if (this->CompressionCodec)
+  if (!this->Frame)
     {
-    return this->CompressionCodec;
+    vtkErrorMacro("No frame to decode!");
+    return false;
     }
-  return NULL;
+
+  if (this->FrameDecoded)
+    {
+    // Frame is already decoded.
+    // Doesn't need to be decoded twice.
+    return true;
+    }
+
+  this->AllocateImageForFrame();
+  vtkImageData* imageData = Superclass::GetImageData();
+  if (!imageData)
+    {
+    vtkErrorMacro("Cannot decode frame. No destination image data!");
+    return false;
+    }
+
+  if (!this->GetCodec())
+    {
+    vtkErrorMacro("Could not find codec \"" << this->GetCodecFourCC() << "\"");
+    return false;
+    }
+
+  if (!this->Codec->DecodeFrame(this->Frame, imageData))
+    {
+    vtkErrorMacro("Could not decode frame");
+    return false;
+    }
+
+  this->FrameDecoded = true;
+  this->ImageDataModified = false;
+  return true;
+}
+
+//---------------------------------------------------------------------------
+bool vtkMRMLStreamingVolumeNode::EncodeImageData()
+{
+  vtkImageData* imageData = Superclass::GetImageData();
+  if (!imageData)
+    {
+    vtkErrorMacro("No image data to encode!")
+    return false;
+    }
+
+  if (!this->GetCodec())
+    {
+    vtkErrorMacro("Could not find codec \"" << this->GetCodecFourCC() << "\"");
+    return false;
+    }
+
+  if (!this->Frame)
+    {
+    this->Frame = vtkSmartPointer<vtkStreamingVolumeFrame>::New();
+    }
+
+  if (!this->Codec->EncodeImageData(this->GetImageData(), this->Frame))
+    {
+    vtkErrorMacro("Could not encode frame!");
+    return false;
+    }
+
+  return true;
 }
 
 //----------------------------------------------------------------------------
@@ -267,9 +291,17 @@ void vtkMRMLStreamingVolumeNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
   vtkMRMLWriteXMLBeginMacro(of);
-  vtkMRMLWriteXMLStringMacro(CodecName, CodecName);
-  vtkMRMLWriteXMLStringMacro(CodecClassName, CodecClassName);
-  vtkMRMLWriteXMLStringMacro(CodecType, CodecType);
+  vtkMRMLWriteXMLBooleanMacro(imageAllocationInProgress, ImageAllocationInProgress);
+  vtkMRMLWriteXMLBooleanMacro(frameDecoded, FrameDecoded);
+  vtkMRMLWriteXMLBooleanMacro(imageDataModified, ImageDataModified);
+  if (this->Codec)
+    {
+    this->Codec->WriteXML(of, nIndent);
+    }
+  else
+    {
+    vtkMRMLWriteXMLStdStringMacro(codecFourCC, CodecFourCC);
+    }
   vtkMRMLWriteXMLEndMacro();
 }
 
@@ -277,22 +309,32 @@ void vtkMRMLStreamingVolumeNode::WriteXML(ostream& of, int nIndent)
 void vtkMRMLStreamingVolumeNode::ReadXMLAttributes(const char** atts)
 {
   int disabledModify = this->StartModify();
-
   Superclass::ReadXMLAttributes(atts);
   vtkMRMLReadXMLBeginMacro(atts);
-  vtkMRMLReadXMLStringMacro(CodecName, CodecName);
-  vtkMRMLReadXMLStringMacro(CodecClassName, CodecClassName);
-  vtkMRMLReadXMLStringMacro(CodecType, CodecType);
+  vtkMRMLReadXMLStdStringMacro(codecFourCC, CodecFourCC);
+  vtkMRMLReadXMLBooleanMacro(imageAllocationInProgress, ImageAllocationInProgress);
+  vtkMRMLReadXMLBooleanMacro(frameDecoded, FrameDecoded);
+  vtkMRMLReadXMLBooleanMacro(imageDataModified, ImageDataModified);
   vtkMRMLReadXMLEndMacro();
+  if (this->GetCodec())
+    {
+    this->Codec->ReadXMLAttributes(atts);
+    }
   this->EndModify(disabledModify);
 }
-
 
 //----------------------------------------------------------------------------
 void vtkMRMLStreamingVolumeNode::Copy(vtkMRMLNode *anode)
 {
   int disabledModify = this->StartModify();
   Superclass::Copy(anode);
+  vtkMRMLCopyBeginMacro(anode);
+  vtkMRMLCopyStdStringMacro(CodecFourCC);
+  vtkMRMLCopyBooleanMacro(ImageAllocationInProgress);
+  vtkMRMLCopyBooleanMacro(FrameDecoded);
+  vtkMRMLCopyBooleanMacro(ImageDataModified);
+  this->SetAndObserveFrame(this->SafeDownCast(copySourceNode)->GetFrame());
+  vtkMRMLCopyEndMacro();
   this->EndModify(disabledModify);
 }
 
@@ -300,4 +342,18 @@ void vtkMRMLStreamingVolumeNode::Copy(vtkMRMLNode *anode)
 void vtkMRMLStreamingVolumeNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os,indent);
+  vtkMRMLPrintBeginMacro(os, indent);
+  vtkMRMLPrintBooleanMacro(ImageAllocationInProgress);
+  vtkMRMLPrintBooleanMacro(FrameDecoded);
+  vtkMRMLPrintBooleanMacro(ImageDataModified);
+  os << indent << this->Frame << "\n";
+  if (this->Codec)
+    {
+    os << indent << this->Codec << "\n";
+    }
+  else
+    {
+    vtkMRMLPrintStdStringMacro(CodecFourCC);
+    }
+  vtkMRMLPrintEndMacro();
 }

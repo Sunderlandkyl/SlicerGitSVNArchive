@@ -17,15 +17,15 @@
 
 // MRML includes
 #include "vtkMRML.h"
+#include "vtkStreamingVolumeFrame.h"
 
 // VTK includes
-#include <vtkObject.h>
-#include <vtkStdString.h>
 #include <vtkImageData.h>
 #include <vtkObject.h>
-#include <vtkSmartPointer.h>
 #include <vtkUnsignedCharArray.h>
 
+// STD includes
+#include <map>
 
 #ifndef vtkMRMLCodecNewMacro
 #define vtkMRMLCodecNewMacro(newClass) \
@@ -36,104 +36,88 @@ return newClass::New(); \
 }
 #endif
 
-/// \brief vtk object for representing volume compression codec (normally a video compression codec).
-///
-/// Any nodes that encapsulates video codec should derive from the vtkStreamingVolumeCodec.
-/// This compression codec node is observed by the vtkMRMLStreamingVolumeNode. This codec node
-/// generates keyframeMessage and frameMessage from the image data in the vtkMRMLStreamingVolumeNode
-/// See this derived node for more detail:
-/// https://github.com/openigtlink/SlicerOpenIGTLink/blob/BitStreamNodeRemoval/OpenIGTLinkIF/MRML/vtkIGTLStreamingVolumeCodec.h
-/// Two functions in this class needs to be derived from child class:
-/// 1. virtual int UncompressedDataFromStream(std::string bitStreamData, bool checkCRC);
-/// 2. virtual std::string GetCompressedStreamFromData();
+/// \brief VTK object for representing a volume compression codec (normally a video compression codec)
+/// Three functions from this class need to be implemented in child classes:
+/// 1. virtual bool EncodeImageDataInternal(vtkImageData* inputImageData, vtkStreamingVolumeFrame* outputFrame, bool forceKeyFrame);
+/// 2. virtual bool DecodeFrameInternal(vtkStreamingVolumeFrame* inputFrame, vtkImageData* outputImageData, bool saveDecodedImage);
+/// 3. virtual std::string GetFourCC();
+/// Optionally:
+/// 4. virtual bool SetParameter(std::string parameterName, std::string parameterValue);
 class VTK_MRML_EXPORT vtkStreamingVolumeCodec : public vtkObject
 {
 public:
-  //static vtkStreamingVolumeCodec *New();
   vtkTypeMacro(vtkStreamingVolumeCodec, vtkObject);
   void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
-  struct ContentData
-  {
-    vtkSmartPointer<vtkImageData> image;
-    int frameType;
-    bool keyFrameUpdated;
-    std::string codecName;
-    std::string codecType;
-    vtkSmartPointer<vtkUnsignedCharArray> frame; // for saving the compressed data.
-    vtkSmartPointer<vtkUnsignedCharArray> keyFrame; // for saving the compressed data.
-  };
+  /// Returns the FourCC code representing the codec
+  /// See https://www.fourcc.org/codecs.php for an incomplete list
+  virtual std::string GetFourCC() { return ""; };
 
-  ///
-  /// The codec modified event. This event could be invoke when bit stream is generated or decoded.
-  virtual unsigned int GetCodecContentModifiedEvent() const;
+  /// Creates an instance of the codec
+  virtual vtkStreamingVolumeCodec* CreateCodecInstance() { return NULL; };
 
-  ///
-  /// Create Codec Instance
-  virtual vtkStreamingVolumeCodec* CreateCodecInstance() = 0;
+  /// Decode compressed frame data and stores it in the imagedata
+  /// Handles the decoding of additional previous frames if required
+  /// \param frame Input frame containing the compressed frame data
+  /// \param outputImageData Output image which will store the uncompressed image
+  /// Returns true if the frame is decoded successfully
+  virtual bool DecodeFrame(vtkStreamingVolumeFrame* frame, vtkImageData* outputImageData);
 
-  ///
-  /// Get the compression codec type, a compression codec could contain serveral codec.
-  /// This function only returns the compresion codec type.
-  virtual std::string GetCodecType() const;
+  /// Encode the image data and store it in the frame
+  /// \param inputImageData Input image containing the uncompressed image
+  /// \param outputStreamingFrame Output frame that will be used to store the compressed frame
+  /// \param forceKeyFrame If the codec supports it, attempt to encode the image as a keyframe
+  /// Returns true if the image is encoded successfully
+  virtual bool EncodeImageData(vtkImageData* inputImageData, vtkStreamingVolumeFrame* outputStreamingFrame, bool forceKeyFrame = true);
 
-  ///
-  /// Decode bit stream and update the image pointer in content.
-  /// The image pointer normally from the vtkMRMLStreamingVolumeNode
-  virtual int UncompressedDataFromStream(vtkSmartPointer<vtkUnsignedCharArray> bitStreamData, bool checkCRC);
+  /// Read this codec's information in XML format
+  virtual void ReadXMLAttributes(const char** atts) {};
 
-  ///
-  /// Return the compressed bit stream from the image.
-  virtual vtkSmartPointer<vtkUnsignedCharArray> GetCompressedStreamFromData();
+  /// Write this codec's information in XML format.
+  virtual void WriteXML(ostream& of, int indent);
 
-  ///
-  /// Get the compression codec type, a compression codec could contain serveral codec.
-  /// This function returns the codec that is used for encoding and decoding.
-  virtual std::string GetContentCodecType();
+  const std::string CodecParameterPrefix = "Codec.";
 
-  ///
-  /// Return the Content data
-  virtual ContentData GetContent();
+  /// Set the parameters for the codec
+  /// \param parameterName String containing the name of the parameter in the form "Codec.ParameterName"
+  /// \param parameterValue Value of the specified parameter
+  /// Returns true if the parameter is successfully set
+  virtual bool SetParameter(std::string parameterName, std::string parameterValue) { return false; };
 
-  ///
-  /// Return the image in the Content data
-  virtual vtkSmartPointer<vtkImageData> GetContentImage();
+  /// Sets all of the specified parameters in the codec
+  /// \parameters Map containing the parameters and values to be set
+  virtual void SetParameters(std::map<std::string, std::string> parameters);
 
-  ///
-  /// Return the codec name in the Content data
-  virtual std::string GetContentCodecName();
+protected:
 
-  ///
-  /// Set the codec typt in the Content data, will be useful to indicate which codec to use.
-  virtual int SetContentCodecType(std::string codecType);
+  /// Decode a frame and store its contents in a vtkImageData
+  /// This function performs the actual decoding for a single frame and should be implemented in all non abstract subclasses
+  /// \param inputFame Frame object containing the compressed data to be decoded
+  /// \param outputImageData Image data object that will be used to store the output image
+  /// \param saveDecodedImage If true, writes the decoded image to the frame. If false, the decoded results are discarded
+  /// Returns true if the frame is decoded successfully
+  virtual bool DecodeFrameInternal(vtkStreamingVolumeFrame* inputFrame, vtkImageData* outputImageData, bool saveDecodedImage = true) { return false; };
 
-  ///
-  /// Set the Content data
-  virtual void SetContent(ContentData content);
-
-  ///
-  /// Set the image pointer in the Content data
-  virtual void SetContentImage(vtkSmartPointer<vtkImageData> image);
-
-  ///
-  /// Set the codec name in the Content data
-  virtual void SetContentCodecName(std::string name);
+  /// Decode a vtkImageData and store its contents in a frame
+  /// This function performs the actual encoding for a single frame and should be implemented in all non abstract subclasses
+  /// \param inputImageData Image data object containing the uncompressed data to be encoded
+  /// \param outputFrame Frame object that will be used to store the compressed data
+  /// \param forceKeyFrame When true, attempt to encode the image as a keyframe if the codec supports it
+  /// Returns true if the image is encoded successfully
+  virtual bool EncodeImageDataInternal(vtkImageData* inputImageData, vtkStreamingVolumeFrame* outputFrame, bool forceKeyFrame) { return false; };
 
 protected:
   vtkStreamingVolumeCodec();
   ~vtkStreamingVolumeCodec();
+
+private:
   vtkStreamingVolumeCodec(const vtkStreamingVolumeCodec&);
   void operator=(const vtkStreamingVolumeCodec&);
 
-  enum {
-    CodecModifiedEvent         = 118961, //Todo, should have a different id, as it is conflict with openigtlinkIO VideoDeviceModified event
-  };
-
-  enum {
-    UndefinedFrameType         = -1 // undefined frame type
-  };
-
-  ContentData Content;
+protected:
+  vtkSmartPointer<vtkStreamingVolumeFrame>     LastDecodedFrame;
+  vtkSmartPointer<vtkStreamingVolumeFrame>     LastEncodedFrame;
+  std::map<std::string, std::string>           Parameters;
 };
 
 #endif

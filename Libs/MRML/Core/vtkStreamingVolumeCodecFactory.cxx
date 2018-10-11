@@ -113,32 +113,33 @@ void vtkStreamingVolumeCodecFactory::classFinalize()
 }
 
 //----------------------------------------------------------------------------
-int vtkStreamingVolumeCodecFactory::RegisterStreamingCodec(vtkSmartPointer<vtkStreamingVolumeCodec> codec)
+bool vtkStreamingVolumeCodecFactory::RegisterStreamingCodec(vtkSmartPointer<vtkStreamingVolumeCodec> codec)
 {
   for (unsigned int i = 0; i < this->RegisteredCodecs.size(); ++i)
     {
     if (strcmp(this->RegisteredCodecs[i]->GetClassName(), codec->GetClassName())==0)
       {
-      return 0;
+      vtkWarningMacro("RegisterStreamingCodec failed: codec is already registered");
+      return false;
       }
     }
   this->RegisteredCodecs.push_back(codec);
-  return 1;
+  return true;
 }
 
 //----------------------------------------------------------------------------
-int vtkStreamingVolumeCodecFactory::UnregisterStreamingCodecByClassName(const std::string&  codecClassName)
+bool vtkStreamingVolumeCodecFactory::UnregisterStreamingCodecByClassName(const std::string&  codecClassName)
 {
   for (unsigned int i = 0; i < this->RegisteredCodecs.size(); ++i)
     {
     if (strcmp(this->RegisteredCodecs[i]->GetClassName(), codecClassName.c_str())==0)
       {
       this->RegisteredCodecs.erase(this->RegisteredCodecs.begin() + i);
-      return 1;
+      return true;
       }
     }
   vtkWarningMacro("UnregisterStreamingVolumeCodec failed: codec not found");
-  return 0;
+  return false;
 }
 
 //----------------------------------------------------------------------------
@@ -155,7 +156,32 @@ int vtkStreamingVolumeCodecFactory::UnregisterStreamingCodecByClassName(const st
 }
 
 //----------------------------------------------------------------------------
-const std::vector<vtkSmartPointer<vtkStreamingVolumeCodec> >& vtkStreamingVolumeCodecFactory::GetStreamingCodecClassNames()
+vtkStreamingVolumeCodec* vtkStreamingVolumeCodecFactory::CreateCodecByFourCC(const std::string fourCC)
+{
+  for (unsigned int i = 0; i < this->RegisteredCodecs.size(); ++i)
+  {
+    if (this->RegisteredCodecs[i]->GetFourCC() == fourCC)
+    {
+      return vtkStreamingVolumeCodec::SafeDownCast(this->RegisteredCodecs[i]->CreateCodecInstance());
+    }
+  }
+  return NULL;
+}
+
+//----------------------------------------------------------------------------
+const std::vector<vtkSmartPointer<vtkStreamingVolumeCodec> >& vtkStreamingVolumeCodecFactory::GetStreamingCodecClasses()
 {
   return this->RegisteredCodecs;
+}
+
+//----------------------------------------------------------------------------
+std::vector<std::string> vtkStreamingVolumeCodecFactory::GetStreamingCodecFourCCs()
+{
+  std::vector<std::string> codecFourCCs;
+  std::vector<vtkSmartPointer<vtkStreamingVolumeCodec> >::iterator registeredCodecIt;
+  for (registeredCodecIt = this->RegisteredCodecs.begin(); registeredCodecIt != this->RegisteredCodecs.end(); ++registeredCodecIt)
+  {
+    codecFourCCs.push_back((*registeredCodecIt)->GetFourCC());
+  }
+  return codecFourCCs;
 }

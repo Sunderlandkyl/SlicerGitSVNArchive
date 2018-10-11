@@ -10,8 +10,6 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
   vtkSlicer${MODULE_NAME}Logic.cxx
   vtkSlicer${MODULE_NAME}Logic.h
-  vtkStreamingVolumeCodecFactory.cxx
-  vtkStreamingVolumeCodecFactory.h
   )
 
 set(${KIT}_TARGET_LIBRARIES

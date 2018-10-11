@@ -12,25 +12,20 @@
 
 =========================================================================auto=*/
 
+// MRML includes
 #include "vtkStreamingVolumeCodec.h"
 
+// STD includes
+#include <deque>
+
 // VTK includes
-#include <vtkCollection.h>
-#include <vtkMatrix4x4.h>
-#include <vtkNew.h>
 #include <vtkObjectFactory.h>
-#include <vtkXMLUtilities.h>
 
 //---------------------------------------------------------------------------
 vtkStreamingVolumeCodec::vtkStreamingVolumeCodec()
+  : LastDecodedFrame(NULL)
+  , LastEncodedFrame(NULL)
 {
-  this->Content.image = NULL;
-  this->Content.frame = NULL;
-  this->Content.keyFrame = NULL;
-  this->Content.frameType = UndefinedFrameType;
-  this->Content.keyFrameUpdated = false;
-  this->Content.codecType = "";
-  this->Content.codecName = "";
 }
 
 //---------------------------------------------------------------------------
@@ -39,86 +34,107 @@ vtkStreamingVolumeCodec::~vtkStreamingVolumeCodec()
 }
 
 //---------------------------------------------------------------------------
-unsigned int vtkStreamingVolumeCodec::GetCodecContentModifiedEvent() const
+bool vtkStreamingVolumeCodec::DecodeFrame(vtkStreamingVolumeFrame* streamingFrame, vtkImageData* outputImageData)
 {
-  return CodecModifiedEvent;
+  if (!streamingFrame || !outputImageData)
+    {
+    vtkErrorMacro("Invalid arguments!");
+    return false;
+    }
+
+  vtkStreamingVolumeFrame* currentFrame = streamingFrame;
+
+  std::deque<vtkStreamingVolumeFrame*> frames;
+  frames.push_back(currentFrame);
+
+  // Decode previous frames if the following circumstance are true:
+  // - Current frame is not a keyframe
+  // - The frame that was previously decoded is not the same as the frame preceding the current one
+  while (currentFrame && !currentFrame->IsKeyFrame() &&
+         currentFrame->GetPreviousFrame() != this->LastDecodedFrame)
+    {
+    currentFrame = currentFrame->GetPreviousFrame();
+    frames.push_back(currentFrame);
+    }
+
+  while (!frames.empty())
+    {
+    vtkStreamingVolumeFrame* frame = frames.back();
+    if (frame)
+      {
+      // Decode the required frames
+      // Only the final frame needs to be saved to the image
+      bool saveDecodedImage = frames.size() == 1;
+      if (!this->DecodeFrameInternal(frame, outputImageData, saveDecodedImage))
+        {
+        vtkErrorMacro("Could not decode frame!");
+        return false;
+        }
+      }
+    frames.pop_back();
+    }
+
+  this->LastDecodedFrame = streamingFrame;
+  return true;
 }
 
 //---------------------------------------------------------------------------
-std::string vtkStreamingVolumeCodec::GetCodecType() const
+bool vtkStreamingVolumeCodec::EncodeImageData(vtkImageData* inputImageData, vtkStreamingVolumeFrame* outputStreamingFrame, bool forceKeyFrame/*=true*/)
 {
-  return "";
-}
+  if (!inputImageData || !outputStreamingFrame)
+    {
+    vtkErrorMacro("Invalid arguments!");
+    return false;
+    }
 
-std::string vtkStreamingVolumeCodec::GetContentCodecType()
-{
-  return this->Content.codecType;
-};
+  if (!this->EncodeImageDataInternal(inputImageData, outputStreamingFrame, forceKeyFrame))
+    {
+    vtkErrorMacro("Could not encode frame!");
+    return false;
+    }
 
-vtkStreamingVolumeCodec::ContentData vtkStreamingVolumeCodec::GetContent()
-{
-  return this->Content;
-}
+  if (outputStreamingFrame->IsKeyFrame())
+    {
+    outputStreamingFrame->SetPreviousFrame(NULL);
+    }
+  else
+    {
+    outputStreamingFrame->SetPreviousFrame(this->LastEncodedFrame);
+    }
 
-vtkSmartPointer<vtkImageData> vtkStreamingVolumeCodec::GetContentImage()
-{
-  return this->Content.image;
-}
-
-std::string vtkStreamingVolumeCodec::GetContentCodecName()
-{
-  return this->Content.codecName;
-}
-
-int vtkStreamingVolumeCodec::SetContentCodecType(std::string codecType)
-{
-  this->Content.codecType = std::string(codecType);
-  return 0;
-}
-
-void vtkStreamingVolumeCodec::SetContent(ContentData content)
-{
-  Content.codecType = content.codecType;
-  Content.image = content.image;
-  this->Content.image = content.image;
-  this->Content.frameType = content.frameType;
-  this->Content.keyFrameUpdated = content.keyFrameUpdated;
-  this->Content.codecType = content.codecType;
-  this->Content.codecName = content.codecName;
-  this->Modified();
-  this->InvokeEvent(CodecModifiedEvent, this);
-}
-
-
-void vtkStreamingVolumeCodec::SetContentImage(vtkSmartPointer<vtkImageData> image)
-{
-  this->Content.image = image;
-}
-
-void vtkStreamingVolumeCodec::SetContentCodecName(std::string name)
-{
-  this->Content.codecName = std::string(name);
-}
-
-
-//---------------------------------------------------------------------------
-int vtkStreamingVolumeCodec::UncompressedDataFromStream(vtkSmartPointer<vtkUnsignedCharArray> bitStreamData, bool checkCRC)
-{
-  //To do : decode the bitStreamData to update Content.image
-  //Return 1 on successful, 0 for unsuccessful
-  return 0;
+  this->LastEncodedFrame = outputStreamingFrame;
+  return true;
 }
 
 //---------------------------------------------------------------------------
-vtkSmartPointer<vtkUnsignedCharArray> vtkStreamingVolumeCodec::GetCompressedStreamFromData()
+void vtkStreamingVolumeCodec::SetParameters(std::map<std::string, std::string> parameters)
 {
-  return NULL;
+  std::map<std::string, std::string>::iterator parameterIt;
+  for (parameterIt = parameters.begin(); parameterIt != parameters.end(); ++parameterIt)
+    {
+    this->SetParameter(parameterIt->first, parameterIt->second);
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkStreamingVolumeCodec::WriteXML(ostream& of, int nIndent)
+{
+  of << " codecFourCC=\"" << this->GetFourCC() << "\"";
+  std::map<std::string, std::string>::iterator codecParameterIt;
+  for (codecParameterIt = this->Parameters.begin(); codecParameterIt != this->Parameters.end(); ++codecParameterIt)
+    {
+    of << " " << codecParameterIt->first << "=\"" << codecParameterIt->second << "\"";
+    }
 }
 
 //---------------------------------------------------------------------------
 void vtkStreamingVolumeCodec::PrintSelf(ostream& os, vtkIndent indent)
 {
   Superclass::PrintSelf(os, indent);
-  os << indent << "Video:\t" <<"\n";
-  Content.image->PrintSelf(os, indent.GetNextIndent());
+  os << indent << "Codec FourCC:\t" << this->GetFourCC() << std::endl;
+  std::map<std::string, std::string>::iterator codecParameterIt;
+  for (codecParameterIt = this->Parameters.begin(); codecParameterIt != this->Parameters.end(); ++codecParameterIt)
+    {
+    os << indent << codecParameterIt->first << "=\"" << codecParameterIt->second << "\"";
+    }
 }

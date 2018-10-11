@@ -19,12 +19,12 @@
 // VTK includes
 #include <vtkObject.h>
 #include <vtkSmartPointer.h>
-#include <vtkInstantiator.h>
 
-// STD MAP includes
+// STD includes
 #include <map>
 
-#include "vtkSlicerVolumesModuleLogicExport.h"
+// MRML includes
+#include "vtkMRML.h"
 #include "vtkStreamingVolumeCodec.h"
 
 /// \ingroup Volumes
@@ -32,30 +32,39 @@
 ///
 /// This singleton class is a repository of all compression codecs for compressing volume .
 /// Singleton pattern adopted from vtkEventBroker class.
-class VTK_SLICER_VOLUMES_MODULE_LOGIC_EXPORT vtkStreamingVolumeCodecFactory : public vtkObject
+class VTK_MRML_EXPORT vtkStreamingVolumeCodecFactory : public vtkObject
 {
 public:
 
   vtkTypeMacro(vtkStreamingVolumeCodecFactory, vtkObject);
   void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
-  /// Add a compression codec and pointer to new function
-  /// Usage: RegisterConverterRule( vtkStreamingVolumeCodec::GetDeviceType(), (PointerToMessageBaseNew)&vtkStreamingVolumeCodec::New );
-  /// \param codecClassName The name of the message type
+  /// Registers a new video compression codec
   /// \param newCodecPointer Function pointer to the codec type new function (e.g. (PointerToCodecBaseNew)&vtkStreamingVolumeCodec::New )
-  int RegisterStreamingCodec(vtkSmartPointer<vtkStreamingVolumeCodec> codec);
+  bool RegisterStreamingCodec(vtkSmartPointer<vtkStreamingVolumeCodec> codec);
 
-  /// Remove a codec from the factory.
-  /// This does not affect codecs that have already been created.
-  int UnregisterStreamingCodecByClassName(const std::string& codecClassName);
+  /// Removes a codec from the factory
+  /// This does not affect codecs that have already been instantiated
+  /// \param codecClassName full name of the codec class that is being unregistered
+  /// Returns true if the codec is successfully unregistered
+  bool UnregisterStreamingCodecByClassName(const std::string& codecClassName);
 
   /// Get pointer to codec new function, or NULL if the codec type not registered
   /// Usage: vtkSmartPointer<vtkStreamingVolumeCodec> codec = GetVolumeCodecNewPointerByType("igtlioVideoDevice")();
-  /// Returns NULL if codec type is not found
+  /// Returns NULL if no matching codec can be found
   vtkStreamingVolumeCodec* CreateCodecByClassName(const std::string& codecClassName);
 
-  /// Get all registered Codecs
-  const std::vector<vtkSmartPointer<vtkStreamingVolumeCodec> >& GetStreamingCodecClassNames();
+  /// Creates a new codec that matches the specified FourCC code
+  /// \param codecFourCC FourCC representing the encoding method
+  /// See https://www.fourcc.org/codecs.php for an incomplete list
+  /// Returns NULL if no matching codec can be found
+  vtkStreamingVolumeCodec* CreateCodecByFourCC(const std::string codecFourCC);
+
+  /// Returns a list of all registered Codecs
+  const std::vector<vtkSmartPointer<vtkStreamingVolumeCodec> >& GetStreamingCodecClasses();
+
+  /// Get FourCCs for all registered Codecs
+  std::vector<std::string> GetStreamingCodecFourCCs();
 
 public:
   /// Return the singleton instance with no reference counting.
@@ -88,7 +97,7 @@ protected:
 
 
 /// Utility class to make sure qSlicerModuleManager is initialized before it is used.
-class VTK_SLICER_VOLUMES_MODULE_LOGIC_EXPORT vtkStreamingVolumeCodecFactoryInitialize
+class VTK_MRML_EXPORT vtkStreamingVolumeCodecFactoryInitialize
 {
 public:
   typedef vtkStreamingVolumeCodecFactoryInitialize Self;

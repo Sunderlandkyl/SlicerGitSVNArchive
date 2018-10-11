@@ -23,7 +23,6 @@
 
 // Slicer includes
 #include "vtkSlicerModuleLogic.h"
-#include "vtkStreamingVolumeCodecFactory.h"
 
 // MRML includes
 #include "vtkMRML.h"
@@ -141,9 +140,9 @@ public:
 
   /// Load a Streaming volume function directly, bypassing checks of all factories done in AddArchetypeVolume.
   /// \sa AddArchetypeVolume(const NodeSetFactoryRegistry& volumeRegistry, const char* filename, const char* volname,
-                             int loadingOptions, vtkStringArray *fileList)
+  ///                        int loadingOptions, vtkStringArray *fileList)
   vtkMRMLStreamingVolumeNode* AddArchetypeStreamingVolume(const char* filename, const char* volname,
-                                                          const char* codecDeviceType, int loadingOptions,
+                                                          const char* codecFourCC, int loadingOptions,
                                                           vtkStringArray *fileList);
 
   /// Write volume's image data to a specified file
@@ -295,8 +294,6 @@ public:
   /// \sa SetCompareVolumeGeometryEpsilon
   vtkGetMacro(CompareVolumeGeometryPrecision, int);
 
-  vtkGetObjectMacro(CodecFactory, vtkStreamingVolumeCodecFactory);
-
 protected:
   vtkSlicerVolumesLogic();
   virtual ~vtkSlicerVolumesLogic();
@@ -306,9 +303,6 @@ protected:
   virtual void ProcessMRMLNodesEvents(vtkObject * caller,
                                   unsigned long event,
                                   void * callData) VTK_OVERRIDE;
-
-  virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene) VTK_OVERRIDE;
-  virtual void ProcessMRMLSceneEvents(vtkObject *, unsigned long, void *) VTK_OVERRIDE;
 
   void InitializeStorageNode(vtkMRMLStorageNode * storageNode,
                              const char * filename,
@@ -333,8 +327,6 @@ protected:
   vtkSmartPointer<vtkMRMLColorLogic> ColorLogic;
 
   NodeSetFactoryRegistry VolumeRegistry;
-
-  vtkStreamingVolumeCodecFactory* CodecFactory;
 
   /// Allowable difference in comparing volume geometry double values.
   /// Defaults to 1 to the power of 10 to the minus 6
