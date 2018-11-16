@@ -76,6 +76,7 @@ public slots:
   void populate3DRepresentationsCombobox();
   /// Populate combobox that contain possible 2D representation names
   void populate2DRepresentationsCombobox();
+  void populateFractionalEdgeCombobox();
 
   void onVisibilityChanged(int);
   void onVisibilitySliceFillChanged(int);
@@ -87,6 +88,7 @@ public slots:
   void onSliceIntersectionThicknessChanged(int);
   void onRepresentation3DChanged(int);
   void onRepresentation2DChanged(int);
+  void onFractionalEdgeChanged(int);
   void onSegmentVisibilitySliceFillChanged(int);
   void onSegmentVisibilitySliceOutlineChanged(int);
   void onSegmentVisibility3DChanged(int);

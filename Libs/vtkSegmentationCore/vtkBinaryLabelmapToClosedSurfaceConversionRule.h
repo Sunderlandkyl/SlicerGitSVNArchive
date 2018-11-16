@@ -76,7 +76,7 @@ public:
 protected:
   /// If input labelmap has non-background border voxels, then those regions remain open in the output closed surface.
   /// This function checks whether this is the case.
-  bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap);
+  bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap, double backgroundValue=0);
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();

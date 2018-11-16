@@ -40,7 +40,8 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
 
     self.marginSizeMmSpinBox = slicer.qMRMLSpinBox()
     self.marginSizeMmSpinBox.setMRMLScene(slicer.mrmlScene)
-    self.marginSizeMmSpinBox.setToolTip("Segment boundaries will be shifted by this distance. Positive value means the segments will grow, negative value means segment will shrink.")
+    self.marginSizeMmSpinBox.setToolTip(
+      "Segment boundaries will be shifted by this distance. Positive value means the segments will grow, negative value means segment will shrink.")
     self.marginSizeMmSpinBox.quantity = "length"
     self.marginSizeMmSpinBox.value = 3.0
     self.marginSizeMmSpinBox.singleStep = 1.0
@@ -129,33 +130,60 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
     marginSizeMm = self.scriptedEffect.doubleParameter("MarginSizeMm")
     kernelSizePixel = self.getKernelSizePixel()
 
-    # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
-    labelValue = 1
-    backgroundValue = 0
-    thresh = vtk.vtkImageThreshold()
-    thresh.SetInputData(selectedSegmentLabelmap)
-    thresh.ThresholdByLower(0)
-    thresh.SetInValue(backgroundValue)
-    thresh.SetOutValue(labelValue)
-    thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+    import vtkSegmentationCorePython as vtkSegmentationCore
 
-    erodeDilate = vtk.vtkImageDilateErode3D()
-    erodeDilate.SetInputConnection(thresh.GetOutputPort())
-    if marginSizeMm>0:
-      # grow
-      erodeDilate.SetDilateValue(labelValue)
-      erodeDilate.SetErodeValue(backgroundValue)
+    segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+    masterRepresentationIsFractionalLabelmap = (segmentation.GetMasterRepresentationName() ==
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
+    if (masterRepresentationIsFractionalLabelmap):
+
+      # This can be a long operation - indicate it to the user
+      qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
+      if marginSizeMm>0:
+        # grow
+        dilate = vtk.vtkImageContinuousDilate3D()
+        dilate.SetInputData(selectedSegmentLabelmap)
+        dilate.SetKernelSize(kernelSizePixel[0], kernelSizePixel[1], kernelSizePixel[2])
+        dilate.Update()
+        modifierLabelmap.DeepCopy(dilate.GetOutput())
+      else:
+        # shrink
+        erode = vtk.vtkImageContinuousErode3D()
+        erode.SetInputData(selectedSegmentLabelmap)
+        erode.SetKernelSize(kernelSizePixel[0], kernelSizePixel[1], kernelSizePixel[2])
+        erode.Update()
+        modifierLabelmap.DeepCopy(erode.GetOutput())
+
     else:
-      # shrink
-      erodeDilate.SetDilateValue(backgroundValue)
-      erodeDilate.SetErodeValue(labelValue)
+      # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
+      labelValue = 1
+      backgroundValue = 0
+      thresh = vtk.vtkImageThreshold()
+      thresh.SetInputData(selectedSegmentLabelmap)
+      thresh.ThresholdByLower(0)
+      thresh.SetInValue(backgroundValue)
+      thresh.SetOutValue(labelValue)
+      thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
 
-    # This can be a long operation - indicate it to the user
-    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+      erodeDilate = vtk.vtkImageDilateErode3D()
+      erodeDilate.SetInputConnection(thresh.GetOutputPort())
+      if marginSizeMm>0:
+        # grow
+        erodeDilate.SetDilateValue(labelValue)
+        erodeDilate.SetErodeValue(backgroundValue)
+      else:
+        # shrink
+        erodeDilate.SetDilateValue(backgroundValue)
+        erodeDilate.SetErodeValue(labelValue)
 
-    erodeDilate.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
-    erodeDilate.Update()
-    modifierLabelmap.DeepCopy(erodeDilate.GetOutput())
+      # This can be a long operation - indicate it to the user
+      qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
+      erodeDilate.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
+      erodeDilate.Update()
+      modifierLabelmap.DeepCopy(erodeDilate.GetOutput())
 
     # Apply changes
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)

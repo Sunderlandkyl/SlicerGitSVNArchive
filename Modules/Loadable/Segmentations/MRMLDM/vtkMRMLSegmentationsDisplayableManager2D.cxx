@@ -35,6 +35,7 @@
 #include "vtkSegmentation.h"
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
+#include "vtkFractionalOperations.h"
 
 // VTK includes
 #include <vtkVersion.h> // must precede reference to VTK_MAJOR_VERSION
@@ -871,14 +872,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
 
       // Set the range of the scalars in the image data from the ScalarRange field if it exists
       // Default to the scalar range of 0.0 to 1.0 otherwise
-      double minimumValue = 0.0;
-      double maximumValue = 1.0;
-      vtkDoubleArray* scalarRange = vtkDoubleArray::SafeDownCast(
-        imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
-      if (scalarRange && scalarRange->GetNumberOfValues() == 2)
+      double scalarRange[2] = {0.0, 1.0};
+      if (vtkFractionalOperations::ContainsFractionalParameters(imageData))
         {
-        minimumValue = scalarRange->GetValue(0);
-        maximumValue = scalarRange->GetValue(1);
+        vtkFractionalOperations::GetScalarRange(imageData, scalarRange);
         }
 
       // Set segment color
@@ -888,11 +885,20 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->LookupTableFill->SetRampToLinear();
       pipeline->LookupTableFill->SetTableRange(0, 1);
 
+      char* fractionalEdgeName = displayNode->GetFractionalEdgeName();
+      if (fractionalEdgeName)
+        {
+        if (strcmp(fractionalEdgeName,"Smooth"))
+          this->SmoothFractionalLabelMapBorder = true;
+        if (strcmp(fractionalEdgeName, "Hard"))
+          this->SmoothFractionalLabelMapBorder = false;
+        }
+
       if (!this->SmoothFractionalLabelMapBorder)
         {
         //TODO: this works for labelmaps that are int or char type, but would need to be changed for floating point representations since it only creates table values in integer increments
-        pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
-        pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
+        pipeline->LookupTableFill->SetNumberOfTableValues(scalarRange[1] - scalarRange[0] + 1);
+        pipeline->LookupTableFill->SetTableRange(scalarRange[0], scalarRange[1]);
         }
 
       double hsv[3] = {0,0,0};
@@ -902,7 +908,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->LookupTableFill->SetValueRange(hsv[2], hsv[2]);
       pipeline->LookupTableFill->SetAlphaRange(0.0, properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity());
       pipeline->LookupTableFill->ForceBuild();
-      pipeline->Reslice->SetBackgroundLevel(minimumValue);
+      pipeline->Reslice->SetBackgroundLevel(scalarRange[0]);
 
       // Calculate image IJK to world RAS transform
       pipeline->SliceToImageTransform->Identity();
@@ -936,15 +942,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       // Set the interpolation mode from the InterpolationType field if it exists
       // Default to nearest neighbor interpolation otherwise
       pipeline->Reslice->SetInterpolationModeToNearestNeighbor();
-      vtkIntArray* interpolationType = vtkIntArray::SafeDownCast(
-        imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
-      if (interpolationType && interpolationType->GetNumberOfValues() == 1)
+      if (vtkFractionalOperations::ContainsFractionalParameters(imageData))
         {
-        pipeline->Reslice->SetInterpolationMode(interpolationType->GetValue(0));
-        }
-      else if (scalarRange && scalarRange->GetNumberOfValues() == 2)
-        {
-        pipeline->Reslice->SetInterpolationMode(this->DefaultFractionalInterpolationType);
+        pipeline->Reslice->SetInterpolationMode(
+          vtkFractionalOperations::GetInterpolationType(imageData));
         }
 
       pipeline->Reslice->SetInputData(identityImageData);
@@ -955,16 +956,14 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->Reslice->SetOutputExtent(sliceOutputExtent);
 
       // If ThresholdValue is not specified, then do not perform thresholding
-      vtkDoubleArray* thresholdValue = vtkDoubleArray::SafeDownCast(
-        imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
-      if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+      if (vtkFractionalOperations::ContainsFractionalParameters(imageData))
         {
-        pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
+        pipeline->ImageThreshold->ThresholdByLower(vtkFractionalOperations::GetThreshold(imageData));
         }
 
       // Smooth the border of fractional labelmaps
       pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->Reslice->GetOutputPort());
-      if (this->SmoothFractionalLabelMapBorder && thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+      if (this->SmoothFractionalLabelMapBorder && vtkFractionalOperations::ContainsFractionalParameters(imageData))
         {
           pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
         }
@@ -975,7 +974,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         pipeline->LabelOutline->SetInputConnection(pipeline->Reslice->GetOutputPort());
 
         // Set the outline threshold from the ThresholdValue field if it exists
-        if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+        if (vtkFractionalOperations::ContainsFractionalParameters(imageData))
           {
           pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
           }

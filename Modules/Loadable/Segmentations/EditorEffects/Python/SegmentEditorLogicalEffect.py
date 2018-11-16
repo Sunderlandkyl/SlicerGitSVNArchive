@@ -180,7 +180,6 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.saveStateForUndo()
 
     import vtkSegmentationCorePython as vtkSegmentationCore
-
     # Get modifier labelmap and parameters
 
     operation = self.scriptedEffect.parameter("Operation")
@@ -191,6 +190,9 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     segmentation = segmentationNode.GetSegmentation()
 
+    masterRepresentationIsFractionalLabelmap = (segmentation.GetMasterRepresentationName() ==
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
     if operation in self.operationsRequireModifierSegment:
 
       # Get modifier segment
@@ -199,31 +201,53 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
         logging.error("Operation {0} requires a selected modifier segment".format(operation))
         return
       modifierSegment = segmentation.GetSegment(modifierSegmentID)
-      modifierSegmentLabelmap = modifierSegment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
+      modifierSegmentLabelmap = None
+      if (masterRepresentationIsFractionalLabelmap):
+        modifierSegmentLabelmap = modifierSegment.GetRepresentation(
+          vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+      else:
+        modifierSegmentLabelmap = modifierSegment.GetRepresentation(
+          vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
 
       if operation == LOGICAL_COPY:
         if bypassMasking:
-          slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(modifierSegmentLabelmap,
-            segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, modifierSegmentLabelmap.GetExtent())
+          if (masterRepresentationIsFractionalLabelmap):
+            slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(modifierSegmentLabelmap,
+              segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, modifierSegmentLabelmap.GetExtent())
+          else:
+            slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(modifierSegmentLabelmap,
+              segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, modifierSegmentLabelmap.GetExtent())
         else:
           self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
       elif operation == LOGICAL_UNION:
         if bypassMasking:
-          slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(modifierSegmentLabelmap,
-            segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MAX, modifierSegmentLabelmap.GetExtent())
+          if (masterRepresentationIsFractionalLabelmap):
+            slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(modifierSegmentLabelmap,
+              segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MAX, modifierSegmentLabelmap.GetExtent())
+          else:
+            slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(modifierSegmentLabelmap,
+              segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MAX, modifierSegmentLabelmap.GetExtent())
         else:
           self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
       elif operation == LOGICAL_SUBTRACT:
         if bypassMasking:
-          invertedModifierSegmentLabelmap = self.getInvertedBinaryLabelmap(modifierSegmentLabelmap)
-          slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(invertedModifierSegmentLabelmap, segmentationNode, selectedSegmentID,
-            slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MIN, modifierSegmentLabelmap.GetExtent())
+          if (masterRepresentationIsFractionalLabelmap):
+            invertedModifierSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+            invertedModifierSegmentLabelmap.DeepCopy(modifierSegmentLabelmap)
+            vtkSegmentationCore.vtkFractionalOperations.Invert(invertedModifierSegmentLabelmap)
+            slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(invertedModifierSegmentLabelmap, segmentationNode, selectedSegmentID,
+              slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MIN, invertedModifierSegmentLabelmap.GetExtent())
+          else:
+            invertedModifierSegmentLabelmap = self.getInvertedBinaryLabelmap(modifierSegmentLabelmap)
+            slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(invertedModifierSegmentLabelmap, segmentationNode, selectedSegmentID,
+              slicer.vtkSlicerSegmentationsModuleLogic.MODE_MERGE_MIN, modifierSegmentLabelmap.GetExtent())
         else:
           self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeRemove)
       elif operation == LOGICAL_INTERSECT:
         selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
         intersectionLabelmap = vtkSegmentationCore.vtkOrientedImageData()
-        vtkSegmentationCore.vtkOrientedImageDataResample.MergeImage(selectedSegmentLabelmap, modifierSegmentLabelmap, intersectionLabelmap, vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MINIMUM, selectedSegmentLabelmap.GetExtent())
+        vtkSegmentationCore.vtkOrientedImageDataResample.MergeImage(selectedSegmentLabelmap, modifierSegmentLabelmap, intersectionLabelmap,
+          vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MINIMUM, selectedSegmentLabelmap.GetExtent())
         selectedSegmentLabelmapExtent = selectedSegmentLabelmap.GetExtent()
         modifierSegmentLabelmapExtent = modifierSegmentLabelmap.GetExtent()
         commonExtent = [max(selectedSegmentLabelmapExtent[0], modifierSegmentLabelmapExtent[0]),
@@ -233,26 +257,92 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
           max(selectedSegmentLabelmapExtent[4], modifierSegmentLabelmapExtent[4]),
           min(selectedSegmentLabelmapExtent[5], modifierSegmentLabelmapExtent[5])]
         if bypassMasking:
-          slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(intersectionLabelmap, segmentationNode, selectedSegmentID,
-            slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, commonExtent)
+          if (masterRepresentationIsFractionalLabelmap):
+            slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(intersectionLabelmap, segmentationNode, selectedSegmentID,
+              slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, commonExtent)
+          else:
+            slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(intersectionLabelmap, segmentationNode, selectedSegmentID,
+              slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, commonExtent)
         else:
-          self.scriptedEffect.modifySelectedSegmentByLabelmap(intersectionLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet, commonExtent)
+          self.scriptedEffect.modifySelectedSegmentByLabelmap(intersectionLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet,
+            commonExtent)
 
     elif operation == LOGICAL_INVERT:
-      selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
-      invertedSelectedSegmentLabelmap = self.getInvertedBinaryLabelmap(selectedSegmentLabelmap)
+      selectedSegmentLabelmap = None
+      invertedSelectedSegmentLabelmap = None
+      if (masterRepresentationIsFractionalLabelmap):
+        invertedSelectedSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+        invertedSelectedSegmentLabelmap.DeepCopy(self.scriptedEffect.selectedSegmentLabelmap())
+        vtkSegmentationCore.vtkFractionalOperations.Invert(invertedSelectedSegmentLabelmap)
+      else:
+        selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
+        invertedSelectedSegmentLabelmap = self.getInvertedBinaryLabelmap(selectedSegmentLabelmap)
       if bypassMasking:
-        slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
-          invertedSelectedSegmentLabelmap, segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
+        if (masterRepresentationIsFractionalLabelmap):
+          slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(
+            invertedSelectedSegmentLabelmap, segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
+        else:
+          slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
+            invertedSelectedSegmentLabelmap, segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
       else:
         self.scriptedEffect.modifySelectedSegmentByLabelmap(invertedSelectedSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
     elif operation == LOGICAL_CLEAR or operation == LOGICAL_FILL:
       selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
-      vtkSegmentationCore.vtkOrientedImageDataResample.FillImage(selectedSegmentLabelmap, 1 if operation == LOGICAL_FILL else 0, selectedSegmentLabelmap.GetExtent())
+
+      # TODO: make sure this works for segmentations with pre-existing segments
+      scalarRange = [-108.0, 108.0]
+      scalarRangeArray = vtk.vtkDoubleArray.SafeDownCast(
+      selectedSegmentLabelmap.GetFieldData().GetAbstractArray(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName()))
+      if (scalarRangeArray and scalarRangeArray.GetNumberOfValues() == 2 ):
+        scalarRange[0] = scalarRangeArray.GetValue(0)
+        scalarRange[1] = scalarRangeArray.GetValue(1)
+
+      extent = [0,-1,0,-1,0, -1]
+      extent = selectedSegmentLabelmap.GetExtent()
+      if (extent[0] > extent[1] or extent[2] > extent[3] or extent[4] > extent[5]):
+        extent = self.scriptedEffect.masterVolumeImageData().GetExtent()
+        selectedSegmentLabelmap.SetExtent(extent)
+
+        if (not scalarRangeArray and masterRepresentationIsFractionalLabelmap):
+
+          # Specify the scalar range of values in the labelmap
+          scalarRangeArray = vtk.vtkDoubleArray()
+          scalarRangeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetScalarRangeFieldName())
+          scalarRangeArray.InsertNextValue(scalarRange[0])
+          scalarRangeArray.InsertNextValue(scalarRange[1])
+          selectedSegmentLabelmap.GetFieldData().AddArray(scalarRangeArray)
+
+          # Specify the surface threshold value for visualization
+          thresholdValueArray = vtk.vtkDoubleArray()
+          thresholdValueArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetThresholdValueFieldName())
+          thresholdValueArray.InsertNextValue((scalarRange[0] + scalarRange[1])/2.0)
+          selectedSegmentLabelmap.GetFieldData().AddArray(thresholdValueArray)
+
+          # Specify the interpolation type for visualization
+          interpolationTypeArray = vtk.vtkIntArray()
+          interpolationTypeArray.SetName(vtkSegmentationCore.vtkSegmentationConverter.GetInterpolationTypeFieldName())
+          interpolationTypeArray.InsertNextValue(vtk.VTK_LINEAR_INTERPOLATION)
+          selectedSegmentLabelmap.GetFieldData().AddArray(interpolationTypeArray)
+
+          selectedSegmentLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
+
+        else:
+          selectedSegmentLabelmap.AllocateScalars(selectedSegmentLabelmap.GetScalarType(), 1)
+
+      if (masterRepresentationIsFractionalLabelmap):
+        vtkSegmentationCore.vtkOrientedImageDataResample.FillImage(
+          selectedSegmentLabelmap, scalarRange[1] if operation == LOGICAL_FILL else scalarRange[0], selectedSegmentLabelmap.GetExtent())
+      else:
+        vtkSegmentationCore.vtkOrientedImageDataResample.FillImage(
+          selectedSegmentLabelmap, 1 if operation == LOGICAL_FILL else 0, selectedSegmentLabelmap.GetExtent())
       if bypassMasking:
-        slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
-          selectedSegmentLabelmap, segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
+        if (masterRepresentationIsFractionalLabelmap):
+          slicer.vtkSlicerSegmentationsModuleLogic.SetFractionalLabelmapToSegment(
+            selectedSegmentLabelmap, segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
+        else:
+          slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
+            selectedSegmentLabelmap, segmentationNode, selectedSegmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
       else:
         self.scriptedEffect.modifySelectedSegmentByLabelmap(selectedSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
