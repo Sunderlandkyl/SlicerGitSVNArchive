@@ -26,7 +26,9 @@
 #include "vtkPolyDataMapper.h"
 #include "vtkProperty.h"
 
-#include "vtkOpenGL.h"
+#include <vtkImageViewer.h>
+#include <vtkRenderWindowInteractor.h>
+
 #include <math.h>
 
 //----------------------------------------------------------------------------
@@ -38,8 +40,9 @@ vtkOpenGLTextureImage::vtkOpenGLTextureImage()
   this->ShaderComputation = nullptr;
   this->ImageData = nullptr;
   this->TextureName = 0;
-  this->Interpolate = 1;
+  this->Interpolate = 0;
   this->TextureMTime = 0;
+  this->TextureWrap = vtkOpenGLTextureImage::ClampToEdge;
 }
 
 //----------------------------------------------------------------------------
@@ -51,7 +54,7 @@ vtkOpenGLTextureImage::~vtkOpenGLTextureImage()
 
 //----------------------------------------------------------------------------
 // adapted from Rendering/OpenGL2/vtkTextureObject.cxx
-GLenum vtkOpenGLTextureImage::vtkScalarTypeToGLType(int vtk_scalar_type)
+int vtkOpenGLTextureImage::vtkScalarTypeToGLType(int vtk_scalar_type)
 {
   // DON'T DEAL with VTK_CHAR as this is platform dependent.
   switch (vtk_scalar_type)
@@ -254,6 +257,9 @@ void vtkOpenGLTextureImage::AttachAsDrawTarget(int attachmentIndex, int layer, i
 
   vtkOpenGLClearErrorMacro();
 
+  glClearColor(0.0, 0.0, 0.0, 0.0);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
   int dimensions[3] = {0,0,0};
   this->ImageData->GetDimensions(dimensions);
 
@@ -323,9 +329,10 @@ void vtkOpenGLTextureImage::ReadBack()
     return;
     }
 
-  vtkPointData *pointData = this->ImageData->GetPointData();
-  vtkDataArray *scalars = pointData->GetScalars();
-  void *pixels = scalars->GetVoidPointer(0);
+  //vtkPointData *pointData = this->ImageData->GetPointData();
+  //vtkDataArray *scalars = pointData->GetScalars();
+  //void *pixels = scalars->GetVoidPointer(0);
+  void *pixels = this->ImageData->GetScalarPointer();
 
   // TODO:
   glBindTexture(GL_TEXTURE_3D, this->TextureName);
@@ -337,7 +344,29 @@ void vtkOpenGLTextureImage::ReadBack()
     /* type */   vtkScalarTypeToGLType(this->ImageData->GetScalarType()),
     /* pixels */ pixels);
 
-  pointData->Modified();
+  this->ImageData->Modified();
+
+  //pixels = this->ImageData->GetScalarPointer();
+  //unsigned short* q = (unsigned short*)pixels;
+  //int numVoxels = this->GetImageData()->GetDimensions()[0]* this->GetImageData()->GetDimensions()[1] * this->GetImageData()->GetDimensions()[2];
+  //for (unsigned long i = 0; i < numVoxels; ++i)
+  //{
+  //  float out = i / (float)(numVoxels);
+  //  if (out > 0.5)
+  //    int i = 0;
+
+  //  (*q) = out * VTK_UNSIGNED_SHORT_MAX;
+  //  ++q;
+  //}
+
+  //vtkRenderWindowInteractor* renderWindowInteractor = vtkRenderWindowInteractor::New();
+  //vtkImageViewer* imageViewer = vtkImageViewer::New();
+  //imageViewer->SetInputData(this->ImageData);
+  //imageViewer->SetColorLevel(VTK_UNSIGNED_SHORT_MAX/2.0);
+  //imageViewer->SetColorWindow(VTK_UNSIGNED_SHORT_MAX);
+  //imageViewer->SetPosition(20, 600);
+  //imageViewer->SetupInteractor(renderWindowInteractor);
+  //imageViewer->Render();
 
   vtkOpenGLCheckErrorMacro("after getting");
 }

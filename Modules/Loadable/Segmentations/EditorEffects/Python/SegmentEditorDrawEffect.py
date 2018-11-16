@@ -233,10 +233,22 @@ class DrawPipeline:
     import vtkSegmentationCorePython as vtkSegmentationCore
     modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
 
+    segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+    masterRepresentationIsFractionalLabelmap = (segmentation.GetMasterRepresentationName() ==
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
+    if (masterRepresentationIsFractionalLabelmap):
+      vtkSegmentationCore.vtkFractionalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
+      # TODO: get type if necessary
+      modifierLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
+
     # Apply poly data on modifier labelmap
-    self.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget)
+    self.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget, masterRepresentationIsFractionalLabelmap)
     self.resetPolyData()
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
+
+    if (masterRepresentationIsFractionalLabelmap):
+      vtkSegmentationCore.vtkFractionalOperations.ClearFractionalParameters(modifierLabelmap)
 
   def resetPolyData(self):
     # Return the polyline to initial state with no points
