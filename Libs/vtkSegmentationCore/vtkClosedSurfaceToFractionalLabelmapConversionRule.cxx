@@ -22,6 +22,7 @@
 // SegmentationCore includes
 #include "vtkOrientedImageData.h"
 #include "vtkPolyDataToFractionalLabelmapFilter.h"
+#include "vtkFractionalOperations.h"
 
 // VTK includes
 #include <vtkSmartPointer.h>
@@ -142,23 +143,14 @@ bool vtkClosedSurfaceToFractionalLabelmapConversionRule::Convert(vtkDataObject* 
   fractionalLabelMap->DeepCopy(polyDataToLabelmapFilter->GetOutput());
 
   // Specify the scalar range of values in the labelmap
-  vtkSmartPointer<vtkDoubleArray> scalarRange = vtkSmartPointer<vtkDoubleArray>::New();
-  scalarRange->SetName(vtkSegmentationConverter::GetScalarRangeFieldName());
-  scalarRange->InsertNextValue(FRACTIONAL_MIN);
-  scalarRange->InsertNextValue(FRACTIONAL_MAX);
-  fractionalLabelMap->GetFieldData()->AddArray(scalarRange);
+  double scalarRange[2] = {FRACTIONAL_MIN, FRACTIONAL_MAX};
+  vtkFractionalOperations::SetScalarRange(fractionalLabelMap, scalarRange);
 
   // Specify the surface threshold value for visualization
-  vtkSmartPointer<vtkDoubleArray> thresholdValue = vtkSmartPointer<vtkDoubleArray>::New();
-  thresholdValue->SetName(vtkSegmentationConverter::GetThresholdValueFieldName());
-  thresholdValue->InsertNextValue((FRACTIONAL_MIN+FRACTIONAL_MAX)/2.0);
-  fractionalLabelMap->GetFieldData()->AddArray(thresholdValue);
+  vtkFractionalOperations::SetThreshold(fractionalLabelMap, (FRACTIONAL_MIN+FRACTIONAL_MAX)/2.0);
 
   // Specify the interpolation type for visualization
-  vtkSmartPointer<vtkIntArray> interpolationType = vtkSmartPointer<vtkIntArray>::New();
-  interpolationType->SetName(vtkSegmentationConverter::GetInterpolationTypeFieldName());
-  interpolationType->InsertNextValue(VTK_LINEAR_INTERPOLATION);
-  fractionalLabelMap->GetFieldData()->AddArray(interpolationType);
+  vtkFractionalOperations::SetInterpolationType(fractionalLabelMap, VTK_LINEAR_INTERPOLATION);
 
   return true;
 }

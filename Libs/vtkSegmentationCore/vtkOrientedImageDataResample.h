@@ -44,7 +44,8 @@ public:
     {
     OPERATION_MINIMUM,
     OPERATION_MAXIMUM,
-    OPERATION_MASKING
+    OPERATION_MASKING,
+    OPERATION_FRACTIONAL_ADDITION
     };
 
   /// Resample an oriented image data to match the geometry of a reference geometry matrix.
@@ -54,7 +55,8 @@ public:
   /// \param outputImage Output image
   /// \param linearInterpolation True if linear interpolation is requested (fractional labelmap), or false for nearest neighbor (binary labelmap). Default is false.
   /// \return Success flag
-  static bool ResampleOrientedImageToReferenceGeometry(vtkOrientedImageData* inputImage, vtkMatrix4x4* referenceGeometryMatrix, vtkOrientedImageData* outputImage, bool linearInterpolation=false);
+  static bool ResampleOrientedImageToReferenceGeometry(vtkOrientedImageData* inputImage, vtkMatrix4x4* referenceGeometryMatrix,
+                                                       vtkOrientedImageData* outputImage, bool linearInterpolation=false);
 
   /// Resample an oriented image data to match the geometry of a reference oriented image data
   /// \param inputImage Oriented image to resample
@@ -65,7 +67,9 @@ public:
   ///          to be outside the reference extent, then it is padded. Disabled by default.
   /// \param inputImageTransform If specified then inputImage will be transformed with inputImageTransform before resampled into referenceImage.
   /// \return Success flag
-  static bool ResampleOrientedImageToReferenceOrientedImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* referenceImage, vtkOrientedImageData* outputImage, bool linearInterpolation=false, bool padImage=false, vtkAbstractTransform* inputImageTransform=NULL, double backgroundValue=0);
+  static bool ResampleOrientedImageToReferenceOrientedImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* referenceImage,
+                                                            vtkOrientedImageData* outputImage, bool linearInterpolation=false, bool padImage=false,
+                                                            vtkAbstractTransform* inputImageTransform=NULL, double backgroundValue=0);
 
   /// Transform an oriented image data using a transform that can be linear or non-linear.
   /// Linear: simply multiply the geometry matrix with the applied matrix, extent stays the same
@@ -75,23 +79,25 @@ public:
   /// \param geometryOnly Only the geometry of the image is changed according to the transform if this flag is turned on.
   ///          This flag only has an effect if the transform is non-linear, in which case only the extent is changed. Off by default
   /// \param alwaysResample If on, then image data will be resampled even if the applied transform is linear
-  static void TransformOrientedImage(vtkOrientedImageData* image, vtkAbstractTransform* transform, bool geometryOnly=false, bool alwaysResample=false, bool linearInterpolation=false, double backgroundColor[4]=NULL);
+  static void TransformOrientedImage(vtkOrientedImageData* image, vtkAbstractTransform* transform, bool geometryOnly=false, bool alwaysResample=false,
+                                     bool linearInterpolation=false, double backgroundColor[4]=NULL);
 
   /// Combines the inputImage and imageToAppend into a new image by max/min operation. The extent will be the union of the two images.
   /// Extent can be specified to restrict imageToAppend's extent to a smaller region.
   /// inputImage and imageToAppend must have the same geometry, but they may have different extents.
   static bool MergeImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* imageToAppend, vtkOrientedImageData* outputImage, int operation,
-    const int extent[6] = 0, double maskThreshold = 0, double fillValue = 1, bool *outputModified=NULL);
+    const int extent[6] = 0, double maskThreshold = 0, double fillValue = 1, bool *outputModified=NULL, double backgroundValue=0,
+    double minimumValue=0, double maximumValue=1);
 
   /// Modifies inputImage in-place by combining with modifierImage using max/min operation.
   /// The extent will remain unchanged.
   /// Extent can be specified to restrict modifierImage's extent to a smaller region.
   /// inputImage and modifierImage must have the same geometry (origin, spacing, directions) and scalar type, but they may have different extents.
   static bool ModifyImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* modifierImage, int operation,
-    const int extent[6] = 0, double maskThreshold = 0, double fillValue = 1);
+    const int extent[6] = 0, double maskThreshold = 0, double fillValue = 1, double minimumValue=VTK_DOUBLE_MIN, double maximumValue=VTK_DOUBLE_MAX);
 
   /// Copy image with clipping to the specified extent
-  static bool CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]=0);
+  static bool CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]=0, const double backgroundValue=0);
 
   /// Prints image information. Does not print lots of irrelevant information that default PrintSelf would print.
   static void PrintImageInformation(vtkImageData* imageData, ostream& os, vtkIndent indent);
@@ -138,9 +144,11 @@ public:
   static bool GetTransformBetweenOrientedImages(vtkOrientedImageData* image1, vtkOrientedImageData* image2, vtkTransform* image1ToImage2Transform);
 
   /// Pad an image to entirely contain another image using custom extent to contain
-  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage, const int extent[6]);
+  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage,
+                                     const int extent[6], double backgroundValue=0);
   /// Pad an image to entirely contain another image
-  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage);
+  static bool PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage,
+                                     double backgroundValue=0);
 
   /// Determine if a transform is linear and return it if it is. A simple downcast is not enough, as the transform may be
   /// a general transform, which can be linear if the concatenation it contains consist of all linear transforms.

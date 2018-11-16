@@ -16,10 +16,11 @@
 
 // VTK includes
 #include "vtk_glew.h"
+#include "vtkOpenGL.h"
+
 #include "vtkDataArray.h"
 #include "vtkImageData.h"
 #include "vtkObjectFactory.h"
-#include "vtkOpenGL.h"
 #include "vtkOpenGLError.h"
 #include "vtkOpenGLRenderWindow.h"
 #include "vtkPointData.h"

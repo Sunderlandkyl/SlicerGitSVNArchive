@@ -54,7 +54,9 @@ void MergeImageGeneric2(
     int operation,
     const int extent[6],
     double maskThreshold,
-    double fillValue)
+    double fillValue,
+    double minimumValue,
+    double maximumValue)
 {
   // Compute update extent as intersection of base and modifier image extents (extent can be further reduced by specifying a smaller extent)
   int updateExt[6] = { 0, -1, 0, -1, 0, -1 };
@@ -219,6 +221,36 @@ void MergeImageGeneric2(
       modifierImagePtr += modifierIncZ;
       }
     }
+  else if (operation == vtkOrientedImageDataResample::OPERATION_FRACTIONAL_ADDITION)
+    {
+    double scalarRangeMagnitude = maximumValue-minimumValue;
+
+    for (vtkIdType idxZ = 0; idxZ <= maxZ; idxZ++)
+      {
+      for (vtkIdType idxY = 0; idxY <= maxY; idxY++)
+        {
+        for (vtkIdType idxX = 0; idxX <= maxX; idxX++)
+          {
+          if (static_cast<double>(*modifierImagePtr) > minimumValue)
+            {
+            double baseImageValue = (static_cast<double>(*baseImagePtr) - minimumValue) / scalarRangeMagnitude;
+            double modifierImageValue = (static_cast<double>(*modifierImagePtr) - minimumValue) / scalarRangeMagnitude;
+            double sumValue = std::min(1.0, std::max(0.0, (baseImageValue + modifierImageValue) ));
+            *baseImagePtr = static_cast<BaseImageScalarType>(sumValue * scalarRangeMagnitude + minimumValue);
+
+            baseImageModified = true;
+            }
+          baseImagePtr++;
+          modifierImagePtr++;
+        }
+        baseImagePtr += baseIncY;
+        modifierImagePtr += modifierIncY;
+        }
+      baseImagePtr += baseIncZ;
+      modifierImagePtr += modifierIncZ;
+      }
+    }
+
   if (baseImageModified)
     {
     baseImage->Modified();
@@ -233,7 +265,9 @@ void MergeImageGeneric(
     int operation,
     const int extent[6],
     double maskThreshold,
-    double fillValue)
+    double fillValue,
+    double minimumValue,
+    double maximumValue)
 {
   switch (modifierImage->GetScalarType())
     {
@@ -243,7 +277,9 @@ void MergeImageGeneric(
                         operation,
                         extent,
                         maskThreshold,
-                        fillValue)));
+                        fillValue,
+                        minimumValue,
+                        maximumValue)));
   default:
     vtkGenericWarningMacro("vtkOrientedImageDataResample::MergeImage: Unknown ScalarType");
     }
@@ -260,7 +296,10 @@ vtkOrientedImageDataResample::~vtkOrientedImageDataResample()
 }
 
 //-----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* referenceImage, vtkOrientedImageData* outputImage, bool linearInterpolation/*=false*/, bool padImage/*=false*/, vtkAbstractTransform* inputImageTransform/*=NULL*/, double backgroundValue/*=0*/)
+bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* referenceImage,
+                                                                                 vtkOrientedImageData* outputImage, bool linearInterpolation/*=false*/,
+                                                                                 bool padImage/*=false*/, vtkAbstractTransform* inputImageTransform/*=NULL*/,
+                                                                                 double backgroundValue/*=0*/)
 {
   if (!inputImage || !referenceImage || !outputImage)
     {
@@ -414,7 +453,8 @@ bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage
 }
 
 //-----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(vtkOrientedImageData* inputImage, vtkMatrix4x4* referenceToWorldMatrix, vtkOrientedImageData* outputImage, bool linearInterpolation/*=false*/)
+bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(vtkOrientedImageData* inputImage, vtkMatrix4x4* referenceToWorldMatrix,
+                                                                            vtkOrientedImageData* outputImage, bool linearInterpolation/*=false*/)
 {
   if (!inputImage || !referenceToWorldMatrix || !outputImage)
     {
@@ -424,13 +464,14 @@ bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(vtkO
   // Only support the following scalar types
   int inputImageScalarType = inputImage->GetScalarType();
   if ( inputImageScalarType != VTK_UNSIGNED_CHAR
+    && inputImageScalarType != VTK_CHAR
     && inputImageScalarType != VTK_UNSIGNED_SHORT
     && inputImageScalarType != VTK_SHORT )
     {
     vtkErrorWithObjectMacro(inputImage, "ResampleOrientedImageToReferenceGeometry: Input image scalar type must be unsigned char, unsighed short, or short!");
     return false;
     }
-
+  //TODO: Fractional range:: pass background value as argument
   // Determine IJK extent of contained data (non-zero voxels) in the input image
   int inputExtent[6] = {0,-1,0,-1,0,-1};
   inputImage->GetExtent(inputExtent);
@@ -484,7 +525,6 @@ bool vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(vtkO
   resliceFilter->SetOutputOrigin(0, 0, 0);
   resliceFilter->SetOutputSpacing(1, 1, 1);
   resliceFilter->SetOutputExtent(outputExtent);
-
   resliceFilter->SetResliceTransform(inputImageToReferenceImageTransform);
 
   // Set interpolation mode
@@ -531,7 +571,7 @@ bool vtkOrientedImageDataResample::IsEqual(vtkMatrix4x4* lhs, vtkMatrix4x4* rhs)
 }
 
 //----------------------------------------------------------------------------
-template <typename T> void CalculateEffectiveExtentGeneric(vtkOrientedImageData* image, int effectiveExtent[6], T threshold)
+template <typename T> void CalculateEffectiveExtentGeneric(vtkOrientedImageData* image, int effectiveExtent[6], double threshold)
 {
   // Get increments to march through image
   int *wholeExt = image->GetExtent();
@@ -866,7 +906,8 @@ void vtkOrientedImageDataResample::TransformOrientedImageDataBounds(vtkOrientedI
 }
 
 //----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::GetTransformBetweenOrientedImages(vtkOrientedImageData* image1, vtkOrientedImageData* image2, vtkTransform* image1ToImage2Transform)
+bool vtkOrientedImageDataResample::GetTransformBetweenOrientedImages(vtkOrientedImageData* image1, vtkOrientedImageData* image2,
+                                                                     vtkTransform* image1ToImage2Transform)
 {
   if (!image1 || !image2 || !image1ToImage2Transform)
     {
@@ -934,7 +975,8 @@ bool vtkOrientedImageDataResample::IsTransformLinear(vtkAbstractTransform* input
     return true;
     }
 
-  vtkErrorWithObjectMacro(inputTransform, "vtkOrientedImageDataResample::IsTransformLinear: Unsupported input transform with type " << inputTransform->GetClassName());
+  vtkErrorWithObjectMacro(inputTransform, "vtkOrientedImageDataResample::IsTransformLinear: Unsupported input transform with type "
+    << inputTransform->GetClassName());
   return false;
 }
 
@@ -954,13 +996,15 @@ bool vtkOrientedImageDataResample::DoesTransformMatrixContainShear(vtkMatrix4x4*
 }
 
 //----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage)
+bool vtkOrientedImageDataResample::PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage,
+                                                          vtkOrientedImageData* outputImage, double backgroundValue/*=0*/)
 {
-  return vtkOrientedImageDataResample::PadImageToContainImage(inputImage, containedImage, outputImage, NULL);
+  return vtkOrientedImageDataResample::PadImageToContainImage(inputImage, containedImage, outputImage, NULL, backgroundValue);
 }
 
 //----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage, vtkOrientedImageData* outputImage, const int extent[6])
+bool vtkOrientedImageDataResample::PadImageToContainImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* containedImage,
+                                                          vtkOrientedImageData* outputImage, const int extent[6],  double backgroundValue/*=0*/)
 {
   if (!inputImage || !containedImage || !outputImage)
     {
@@ -985,14 +1029,18 @@ bool vtkOrientedImageDataResample::PadImageToContainImage(vtkOrientedImageData* 
   // Make sure input image data fits into the extent. If padding is disabled, then output extent is the reference extent
   int inputImageExtent[6] = {0,-1,0,-1,0,-1};
   inputImage->GetExtent(inputImageExtent);
-  int unionExtent[6] = { std::min(containedImageExtentInInputImageFrame[0],inputImageExtent[0]), std::max(containedImageExtentInInputImageFrame[1],inputImageExtent[1]),
-                         std::min(containedImageExtentInInputImageFrame[2],inputImageExtent[2]), std::max(containedImageExtentInInputImageFrame[3],inputImageExtent[3]),
-                         std::min(containedImageExtentInInputImageFrame[4],inputImageExtent[4]), std::max(containedImageExtentInInputImageFrame[5],inputImageExtent[5]) };
+  int unionExtent[6] = { std::min(containedImageExtentInInputImageFrame[0],inputImageExtent[0]),
+                         std::max(containedImageExtentInInputImageFrame[1],inputImageExtent[1]),
+                         std::min(containedImageExtentInInputImageFrame[2],inputImageExtent[2]),
+                         std::max(containedImageExtentInInputImageFrame[3],inputImageExtent[3]),
+                         std::min(containedImageExtentInInputImageFrame[4],inputImageExtent[4]),
+                         std::max(containedImageExtentInInputImageFrame[5],inputImageExtent[5]) };
 
   // Pad image by expansion extent (extents are fitted to the structure, dilate will reach the edge of the image)
   vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
   padder->SetInputData(inputImage);
   padder->SetOutputWholeExtent(unionExtent);
+  padder->SetConstant(backgroundValue);
   padder->Update();
 
   // Output may be same as input, so save the geometry information before overwriting it
@@ -1015,7 +1063,10 @@ bool vtkOrientedImageDataResample::MergeImage(
     const int extent[6]/*=0*/,
     double maskThreshold /*=0*/,
     double fillValue /*=1*/,
-    bool *outputModified /*=NULL*/)
+    bool *outputModified /*=NULL*/,
+    double backgroundValue/*=0*/,
+    double minimumValue/*=0*/,
+    double maximumValue/*=1*/)
 {
   if (outputModified != NULL)
     {
@@ -1031,7 +1082,7 @@ bool vtkOrientedImageDataResample::MergeImage(
     vtkGenericWarningMacro("vtkOrientedImageDataResample::MergeImage failed: geometry mismatch between inputImage and imageToAppend");
     return false;
     }
-  if (!vtkOrientedImageDataResample::PadImageToContainImage(inputImage, imageToAppend, outputImage, extent))
+  if (!vtkOrientedImageDataResample::PadImageToContainImage(inputImage, imageToAppend, outputImage, extent, backgroundValue))
     {
     vtkGenericWarningMacro("vtkOrientedImageDataResample::MergeImage: Failed to pad segment labelmap");
     return false;
@@ -1045,7 +1096,9 @@ bool vtkOrientedImageDataResample::MergeImage(
                        operation,
                        extent,
                        maskThreshold,
-                       fillValue));
+                       fillValue,
+                       minimumValue,
+                       maximumValue));
   default:
     vtkGenericWarningMacro("vtkOrientedImageDataResample::MergeImage: Unknown ScalarType");
     return false;
@@ -1065,12 +1118,15 @@ bool vtkOrientedImageDataResample::ModifyImage(
     int operation,
     const int extent[6]/*=0*/,
     double maskThreshold /*=0*/,
-    double fillValue /*=1*/)
+    double fillValue /*=1*/,
+    double minimumValue/*=VTK_DOUBLE_MIN*/,
+    double maximumValue/*=VTK_DOUBLE_MAX)*/)
 {
   if (!inputImage || !modifierImage)
     {
     return false;
     }
+
   if (!vtkOrientedImageDataResample::DoGeometriesMatch(inputImage, modifierImage))
     {
     vtkGenericWarningMacro("vtkOrientedImageDataResample::ModifyImage failed: geometry mismatch between inputImage and modifierImage");
@@ -1084,16 +1140,20 @@ bool vtkOrientedImageDataResample::ModifyImage(
                        operation,
                        extent,
                        maskThreshold,
-                       fillValue));
+                       fillValue,
+                       minimumValue,
+                       maximumValue));
   default:
     vtkGenericWarningMacro("vtkOrientedImageDataResample::ModifyImage failed: unknown ScalarType");
     return false;
     }
+
   return true;
 }
 
 //----------------------------------------------------------------------------
-bool vtkOrientedImageDataResample::CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]/*=0*/)
+bool vtkOrientedImageDataResample::CopyImage(vtkOrientedImageData* imageToCopy, vtkOrientedImageData* outputImage, const int extent[6]/*=0*/,
+                                             const double backgroundValue/*=0*/)
 {
   if (!imageToCopy || !outputImage)
     {
@@ -1104,6 +1164,7 @@ bool vtkOrientedImageDataResample::CopyImage(vtkOrientedImageData* imageToCopy, 
   vtkNew<vtkImageConstantPad> padder;
   padder->SetInputData(imageToCopy);
   padder->SetOutputWholeExtent(extent ? const_cast<int*>(extent) : imageToCopy->GetExtent());
+  padder->SetConstant(backgroundValue);
   padder->Update();
   outputImage->ShallowCopy(padder->GetOutput());
   outputImage->CopyDirections(imageToCopy);

@@ -26,7 +26,6 @@
 #include "vtkPolyDataMapper.h"
 #include "vtkProperty.h"
 
-#include "vtkOpenGL.h"
 #include <math.h>
 
 //----------------------------------------------------------------------------
@@ -51,7 +50,7 @@ vtkOpenGLTextureImage::~vtkOpenGLTextureImage()
 
 //----------------------------------------------------------------------------
 // adapted from Rendering/OpenGL2/vtkTextureObject.cxx
-GLenum vtkOpenGLTextureImage::vtkScalarTypeToGLType(int vtk_scalar_type)
+int vtkOpenGLTextureImage::vtkScalarTypeToGLType(int vtk_scalar_type)
 {
   // DON'T DEAL with VTK_CHAR as this is platform dependent.
   switch (vtk_scalar_type)

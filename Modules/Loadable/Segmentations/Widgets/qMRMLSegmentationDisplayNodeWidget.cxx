@@ -98,6 +98,8 @@ void qMRMLSegmentationDisplayNodeWidgetPrivate::init()
     q, SLOT(onRepresentation3DChanged(int)) );
   QObject::connect(this->comboBox_DisplayedRepresentation2D, SIGNAL(currentIndexChanged(int)),
     q, SLOT(onRepresentation2DChanged(int)) );
+    QObject::connect(this->comboBox_FractionalEdge, SIGNAL(currentIndexChanged(int)),
+    q, SLOT(onFractionalEdgeChanged(int)));
 
   // Selected segment visibility and opacity settings
   QObject::connect(this->checkBox_VisibilitySliceFill_SelectedSegment, SIGNAL(stateChanged(int)),
@@ -313,6 +315,7 @@ void qMRMLSegmentationDisplayNodeWidget::updateWidgetFromMRML()
   // Populate representations comboboxes
   this->populate3DRepresentationsCombobox();
   this->populate2DRepresentationsCombobox();
+  this->populateFractionalEdgeCombobox();
 
   // Set displayed representation selections
   std::string displayRepresentation3D = d->SegmentationDisplayNode->GetDisplayRepresentationName3D();
@@ -414,6 +417,31 @@ void qMRMLSegmentationDisplayNodeWidget::populate2DRepresentationsCombobox()
     d->comboBox_DisplayedRepresentation2D->setCurrentIndex( d->comboBox_DisplayedRepresentation2D->findText(
       displayRepresentation2D.c_str() ) );
     }
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentationDisplayNodeWidget::populateFractionalEdgeCombobox()
+{
+  Q_D(qMRMLSegmentationDisplayNodeWidget);
+  if (!d->SegmentationDisplayNode.GetPointer())
+  {
+    return;
+  }
+
+  // Prevent selecting incrementally added representations thus changing MRML properties
+  d->comboBox_FractionalEdge->blockSignals(true);
+  d->comboBox_FractionalEdge->clear();
+
+  //TODO: add string function somewhere
+  d->comboBox_FractionalEdge->addItem("Hard");
+  d->comboBox_FractionalEdge->addItem("Smooth");
+
+  // Unblock signals
+  d->comboBox_FractionalEdge->blockSignals(false);
+
+  // Set selection from display node
+  d->comboBox_FractionalEdge->setCurrentIndex(d->comboBox_FractionalEdge->findText(d->SegmentationDisplayNode->GetFractionalEdgeName()));
+
 }
 
 //-----------------------------------------------------------------------------
@@ -550,6 +578,21 @@ void qMRMLSegmentationDisplayNodeWidget::onRepresentation2DChanged(int index)
   QString representationName = d->comboBox_DisplayedRepresentation2D->itemText(index);
 
   d->SegmentationDisplayNode->SetPreferredDisplayRepresentationName2D(representationName.toLatin1().constData());
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentationDisplayNodeWidget::onFractionalEdgeChanged(int index)
+{
+  Q_D(qMRMLSegmentationDisplayNodeWidget);
+
+  if (!d->SegmentationDisplayNode.GetPointer())
+  {
+    return;
+  }
+
+  // Get representation name from index
+  QString representationName = d->comboBox_FractionalEdge->itemText(index);
+  d->SegmentationDisplayNode->SetFractionalEdgeName(representationName.toLatin1().constData());
 }
 
 //-----------------------------------------------------------------------------

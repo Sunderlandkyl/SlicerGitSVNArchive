@@ -292,7 +292,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
 
 //----------------------------------------------------------------------------
 template<class ImageScalarType>
-void IsLabelmapPaddingNecessaryGeneric(vtkImageData* binaryLabelMap, bool &paddingNecessary)
+void IsLabelmapPaddingNecessaryGeneric(vtkImageData* binaryLabelMap, bool &paddingNecessary, double backgroundValue/*=0*/)
 {
   if (!binaryLabelMap)
     {
@@ -319,10 +319,10 @@ void IsLabelmapPaddingNecessaryGeneric(vtkImageData* binaryLabelMap, bool &paddi
           // Skip non-border voxels
           continue;
           }
-        int voxelValue = 0;
+        ImageScalarType voxelValue = 0;
         voxelValue = (*(imagePtr + i + j*dimensions[0] + k*dimensions[0]*dimensions[1]));
 
-        if (voxelValue != 0)
+        if (voxelValue != backgroundValue)
           {
           paddingNecessary = true;
           return;
@@ -336,7 +336,7 @@ void IsLabelmapPaddingNecessaryGeneric(vtkImageData* binaryLabelMap, bool &paddi
 }
 
 //----------------------------------------------------------------------------
-bool vtkBinaryLabelmapToClosedSurfaceConversionRule::IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap)
+bool vtkBinaryLabelmapToClosedSurfaceConversionRule::IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap, double backgroundValue)
 {
   if (!binaryLabelMap)
     {
@@ -347,7 +347,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::IsLabelmapPaddingNecessary(
 
   switch (binaryLabelMap->GetScalarType())
     {
-    vtkTemplateMacro(IsLabelmapPaddingNecessaryGeneric<VTK_TT>( binaryLabelMap, paddingNecessary ));
+    vtkTemplateMacro(IsLabelmapPaddingNecessaryGeneric<VTK_TT>( binaryLabelMap, paddingNecessary, backgroundValue));
     default:
       vtkErrorWithObjectMacro(binaryLabelMap, "IsLabelmapPaddingNecessary: Unknown image scalar type!");
       return false;

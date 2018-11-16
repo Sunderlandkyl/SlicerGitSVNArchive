@@ -61,6 +61,12 @@ set(vtkSegmentationCore_SRCS
   vtkFractionalLabelmapToClosedSurfaceConversionRule.cxx
   vtkPolyDataToFractionalLabelmapFilter.h
   vtkPolyDataToFractionalLabelmapFilter.cxx
+  vtkResampleBinaryLabelmapToFractionalLabelmap.h
+  vtkResampleBinaryLabelmapToFractionalLabelmap.cxx
+  vtkFractionalOperations.cxx
+  vtkFractionalOperations.h
+  vtkFractionalImageAccumulate.cxx
+  vtkFractionalImageAccumulate.h
   )
 
 # Abstract/pure virtual classes
@@ -68,6 +74,8 @@ set(vtkSegmentationCore_SRCS
 #set_source_files_properties(
 #  ABSTRACT
 #  )
+
+include_directories(BEFORE ${vtkTeem_INCLUDE_DIRS})
 
 set(vtkSegmentationCore_INCLUDE_DIRS
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -83,6 +91,8 @@ set(vtkSegmentationCore_INCLUDE_DIRS
 
 set(vtkSegmentationCore_LIBS
   ${VTK_LIBRARIES}
+  vtkAddon
+  vtkTeem
   )
 
 include_directories( ${vtkSegmentationCore_INCLUDE_DIRS} )

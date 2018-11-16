@@ -106,6 +106,9 @@ protected:
   /// Paint labelmap
   void paintApply(qMRMLWidget* viewWidget);
 
+  /// Paint labelmap
+  void applyFractionalBrush(qMRMLWidget* viewWidget, vtkOrientedImageData* modifierLabelmap);
+
   /// Paint one pixel to coordinate
   void paintPixel(qMRMLWidget* viewWidget, double brushPosition_World[3]);
   void paintPixels(qMRMLWidget* viewWidget, vtkPoints* pixelPositions);

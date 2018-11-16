@@ -38,6 +38,7 @@
 #include "vtkOrientedImageDataResample.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
 #include "vtkBinaryLabelmapToClosedSurfaceConversionRule.h"
+#include "vtkFractionalOperations.h"
 
 // Segment editor effects includes
 #include "qSlicerSegmentEditorAbstractEffect.h"
@@ -62,6 +63,7 @@
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
 #include <vtkWeakPointer.h>
+#include <vtkDoubleArray.h>
 
 // Slicer includes
 #include <vtkMRMLSliceLogic.h>
@@ -457,7 +459,8 @@ void qMRMLSegmentEditorWidgetPrivate::init()
 
   QObject::connect( this->MaskModeComboBox, SIGNAL(currentIndexChanged(int)), q, SLOT(onMaskModeChanged(int)));
   QObject::connect( this->MasterVolumeIntensityMaskCheckBox, SIGNAL(toggled(bool)), q, SLOT(onMasterVolumeIntensityMaskChecked(bool)));
-  QObject::connect( this->MasterVolumeIntensityMaskRangeWidget, SIGNAL(valuesChanged(double,double)), q, SLOT(onMasterVolumeIntensityMaskRangeChanged(double,double)));
+  QObject::connect( this->MasterVolumeIntensityMaskRangeWidget, SIGNAL(valuesChanged(double,double)), q,
+                                                                SLOT(onMasterVolumeIntensityMaskRangeChanged(double,double)));
   QObject::connect( this->OverwriteModeComboBox, SIGNAL(currentIndexChanged(int)), q, SLOT(onOverwriteModeChanged(int)));
 
   QObject::connect( this->UndoButton, SIGNAL(clicked()), q, SLOT(undo()) );
@@ -613,8 +616,25 @@ bool qMRMLSegmentEditorWidgetPrivate::updateSelectedSegmentLabelmap()
     qWarning() << Q_FUNC_INFO << " failed: Segment " << selectedSegmentID << " not found in segmentation";
     return false;
     }
-  vtkOrientedImageData* segmentLabelmap = vtkOrientedImageData::SafeDownCast(
-    selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+
+  bool masterRepresentationIsFractional =
+    segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
+  double scalarRange[2] = {0.0, 1.0};
+
+  vtkOrientedImageData* segmentLabelmap;
+  if (masterRepresentationIsFractional)
+    {
+    segmentLabelmap = vtkOrientedImageData::SafeDownCast(
+      selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
+    vtkFractionalOperations::GetScalarRange(segmentLabelmap, scalarRange);
+    }
+  else
+    {
+    segmentLabelmap = vtkOrientedImageData::SafeDownCast(
+      selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+    }
+
   if (!segmentLabelmap)
     {
     qCritical() << Q_FUNC_INFO << ": Failed to get binary labelmap representation in segmentation " << segmentationNode->GetName();
@@ -625,12 +645,13 @@ bool qMRMLSegmentEditorWidgetPrivate::updateSelectedSegmentLabelmap()
     {
     vtkSegmentationConverter::DeserializeImageGeometry(referenceImageGeometry, this->SelectedSegmentLabelmap, false);
     this->SelectedSegmentLabelmap->SetExtent(0, -1, 0, -1, 0, -1);
-    this->SelectedSegmentLabelmap->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
+    this->SelectedSegmentLabelmap->AllocateScalars(segmentLabelmap->GetScalarType(), 1);
     return true;
     }
   vtkNew<vtkOrientedImageData> referenceImage;
   vtkSegmentationConverter::DeserializeImageGeometry(referenceImageGeometry, referenceImage.GetPointer(), false);
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(segmentLabelmap, referenceImage.GetPointer(), this->SelectedSegmentLabelmap, /*linearInterpolation=*/false);
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(segmentLabelmap, referenceImage.GetPointer(), this->SelectedSegmentLabelmap,
+    masterRepresentationIsFractional, false, NULL, scalarRange[0]);
 
   return true;
 }
@@ -710,9 +731,11 @@ bool qMRMLSegmentEditorWidgetPrivate::updateAlignedMasterVolume()
   masterVolume->SetGeometryFromImageToWorldMatrix(ijkToRasMatrix);
 
   vtkNew<vtkGeneralTransform> masterVolumeToSegmentationTransform;
-  vtkMRMLTransformNode::GetTransformBetweenNodes(masterVolumeNode->GetParentTransformNode(), segmentationNode->GetParentTransformNode(), masterVolumeToSegmentationTransform.GetPointer());
+  vtkMRMLTransformNode::GetTransformBetweenNodes(masterVolumeNode->GetParentTransformNode(), segmentationNode->GetParentTransformNode(),
+                                                 masterVolumeToSegmentationTransform.GetPointer());
 
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(masterVolume.GetPointer(), referenceImage.GetPointer(), this->AlignedMasterVolume,
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(masterVolume.GetPointer(), referenceImage.GetPointer(),
+                                                                              this->AlignedMasterVolume,
     /*linearInterpolation=*/true, /*padImage=*/false, masterVolumeToSegmentationTransform.GetPointer());
 
   this->AlignedMasterVolumeUpdateMasterVolumeNode = masterVolumeNode;
@@ -829,17 +852,30 @@ bool qMRMLSegmentEditorWidgetPrivate::updateMaskLabelmap()
     vtkSmartPointer<vtkMatrix4x4> mergedImageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
     maskImage->GetImageToWorldMatrix(mergedImageToWorldMatrix);
 
-    vtkSmartPointer<vtkImageThreshold> threshold = vtkSmartPointer<vtkImageThreshold>::New();
-    threshold->SetInputData(maskImage);
-    threshold->SetInValue(paintInsideSegments ? 1 : 0);
-    threshold->SetOutValue(paintInsideSegments ? 0 : 1);
-    threshold->ReplaceInOn();
-    threshold->ThresholdByLower(0);
-    threshold->SetOutputScalarType(VTK_UNSIGNED_CHAR);
-    threshold->Update();
+    bool masterRepresentationIsFractionalLabelmap =
+      segmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      if (!paintInsideSegments)
+        {
+        vtkFractionalOperations::Invert(maskImage);
+        }
+      }
+    else
+      {
 
-    maskImage->DeepCopy(threshold->GetOutput());
-    maskImage->SetImageToWorldMatrix(mergedImageToWorldMatrix);
+      vtkSmartPointer<vtkImageThreshold> threshold = vtkSmartPointer<vtkImageThreshold>::New();
+      threshold->SetInputData(maskImage);
+      threshold->SetInValue(paintInsideSegments ? 1 : 0);
+      threshold->SetOutValue(paintInsideSegments ? 0 : 1);
+      threshold->ReplaceInOn();
+      threshold->ThresholdByLower(0);
+      threshold->SetOutputScalarType(VTK_UNSIGNED_CHAR);
+      threshold->Update();
+
+      maskImage->DeepCopy(threshold->GetOutput());
+      maskImage->SetImageToWorldMatrix(mergedImageToWorldMatrix);
+      }
     }
   return true;
 }
@@ -1414,6 +1450,13 @@ bool qMRMLSegmentEditorWidget::setMasterRepresentationToBinaryLabelmap()
     return true;
     }
 
+  //TODO
+  if (d->SegmentationNode->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())
+    {
+    // Current master representation is already fractional labelmap
+    return true;
+    }
+
   // Editing is only possible if binary labelmap is the master representation
   // If master is not binary labelmap, then ask the user if they wants to make it master
   QString message = QString("Editing requires binary labelmap master representation, but currently the master representation is %1. "
@@ -1497,7 +1540,8 @@ void qMRMLSegmentEditorWidget::updateWidgetFromSegmentationNode()
     qvtkReconnect(d->SegmentationNode, segmentationNode, vtkSegmentation::SegmentRemoved, this, SLOT(onSegmentAddedRemoved()));
     qvtkReconnect(d->SegmentationNode, segmentationNode, vtkSegmentation::SegmentModified, this, SLOT(updateMaskingSection()));
     qvtkReconnect(d->SegmentationNode, segmentationNode, vtkMRMLDisplayableNode::DisplayModifiedEvent, this, SLOT(onSegmentationDisplayModified()));
-    qvtkReconnect(d->SegmentationNode, segmentationNode, vtkSegmentation::MasterRepresentationModified, this, SLOT(updateSliceRotateWarningButtonVisibility()));
+    qvtkReconnect(d->SegmentationNode, segmentationNode, vtkSegmentation::MasterRepresentationModified, this,
+                  SLOT(updateSliceRotateWarningButtonVisibility()));
     d->SegmentationNode = segmentationNode;
 
     bool wasBlocked = d->SegmentationNodeComboBox->blockSignals(true);
