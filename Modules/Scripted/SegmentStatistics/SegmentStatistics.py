@@ -444,10 +444,73 @@ class SegmentStatisticsLogic(ScriptedLoadableModuleLogic):
     """
     import vtkSegmentationCorePython as vtkSegmentationCore
 
-    segmentationNode = slicer.mrmlScene.GetNodeByID(self.getParameterNode().GetParameter("Segmentation"))
+    containsBinaryLabelmapRepresentation = self.segmentationNode.GetSegmentation().ContainsRepresentation(
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
+    containsFractionalLabelmapRepresentation = self.segmentationNode.GetSegmentation().ContainsRepresentation(
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
 
-    if not segmentationNode.GetSegmentation().GetSegment(segmentID):
-      logging.debug("updateStatisticsForSegment will not update any results because the segment doesn't exist")
+    containsLabelmapRepresentation = containsBinaryLabelmapRepresentation or containsFractionalLabelmapRepresentation
+
+    if not containsLabelmapRepresentation:
+      return
+
+    masterRepresentationIsFractionalLabelmap = (self.segmentationNode.GetSegmentation().GetMasterRepresentationName() ==
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+    # Use the fractional labelmap representation if it is the master representation or
+    # if the fractional representation exists without the binary representation
+    useFractionalLabelmap = masterRepresentationIsFractionalLabelmap or (containsFractionalLabelmapRepresentation and not containsBinaryLabelmapRepresentation)
+
+    for segmentID in self.statistics["SegmentIDs"]:
+      segment = self.segmentationNode.GetSegmentation().GetSegment(segmentID)
+
+      scalarRange = [0.0, 1.0]
+      if (useFractionalLabelmap):
+        segmentLabelmap = segment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentLabelmap, scalarRange)
+      else:
+        segmentLabelmap = segment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
+
+      # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
+      labelValue = 1
+      backgroundValue = 0
+      thresh = vtk.vtkImageThreshold()
+      thresh.SetInputData(segmentLabelmap)
+      thresh.ThresholdByLower(scalarRange[0])
+      thresh.SetInValue(backgroundValue)
+      thresh.SetOutValue(labelValue)
+      thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_CHAR)
+      thresh.Update()
+
+      #  Use binary labelmap as a stencil
+      stencil = vtk.vtkImageToImageStencil()
+      stencil.SetInputData(thresh.GetOutput())
+      stencil.ThresholdByUpper(labelValue)
+      stencil.Update()
+
+      if useFractionalLabelmap:
+        stat = vtkSegmentationCore.vtkFractionalImageAccumulate()
+        stat.UseFractionalLabelmapOn()
+        stat.SetFractionalLabelmap(segmentLabelmap)
+        stat.SetMinimumFractionalValue(scalarRange[0])
+        stat.SetMaximumFractionalValue(scalarRange[1])
+      else:
+        stat = vtk.vtkImageAccumulate()
+      stat.SetInputData(thresh.GetOutput())
+      stat.SetStencilData(stencil.GetOutput())
+      stat.Update()
+
+      # Add data to statistics list
+      cubicMMPerVoxel = reduce(lambda x,y: x*y, segmentLabelmap.GetSpacing())
+      ccPerCubicMM = 0.001
+      if (useFractionalLabelmap):
+        self.statistics[segmentID,"LM voxel count"] = stat.GetFractionalVoxelCount()
+        self.statistics[segmentID,"LM volume mm3"] = stat.GetFractionalVoxelCount() * cubicMMPerVoxel
+        self.statistics[segmentID,"LM volume cc"] = stat.GetFractionalVoxelCount() * cubicMMPerVoxel * ccPerCubicMM
+      else:
+        self.statistics[segmentID,"LM voxel count"] = stat.GetVoxelCount()
+        self.statistics[segmentID,"LM volume mm3"] = stat.GetVoxelCount() * cubicMMPerVoxel
+        self.statistics[segmentID,"LM volume cc"] = stat.GetVoxelCount() * cubicMMPerVoxel * ccPerCubicMM
       return
 
     segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
@@ -478,6 +541,114 @@ class SegmentStatisticsLogic(ScriptedLoadableModuleLogic):
     if plugin:
       return plugin.getMeasurementInfo(plugin.toShortKey(key))
     return None
+
+    containsBinaryLabelmapRepresentation = self.segmentationNode.GetSegmentation().ContainsRepresentation(
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
+    containsFractionalLabelmapRepresentation = self.segmentationNode.GetSegmentation().ContainsRepresentation(
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
+    containsLabelmapRepresentation = containsBinaryLabelmapRepresentation or containsFractionalLabelmapRepresentation
+
+    if not containsLabelmapRepresentation:
+      return
+
+    masterRepresentationIsFractionalLabelmap = (self.segmentationNode.GetSegmentation().GetMasterRepresentationName() ==
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName()
+
+    # Use the fractional labelmap representation if it is the master representation or
+    # if the fractional representation exists without the binary representation
+    useFractionalLabelmap = masterRepresentationIsFractionalLabelmap or (containsFractionalLabelmapRepresentation and not containsBinaryLabelmapRepresentation)
+
+    if self.grayscaleNode is None or self.grayscaleNode.GetImageData() is None:
+      return
+
+    # Get geometry of grayscale volume node as oriented image data
+    referenceGeometry_Reference = vtkSegmentationCore.vtkOrientedImageData() # reference geometry in reference node coordinate system
+    referenceGeometry_Reference.SetExtent(self.grayscaleNode.GetImageData().GetExtent())
+    ijkToRasMatrix = vtk.vtkMatrix4x4()
+    self.grayscaleNode.GetIJKToRASMatrix(ijkToRasMatrix)
+    referenceGeometry_Reference.SetGeometryFromImageToWorldMatrix(ijkToRasMatrix)
+
+    # Get transform between grayscale volume and segmentation
+    segmentationToReferenceGeometryTransform = vtk.vtkGeneralTransform()
+    slicer.vtkMRMLTransformNode.GetTransformBetweenNodes(self.segmentationNode.GetParentTransformNode(),
+      self.grayscaleNode.GetParentTransformNode(), segmentationToReferenceGeometryTransform)
+
+    cubicMMPerVoxel = reduce(lambda x,y: x*y, referenceGeometry_Reference.GetSpacing())
+    ccPerCubicMM = 0.001
+
+    for segmentID in self.statistics["SegmentIDs"]:
+      segment = self.segmentationNode.GetSegmentation().GetSegment(segmentID)
+
+      scalarRange = [0.0, 1.0]
+      if (useFractionalLabelmap):
+        segmentLabelmap = segment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentLabelmap, scalarRange)
+      else:
+        segmentLabelmap = segment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
+
+      segmentLabelmap_Reference = vtkSegmentationCore.vtkOrientedImageData()
+      if (useFractionalLabelmap):
+        scalarRange = [0.0, 1.0]
+        vtkSegmentationCore.vtkFractionalOperations.GetScalarRange(segmentLabelmap, scalarRange)
+        vtkSegmentationCore.vtkOrientedImageDataResample.ResampleOrientedImageToReferenceOrientedImage(
+          segmentLabelmap, referenceGeometry_Reference, segmentLabelmap_Reference,
+          True, # nearest neighbor interpolation
+          False, # no padding
+          segmentationToReferenceGeometryTransform,
+          scalarRange[0])
+        vtkSegmentationCore.vtkFractionalOperations.Write(segmentLabelmap_Reference, "E:\\frac\\frac.nrrd")
+      else:
+        vtkSegmentationCore.vtkOrientedImageDataResample.ResampleOrientedImageToReferenceOrientedImage(
+          segmentLabelmap, referenceGeometry_Reference, segmentLabelmap_Reference,
+          False, # nearest neighbor interpolation
+          False, # no padding
+          segmentationToReferenceGeometryTransform)
+
+      # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
+      labelValue = 1
+      backgroundValue = 0
+      thresh = vtk.vtkImageThreshold()
+      thresh.SetInputData(segmentLabelmap_Reference)
+      thresh.ThresholdByLower(scalarRange[0])
+      thresh.SetInValue(backgroundValue)
+      thresh.SetOutValue(labelValue)
+      thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_CHAR)
+      thresh.Update()
+
+      #  Use binary labelmap as a stencil
+      stencil = vtk.vtkImageToImageStencil()
+      stencil.SetInputData(thresh.GetOutput())
+      stencil.ThresholdByUpper(labelValue)
+      stencil.Update()
+
+      if useFractionalLabelmap:
+        stat = vtkSegmentationCore.vtkFractionalImageAccumulate()
+        stat.UseFractionalLabelmapOn()
+        stat.SetFractionalLabelmap(segmentLabelmap_Reference)
+        stat.SetMinimumFractionalValue(scalarRange[0])
+        stat.SetMaximumFractionalValue(scalarRange[1])
+      else:
+        stat = vtk.vtkImageAccumulate()
+      stat.SetInputData(self.grayscaleNode.GetImageData())
+      stat.SetStencilData(stencil.GetOutput())
+      stat.Update()
+
+      # Add data to statistics list
+      if (useFractionalLabelmap):
+        self.statistics[segmentID,"GS voxel count"] = stat.GetFractionalVoxelCount()
+        self.statistics[segmentID,"GS volume mm3"] = stat.GetFractionalVoxelCount() * cubicMMPerVoxel
+        self.statistics[segmentID,"GS volume cc"] = stat.GetFractionalVoxelCount() * cubicMMPerVoxel * ccPerCubicMM
+      else:
+        self.statistics[segmentID,"GS voxel count"] = stat.GetVoxelCount()
+        self.statistics[segmentID,"GS volume mm3"] = stat.GetVoxelCount() * cubicMMPerVoxel
+        self.statistics[segmentID,"GS volume cc"] = stat.GetVoxelCount() * cubicMMPerVoxel * ccPerCubicMM
+
+      if self.statistics[segmentID,"GS voxel count"]>0:
+        self.statistics[segmentID,"GS min"] = stat.GetMin()[0]
+        self.statistics[segmentID,"GS max"] = stat.GetMax()[0]
+        self.statistics[segmentID,"GS mean"] = stat.GetMean()[0]
+        self.statistics[segmentID,"GS stdev"] = stat.GetStandardDeviation()[0]
 
   def getStatisticsValueAsString(self, segmentID, key):
     statistics = self.getStatistics()
