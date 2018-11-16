@@ -22,11 +22,13 @@
 #include "qSlicerSegmentEditorAbstractLabelEffect.h"
 #include "qSlicerSegmentEditorAbstractLabelEffect_p.h"
 
+#include "vtkFractionalOperations.h"
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkMRMLSegmentationNode.h"
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
+#include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
 
 // Qt includes
 #include <QDebug>
@@ -37,13 +39,15 @@
 #include "ctkRangeWidget.h"
 
 // VTK includes
-#include <vtkMatrix4x4.h>
-#include <vtkTransform.h>
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageMask.h>
-#include <vtkImageThreshold.h>
-#include <vtkPolyData.h>
 #include <vtkImageMathematics.h>
+#include <vtkMatrix4x4.h>
+#include <vtkImageThreshold.h>
+#include <vtkTransform.h>
+#include <vtkPolyData.h>
 
 // Slicer includes
 #include "qMRMLSliceWidget.h"
@@ -120,19 +124,47 @@ void qSlicerSegmentEditorAbstractLabelEffect::updateMRMLFromGUI()
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageData* input, vtkPolyData* polyData, qMRMLSliceWidget* sliceWidget)
+void qSlicerSegmentEditorAbstractLabelEffect::appendPolyMask(vtkOrientedImageData* input, vtkPolyData* polyData,
+                                                             qMRMLSliceWidget* sliceWidget,bool isFractional/*=false*/)
 {
   // Rasterize a poly data onto the input image into the slice view
   // - Points are specified in current XY space
   vtkSmartPointer<vtkOrientedImageData> polyMaskImage = vtkSmartPointer<vtkOrientedImageData>::New();
-  qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(polyData, polyMaskImage, sliceWidget);
 
-  // Append poly mask onto input image
-  qSlicerSegmentEditorAbstractLabelEffect::appendImage(input, polyMaskImage);
+  double bounds[6] = {0,0,0,0,0,0};
+
+  if (isFractional)
+    {
+    vtkFractionalOperations::CopyFractionalParameters(polyMaskImage, input);
+    polyMaskImage->AllocateScalars(input->GetScalarType(),1); //TODO: change scalar type?
+    }
+
+  double scalarRange[2] = {0.0, 1.0};
+  if (isFractional)
+    {
+    vtkDoubleArray* scalarRangeArray = vtkDoubleArray::SafeDownCast(polyMaskImage->GetFieldData()->GetAbstractArray(
+      vtkSegmentationConverter::GetScalarRangeFieldName()));
+    if (scalarRangeArray && scalarRangeArray->GetNumberOfValues() == 2)
+      {
+      scalarRange[0] = scalarRangeArray->GetValue(0);
+      scalarRange[1] = scalarRangeArray->GetValue(1);
+      }
+    }
+
+  qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(polyData, polyMaskImage, sliceWidget, isFractional);
+
+  vtkFractionalOperations::CopyFractionalParameters(polyMaskImage, input);
+
+  vtkSmartPointer<vtkOrientedImageData> resampledImage = vtkSmartPointer<vtkOrientedImageData>::New();
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(polyMaskImage, input, resampledImage, isFractional, false, NULL, scalarRange[0]);
+
+  input->DeepCopy(resampledImage);
+  vtkFractionalOperations::CopyFractionalParameters(input, polyMaskImage);
+
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* appendedImage)
+void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* inputImage, vtkOrientedImageData* appendedImage, bool isFractional/*=false*/)
 {
   if (!inputImage || !appendedImage)
     {
@@ -140,10 +172,16 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* 
     return;
     }
 
+  double scalarRange[2] = {0.0, 1.0};
+  if (isFractional)
+    {
+    vtkFractionalOperations::GetScalarRange(inputImage, scalarRange);
+    }
+
   // Make sure appended image has the same lattice as the input image
   vtkSmartPointer<vtkOrientedImageData> resampledAppendedImage = vtkSmartPointer<vtkOrientedImageData>::New();
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
-    appendedImage, inputImage, resampledAppendedImage);
+    appendedImage, inputImage, resampledAppendedImage, isFractional, false, NULL, scalarRange[0]);
 
   // Add image created from poly data to input image
   vtkSmartPointer<vtkImageMathematics> imageMath = vtkSmartPointer<vtkImageMathematics>::New();
@@ -155,7 +193,8 @@ void qSlicerSegmentEditorAbstractLabelEffect::appendImage(vtkOrientedImageData* 
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPolyData* polyData, vtkOrientedImageData* outputMask, qMRMLSliceWidget* sliceWidget)
+void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPolyData* polyData, vtkOrientedImageData* outputMask,
+                                                                          qMRMLSliceWidget* sliceWidget, bool isFractional/*=false*/)
 {
   if (!polyData || !outputMask)
     {
@@ -179,25 +218,28 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   // - TODO: need to account for the boundary pixels
   //
   // Note: uses the slicer2-based vtkImageFillROI filter
-  vtkSmartPointer<vtkMatrix4x4> maskIjkToRasMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-  maskIjkToRasMatrix->DeepCopy(sliceNode->GetXYToRAS());
+  vtkSmartPointer<vtkTransform> xyToSliceTransform = vtkSmartPointer<vtkTransform>::New();
+  xyToSliceTransform->SetMatrix(sliceNode->GetXYToSlice());
+
+  vtkSmartPointer<vtkPoints> slicePoints = vtkSmartPointer<vtkPoints>::New();
+  xyToSliceTransform->TransformPoints(polyData->GetPoints(), slicePoints);
 
   polyData->GetPoints()->Modified();
   double bounds[6] = {0,0,0,0,0,0};
-  polyData->GetBounds(bounds);
+  slicePoints->GetBounds(bounds);
 
   double xlo = bounds[0] - 1.0;
   double xhi = bounds[1];
   double ylo = bounds[2] - 1.0;
   double yhi = bounds[3];
 
-  double originXYZ[3] = {xlo, ylo, 0.0};
-  double originRAS[3] = {0.0,0.0,0.0};
-  qSlicerSegmentEditorAbstractEffect::xyzToRas(originXYZ, originRAS, sliceWidget);
+  int oversamplingFactor = 6;
 
-  maskIjkToRasMatrix->SetElement(0, 3, originRAS[0]);
-  maskIjkToRasMatrix->SetElement(1, 3, originRAS[1]);
-  maskIjkToRasMatrix->SetElement(2, 3, originRAS[2]);
+  vtkSmartPointer<vtkTransform> sliceToRASTransform = vtkSmartPointer<vtkTransform>::New();
+  sliceToRASTransform->PostMultiply();
+  sliceToRASTransform->Identity();
+  sliceToRASTransform->Translate(xlo, ylo, 0.0);
+  sliceToRASTransform->Concatenate(sliceNode->GetSliceToRAS());
 
   // Get a good size for the draw buffer
   // - Needs to include the full region of the polygon
@@ -212,16 +254,32 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   int h = (int)(yhi - ylo) + 32;
 
   vtkSmartPointer<vtkOrientedImageData> imageData = vtkSmartPointer<vtkOrientedImageData>::New();
-  imageData->SetDimensions(w, h, 1);
+  if (isFractional)
+    {
+    imageData->SetDimensions(oversamplingFactor*w, oversamplingFactor*h, 1);
+    }
+  else
+    {
+    imageData->SetDimensions(w, h, 1);
+    }
   imageData->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
 
   // Move the points so the lower left corner of the bounding box is at 1, 1 (to avoid clipping)
-  vtkSmartPointer<vtkTransform> translate = vtkSmartPointer<vtkTransform>::New();
-  translate->Translate(-xlo, -ylo, 0.0);
+  vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+  transform->Identity();
+  if (isFractional)
+    {
+    transform->Scale(oversamplingFactor, oversamplingFactor, 1.0);
+    double offset[3] = { (oversamplingFactor-1.0)/(2.0*oversamplingFactor),
+                         (oversamplingFactor-1.0)/(2.0*oversamplingFactor),
+                          0.0};
+    transform->Translate(offset);
+    }
+  transform->Translate(-xlo, -ylo, 0.0);
 
   vtkSmartPointer<vtkPoints> drawPoints = vtkSmartPointer<vtkPoints>::New();
   drawPoints->Reset();
-  translate->TransformPoints(polyData->GetPoints(), drawPoints);
+  transform->TransformPoints(slicePoints, drawPoints);
   drawPoints->Modified();
 
   vtkSmartPointer<vtkImageFillROI> fill = vtkSmartPointer<vtkImageFillROI>::New();
@@ -230,8 +288,30 @@ void qSlicerSegmentEditorAbstractLabelEffect::createMaskImageFromPolyData(vtkPol
   fill->SetPoints(drawPoints);
   fill->Update();
 
-  outputMask->DeepCopy(fill->GetOutput());
-  outputMask->SetGeometryFromImageToWorldMatrix(maskIjkToRasMatrix);
+  if (isFractional)
+    {
+    double scalarRange[2] = {0.0, 1.0};
+    vtkFractionalOperations::GetScalarRange(outputMask, scalarRange);
+
+    vtkSmartPointer<vtkOrientedImageData> oversampledBinaryImage = vtkSmartPointer<vtkOrientedImageData>::New();
+    oversampledBinaryImage->ShallowCopy(fill->GetOutput());
+
+    vtkSmartPointer<vtkResampleBinaryLabelmapToFractionalLabelmap> fractionalLabelmapFilter =
+      vtkSmartPointer<vtkResampleBinaryLabelmapToFractionalLabelmap>::New();
+    fractionalLabelmapFilter->SetInputData(oversampledBinaryImage);
+    fractionalLabelmapFilter->SetOutputScalarType(outputMask->GetScalarType());
+    fractionalLabelmapFilter->SetStepSize(oversamplingFactor);
+    fractionalLabelmapFilter->SetOutputMinimumValue(scalarRange[0]);
+    fractionalLabelmapFilter->Update();
+    outputMask->DeepCopy(fractionalLabelmapFilter->GetOutput());
+
+    }
+  else
+    {
+    outputMask->DeepCopy(fill->GetOutput());
+    }
+
+  outputMask->SetGeometryFromImageToWorldMatrix(sliceToRASTransform->GetMatrix());
 }
 
 //-----------------------------------------------------------------------------

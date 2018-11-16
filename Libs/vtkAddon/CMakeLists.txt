@@ -77,10 +77,18 @@ set(vtkAddon_SRCS
 if(Slicer_VTK_RENDERING_USE_OpenGL2_BACKEND)
   set(vtkAddon_SRCS
     ${vtkAddon_SRCS}
-    vtkOpenGLTextureImage.cxx
-    vtkOpenGLTextureImage.h
-    vtkOpenGLShaderComputation.cxx
-    vtkOpenGLShaderComputation.h
+  vtkImageToGPUImageFilter.cxx
+  vtkImageToGPUImageFilter.h
+  vtkGPUAbstractImageFilter.cxx
+  vtkGPUAbstractImageFilter.h
+  vtkGPUImageData.cxx
+  vtkGPUImageData.h
+  vtkGPUImageGaussianFilter.cxx
+  vtkGPUImageGaussianFilter.h
+  vtkGPUImageToImageFilter.cxx
+  vtkGPUImageToImageFilter.h
+  vtkGPUSimpleImageFilter.cxx
+  vtkGPUSimpleImageFilter.h
   )
   find_package(OpenGL)
   set(vtkAddon_LIBS

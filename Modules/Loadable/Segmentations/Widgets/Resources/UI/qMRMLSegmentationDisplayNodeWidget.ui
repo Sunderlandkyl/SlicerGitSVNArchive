@@ -273,8 +273,12 @@
       <property name="spacing">
        <number>4</number>
       </property>
-      <item row="0" column="1">
-       <widget class="qMRMLDisplayNodeViewComboBox" name="DisplayNodeViewComboBox"/>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_Representation2D">
+        <property name="text">
+         <string>Representation in 2D views:</string>
+        </property>
+       </widget>
       </item>
       <item row="0" column="0">
        <widget class="QLabel" name="label_Views">
@@ -290,13 +294,6 @@
         </property>
         <property name="maximum">
          <number>10</number>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label_Representation2D">
-        <property name="text">
-         <string>Representation in 2D views:</string>
         </property>
        </widget>
       </item>
@@ -317,13 +314,6 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
-       <widget class="QComboBox" name="comboBox_DisplayedRepresentation2D">
-        <property name="toolTip">
-         <string>Representation that is shown in the 2D slice views</string>
-        </property>
-       </widget>
-      </item>
       <item row="1" column="0">
        <widget class="QLabel" name="label_SliceIntersectionThickness">
         <property name="text">
@@ -331,7 +321,17 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0" colspan="2">
+      <item row="0" column="1">
+       <widget class="qMRMLDisplayNodeViewComboBox" name="DisplayNodeViewComboBox"/>
+      </item>
+      <item row="3" column="1">
+       <widget class="QComboBox" name="comboBox_DisplayedRepresentation2D">
+        <property name="toolTip">
+         <string>Representation that is shown in the 2D slice views</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0" colspan="2">
        <widget class="QGroupBox" name="groupBox_SelectedSegment">
         <property name="title">
          <string>Selected segment</string>
@@ -501,6 +501,16 @@
          </item>
         </layout>
        </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_FractionalEdges">
+        <property name="text">
+         <string>Fractional edge type:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="comboBox_FractionalEdge"/>
       </item>
      </layout>
     </widget>

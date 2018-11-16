@@ -16,6 +16,8 @@ set(${KIT}_SRCS
   vtkSlicerSegmentationGeometryLogic.h
   vtkImageGrowCutSegment.cxx
   vtkImageGrowCutSegment.h
+  vtkGPUImageThresholdFilter.cxx
+  vtkGPUImageThresholdFilter.h
   FibHeap.cxx
   )
 

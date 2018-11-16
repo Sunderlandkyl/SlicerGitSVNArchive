@@ -98,7 +98,8 @@ public:
   /// Create oriented image data from a volume node
   /// \param outputParentTransformNode Specifies the parent transform node where the created image data can be placed.
   /// NOTE: Need to take ownership of the created object! For example using vtkSmartPointer<vtkOrientedImageData>::Take
-  static vtkOrientedImageData* CreateOrientedImageDataFromVolumeNode(vtkMRMLScalarVolumeNode* volumeNode, vtkMRMLTransformNode* outputParentTransformNode = nullptr);
+  static vtkOrientedImageData* CreateOrientedImageDataFromVolumeNode(vtkMRMLScalarVolumeNode* volumeNode,
+                                                                     vtkMRMLTransformNode* outputParentTransformNode = nullptr);
 
   /// Utility function to determine if a labelmap contains a single label
   /// \return 0 if contains no label or multiple labels, the label if it contains a single one
@@ -206,8 +207,9 @@ public:
   /// LabelmapImage is defined in the segmentation node's coordinate system
   /// (parent transform of the segmentation node is not used during import).
   /// \param baseSegmentName Prefix for the names of the new segments. Empty by default, in which case the prefix will be "Label"
-  static bool ImportLabelmapToSegmentationNode(vtkOrientedImageData* labelmapImage,
-    vtkMRMLSegmentationNode* segmentationNode, std::string baseSegmentName="", std::string insertBeforeSegmentId="") ;
+  static bool ImportLabelmapToSegmentationNode(vtkOrientedImageData* labelmapImage, vtkMRMLSegmentationNode* segmentationNode,
+                                               std::string baseSegmentName = "", std::string insertBeforeSegmentId = "", bool isFractional=false,
+                                               vtkOrientedImageData* fractionalImage=NULL);
 
   /// Update segmentation from segments in a labelmap node.
   /// \param updatedSegmentIDs Defines how label values 1..N are mapped to segment IDs (0..N-1).
@@ -284,7 +286,8 @@ public:
   /// \param segmentRepresentation Output representation data object into which the given representation in the segment is copied
   /// \param applyParentTransform Flag determining whether to apply parent transform of the segmentation node. On by default
   /// \return Success flag
-  static bool GetSegmentRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, std::string representationName, vtkDataObject* segmentRepresentation, bool applyParentTransform=true);
+  static bool GetSegmentRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, std::string representationName,
+                                       vtkDataObject* segmentRepresentation, bool applyParentTransform=true);
 
   /// Convenience function to get binary labelmap representation of a segment in a segmentation. Uses \sa GetSegmentRepresentation
   /// A duplicate of the oriented image data is copied into the argument image data, with the segmentation's parent transform
@@ -296,7 +299,8 @@ public:
   /// \param applyParentTransform Flag determining whether to apply parent transform of the segmentation node.
   ///   If on, then the oriented image data is in RAS, otherwise in the segmentation node's coordinate frame. On by default
   /// \return Success flag
-  static bool GetSegmentBinaryLabelmapRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* imageData, bool applyParentTransform=true);
+  static bool GetSegmentBinaryLabelmapRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* imageData,
+                                                     bool applyParentTransform=true);
 
   /// Convenience function to get closed surface representation of a segment in a segmentation. Uses \sa GetSegmentRepresentation
   /// A duplicate of the closed surface data is copied into the argument image data, with the segmentation's parent transform
@@ -322,7 +326,16 @@ public:
     MODE_MERGE_MAX,
     MODE_MERGE_MIN
     };
-  static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=nullptr);
+  static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID,
+                                         int mergeMode=MODE_REPLACE, const int extent[6]=nullptr);
+  static bool SetFractionalLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID,
+                                             int mergeMode=MODE_REPLACE, const int extent[6]=nullptr);
+
+  /// Threshold an image into a fractional labelmap representation
+  /// \param inputImageData The image that will be thresholded
+  /// \param outputImageData The output fractional labelmap
+  /// \param thresholdRange The range of values to be thresholded
+  static bool CreateFractionalThreshold(vtkOrientedImageData* inputImageData, vtkOrientedImageData* outputImageData, double thresholdRange[2]);
 
   /// Assign terminology to segments in a segmentation node based on the labels of a labelmap node. Match is made based on the
   /// 3dSlicerLabel terminology type attribute. If the terminology context does not contain that attribute, match cannot be made.

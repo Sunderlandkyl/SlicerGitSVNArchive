@@ -27,6 +27,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkCalculateOversamplingFactor.h"
+#include "vtkFractionalOperations.h"
 
 // VTK includes
 #include <vtkBoundingBox.h>
@@ -41,12 +42,14 @@
 #include <vtkTransform.h>
 #include <vtkPolyData.h>
 #include <vtkTransformPolyDataFilter.h>
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 
 // STD includes
 #include <sstream>
 #include <algorithm>
 #include <functional>
-
+#include <vtkTimerLog.h>
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSegmentation);
 
@@ -987,9 +990,25 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
         currentConversionRule->ConstructRepresentationObjectByRepresentation(currentConversionRule->GetTargetRepresentationName()) );
       }
 
+    double volume= 0.;
+    int numTriangles = 0;
+    vtkNew<vtkMassProperties> mass;
+    if (currentConversionRule->GetSourceRepresentationName() == vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName())
+    {
+      mass->SetInputData(sourceRepresentation);
+      mass->Update();
+      volume = mass->GetVolume();
+      numTriangles = vtkPolyData::SafeDownCast(sourceRepresentation)->GetNumberOfPolys();
+    }
+    //massProperties = vtk.vtkMassProperties()
+    //massProperties.SetInputData(closedSurface)
+    //massProperties.Update()
+    //surfaceVolume = massProperties.GetVolume()
+    vtkNew<vtkTimerLog> timerlog;
+    double start = timerlog->GetUniversalTime();
     // Perform conversion step
     currentConversionRule->Convert(sourceRepresentation, targetRepresentation);
-
+    std::cout << segment->GetName() << ", " << volume << ", " << numTriangles << ", " << timerlog->GetUniversalTime() - start << std::endl;
     // Add representation to segment
     segment->AddRepresentation(currentConversionRule->GetTargetRepresentationName(), targetRepresentation);
     }
@@ -1440,6 +1459,9 @@ std::string vtkSegmentation::DetermineCommonLabelmapGeometry(int extentComputati
     mergedSegmentIDs = segmentIDs;
     }
 
+  bool masterRepresentationIsFractionalLabelmap =
+    this->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
   // Get highest resolution reference geometry available in segments
   vtkOrientedImageData* highestResolutionLabelmap = nullptr;
   double lowestSpacing[3] = {1, 1, 1}; // We'll multiply the spacings together to get the voxel size
@@ -1451,22 +1473,24 @@ std::string vtkSegmentation::DetermineCommonLabelmapGeometry(int extentComputati
       vtkWarningMacro("DetermineCommonLabelmapGeometry: Segment ID " << (*segmentIt) << " not found in segmentation");
       continue;
       }
-    vtkOrientedImageData* currentBinaryLabelmap = vtkOrientedImageData::SafeDownCast(
-      currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) );
-    if (currentBinaryLabelmap->IsEmpty())
+    vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(
+      masterRepresentationIsFractionalLabelmap ?
+        currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()) :
+        currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+    if (currentLabelmap->IsEmpty())
       {
       continue;
       }
 
     double currentSpacing[3] = {1, 1, 1};
-    currentBinaryLabelmap->GetSpacing(currentSpacing);
+    currentLabelmap->GetSpacing(currentSpacing);
     if (!highestResolutionLabelmap
       || currentSpacing[0] * currentSpacing[1] * currentSpacing[2] < lowestSpacing[0] * lowestSpacing[1] * lowestSpacing[2])
       {
       lowestSpacing[0] = currentSpacing[0];
       lowestSpacing[1] = currentSpacing[1];
       lowestSpacing[2] = currentSpacing[2];
-      highestResolutionLabelmap = currentBinaryLabelmap;
+      highestResolutionLabelmap = currentLabelmap;
       }
     }
   if (!highestResolutionLabelmap)
@@ -1531,6 +1555,9 @@ void vtkSegmentation::DetermineCommonLabelmapExtent(int commonGeometryExtent[6],
     mergedSegmentIDs = segmentIDs;
     }
 
+  bool masterRepresentationIsFractionalLabelmap =
+    this->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
   // Determine extent that contains all segments
   commonGeometryExtent[0] = 0;
   commonGeometryExtent[1] = -1;
@@ -1546,49 +1573,61 @@ void vtkSegmentation::DetermineCommonLabelmapExtent(int commonGeometryExtent[6],
       vtkWarningMacro("DetermineCommonLabelmapGeometry: Segment ID " << (*segmentIt) << " not found in segmentation");
       continue;
       }
-    vtkOrientedImageData* currentBinaryLabelmap = vtkOrientedImageData::SafeDownCast(
-      currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
-    if (currentBinaryLabelmap==nullptr || currentBinaryLabelmap->IsEmpty())
+    vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(
+      masterRepresentationIsFractionalLabelmap ?
+        currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()) :
+        currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+    if (currentLabelmap==nullptr || currentLabelmap->IsEmpty())
       {
       continue;
       }
 
-    int currentBinaryLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
+    double scalarRange[2] = {0.0, 1.0};
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      vtkFractionalOperations::GetScalarRange(currentLabelmap, scalarRange);
+      }
+
+    int currentLabelmapExtent[6] = { 0, -1, 0, -1, 0, -1 };
     bool validExtent = true;
     if (computeEffectiveExtent)
       {
-      validExtent = vtkOrientedImageDataResample::CalculateEffectiveExtent(currentBinaryLabelmap, currentBinaryLabelmapExtent);
+      validExtent = vtkOrientedImageDataResample::CalculateEffectiveExtent(currentLabelmap, currentLabelmapExtent, scalarRange[0]);
       }
     else
       {
-      currentBinaryLabelmap->GetExtent(currentBinaryLabelmapExtent);
+      currentLabelmap->GetExtent(currentLabelmapExtent);
       }
-    if (validExtent && currentBinaryLabelmapExtent[0] <= currentBinaryLabelmapExtent[1]
-      && currentBinaryLabelmapExtent[2] <= currentBinaryLabelmapExtent[3]
-      && currentBinaryLabelmapExtent[4] <= currentBinaryLabelmapExtent[5])
+    if (validExtent && currentLabelmapExtent[0] <= currentLabelmapExtent[1]
+      && currentLabelmapExtent[2] <= currentLabelmapExtent[3]
+      && currentLabelmapExtent[4] <= currentLabelmapExtent[5])
       {
       // There is a valid labelmap
 
       // Get transformed extents of the segment in the common labelmap geometry
-      vtkNew<vtkTransform> currentBinaryLabelmapToCommonGeometryImageTransform;
-      vtkOrientedImageDataResample::GetTransformBetweenOrientedImages(currentBinaryLabelmap, commonGeometryImage, currentBinaryLabelmapToCommonGeometryImageTransform.GetPointer());
-      int currentBinaryLabelmapExtentInCommonGeometryImageFrame[6] = { 0, -1, 0, -1, 0, -1 };
-      vtkOrientedImageDataResample::TransformExtent(currentBinaryLabelmapExtent, currentBinaryLabelmapToCommonGeometryImageTransform.GetPointer(), currentBinaryLabelmapExtentInCommonGeometryImageFrame);
-      if (commonGeometryExtent[0] > commonGeometryExtent[1] || commonGeometryExtent[2] > commonGeometryExtent[3] || commonGeometryExtent[4] > commonGeometryExtent[5])
+      vtkNew<vtkTransform> currentLabelmapToCommonGeometryImageTransform;
+      vtkOrientedImageDataResample::GetTransformBetweenOrientedImages(
+        currentLabelmap, commonGeometryImage, currentLabelmapToCommonGeometryImageTransform.GetPointer());
+      int currentLabelmapExtentInCommonGeometryImageFrame[6] = { 0, -1, 0, -1, 0, -1 };
+      vtkOrientedImageDataResample::TransformExtent(
+        currentLabelmapExtent, currentLabelmapToCommonGeometryImageTransform.GetPointer(), currentLabelmapExtentInCommonGeometryImageFrame);
+      if (commonGeometryExtent[0] > commonGeometryExtent[1] ||
+          commonGeometryExtent[2] > commonGeometryExtent[3] ||
+          commonGeometryExtent[4] > commonGeometryExtent[5])
         {
         // empty commonGeometryExtent
         for (int i = 0; i < 3; i++)
           {
-          commonGeometryExtent[i * 2] = currentBinaryLabelmapExtentInCommonGeometryImageFrame[i * 2];
-          commonGeometryExtent[i * 2 + 1] = currentBinaryLabelmapExtentInCommonGeometryImageFrame[i * 2 + 1];
+          commonGeometryExtent[i * 2] = currentLabelmapExtentInCommonGeometryImageFrame[i * 2];
+          commonGeometryExtent[i * 2 + 1] = currentLabelmapExtentInCommonGeometryImageFrame[i * 2 + 1];
           }
         }
       else
         {
         for (int i = 0; i < 3; i++)
           {
-          commonGeometryExtent[i * 2] = std::min(currentBinaryLabelmapExtentInCommonGeometryImageFrame[i * 2], commonGeometryExtent[i * 2]);
-          commonGeometryExtent[i * 2 + 1] = std::max(currentBinaryLabelmapExtentInCommonGeometryImageFrame[i * 2 + 1], commonGeometryExtent[i * 2 + 1]);
+          commonGeometryExtent[i * 2] = std::min(currentLabelmapExtentInCommonGeometryImageFrame[i * 2], commonGeometryExtent[i * 2]);
+          commonGeometryExtent[i * 2 + 1] = std::max(currentLabelmapExtentInCommonGeometryImageFrame[i * 2 + 1], commonGeometryExtent[i * 2 + 1]);
           }
         }
       }
