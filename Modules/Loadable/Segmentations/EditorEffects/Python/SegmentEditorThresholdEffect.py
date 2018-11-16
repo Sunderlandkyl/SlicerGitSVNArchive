@@ -1,5 +1,5 @@
 import os
-import vtk, qt, ctk, slicer
+import vtk, qt, ctk, slicer, math
 import logging
 from SegmentEditorEffects import *
 
@@ -24,6 +24,21 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     import vtkITK
     self.autoThresholdCalculator = vtkITK.vtkITKImageThresholdCalculator()
 
+    self.imageToGPUImageFilter = vtk.vtkImageToGPUImageFilter()
+
+    self.fractionalThresholdFilter = vtk.vtkGPUSimpleImageFilter()
+    self.fractionalThresholdFilter.SetInputConnection(self.imageToGPUImageFilter.GetOutputPort())
+    self.fractionalThresholdFilter.SetOutputScalarTypeToSignedChar()
+
+    self.gpuImageToImageFilter = vtk.vtkGPUImageToImageFilter()
+    self.gpuImageToImageFilter.SetInputConnection(self.fractionalThresholdFilter.GetOutputPort())
+
+    self.castGPUImage = vtk.vtkImageShiftScale()
+    self.castGPUImage.SetOutputScalarTypeToChar()
+    self.castGPUImage.SetInputConnection(self.gpuImageToImageFilter.GetOutputPort())
+
+    self.setupShader()
+
     self.timer = qt.QTimer()
     self.previewState = 0
     self.previewStep = 1
@@ -32,6 +47,66 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     self.previewPipelines = {}
     self.setupPreviewDisplay()
+
+  def setupShader(self):
+    # TODO: output of fragment shader should range from -108 to +108
+    fragmentShaderCode = """
+//VTK::System::Dec
+varying vec2 tcoordVSOutput;
+uniform float zPos;
+//VTK::AlgTexUniforms::Dec
+//VTK::CustomUniforms::Dec
+//VTK::Output::Dec
+void main()
+{
+// Can't have an oversampling factor that is less than zero.
+gl_FragData[0] = vec4(vec3(0.), 1.0);
+if (oversamplingFactor > 0.0)
+  {
+  float offsetStart = -(oversamplingFactor - 1)/(2 * oversamplingFactor);
+  float stepSize = 1.0/oversamplingFactor;
+  float sum = 0;
+
+  float scaledMin = max(minThreshold / (inputScale0 + inputShift0), -1.0);
+  float scaledMax = max(maxThreshold / (inputScale0 + inputShift0), -1.0);
+
+  // Iterate over 216 offset points.
+  for (int k = 0; k < oversamplingFactor; ++k)
+    {
+    for (int j = 0; j < oversamplingFactor; ++j)
+      {
+      for (int i = 0; i < oversamplingFactor; ++i)
+        {
+
+        // Calculate the current offset.
+        vec3 offset = vec3(
+          (offsetStart + stepSize*i)/(inputSize0.x),
+          (offsetStart + stepSize*j)/(inputSize0.y),
+          (offsetStart + stepSize*k)/(inputSize0.z));
+
+        vec3 offsetTextureCoordinate = vec3(tcoordVSOutput, zPos) + offset;
+
+        // If the value of the interpolated offset pixel is greater than the threshold, then
+        // increment the fractional sum.
+        vec4 referenceSample = texture(inputTex0, offsetTextureCoordinate);
+        if (referenceSample.r >= scaledMin && referenceSample.r <= scaledMax )
+          {
+          ++sum;
+          }
+        }
+      }
+    }
+  // Calculate the fractional value of the pixel.
+  sum = sum - 108;
+  sum = sum / (outputScale + outputShift);
+  gl_FragData[0] = vec4( vec3(sum), 1.0 );
+  }
+}
+    """
+    shaderProperty = self.fractionalThresholdFilter.GetShaderProperty()
+    shaderProperty.SetFragmentShaderCode(fragmentShaderCode)
+    fragmentUniforms = shaderProperty.GetFragmentCustomUniforms()
+    fragmentUniforms.SetUniformi("oversamplingFactor", 6)
 
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -349,21 +424,32 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
       originalImageToWorldMatrix = vtk.vtkMatrix4x4()
       modifierLabelmap.GetImageToWorldMatrix(originalImageToWorldMatrix)
+      originalScalarType = modifierLabelmap.GetScalarType()
+      originalExtent = modifierLabelmap.GetExtent()
       # Get parameters
-      min = self.scriptedEffect.doubleParameter("MinimumThreshold")
-      max = self.scriptedEffect.doubleParameter("MaximumThreshold")
+      minThreshold = self.scriptedEffect.doubleParameter("MinimumThreshold")
+      maxThreshold = self.scriptedEffect.doubleParameter("MaximumThreshold")
 
       self.scriptedEffect.saveStateForUndo()
 
-      # Perform thresholding
-      thresh = vtk.vtkImageThreshold()
-      thresh.SetInputData(masterImageData)
-      thresh.ThresholdBetween(min, max)
-      thresh.SetInValue(1)
-      thresh.SetOutValue(0)
-      thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
-      thresh.Update()
-      modifierLabelmap.DeepCopy(thresh.GetOutput())
+      segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+
+      masterRepresentationIsFractionalLabelmap = (segmentation.GetMasterRepresentationName() ==
+        vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
+      if (masterRepresentationIsFractionalLabelmap):
+        self.fractionalShaderThreshold(masterImageData, modifierLabelmap, minThreshold, maxThreshold)
+
+      else:
+        # Perform thresholding
+        thresh = vtk.vtkImageThreshold()
+        thresh.SetInputData(masterImageData)
+        thresh.ThresholdBetween(minThreshold, maxThreshold)
+        thresh.SetInValue(1)
+        thresh.SetOutValue(0)
+        thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
+        thresh.Update()
+        modifierLabelmap.DeepCopy(thresh.GetOutput())
     except IndexError:
       logging.error('apply: Failed to threshold master volume!')
       pass
@@ -371,8 +457,50 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     # Apply changes
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
+    # TODO: should the modifier labelmap just be copied at the start instead of resetting it?
+    # Reset modifier labelmap
+    # modifierLabelmap.SetImageToWorldMatrix(originalImageToWorldMatrix)
+    # modifierLabelmap.SetExtent(originalExtent)
+    # if (not modifierLabelmap.GetScalarType() == originalScalarType):
+      # modifierLabelmap.AllocateScalars(originalScalarType, 1)
+
     # De-select effect
     self.scriptedEffect.selectEffect("")
+
+  def fractionalShaderThreshold(self, masterImageData, modifierLabelmap, minThreshold, maxThreshold):
+    import vtkSegmentationCorePython as vtkSegmentationCore
+
+    if (masterImageData.GetScalarType() == vtk.VTK_INT):
+      self.shiftScaleFilter = vtk.vtkImageShiftScale()
+      self.shiftScaleFilter.SetInputData(masterImageData)
+      self.shiftScaleFilter.SetOutputScalarTypeToFloat()
+      self.shiftScaleFilter.Update()
+      self.imageToGPUImageFilter.SetInputDataObject(self.shiftScaleFilter.GetOutput())
+    else:
+      self.imageToGPUImageFilter.SetInputDataObject(masterImageData)
+
+    shaderProperty = self.fractionalThresholdFilter.GetShaderProperty()
+    fragmentUniforms = shaderProperty.GetFragmentCustomUniforms()
+    fragmentUniforms.SetUniformf("minThreshold", minThreshold)
+    fragmentUniforms.SetUniformf("maxThreshold", maxThreshold)
+
+    self.castGPUImage.Update()
+    modifierLabelmap.DeepCopy(self.castGPUImage.GetOutput())
+
+    imageToWorldMatrix = vtk.vtkMatrix4x4()
+    masterImageData.GetImageToWorldMatrix(imageToWorldMatrix)
+    modifierLabelmap.SetImageToWorldMatrix(imageToWorldMatrix)
+
+    scalarRange = [-108.0, +108.0]
+    thresholdValue = 0.0
+    interpolationType = vtk.VTK_LINEAR_INTERPOLATION
+
+    # Specify the scalar range of values in the labelmap
+    vtkSegmentationCore.vtkFractionalOperations.SetScalarRange(modifierLabelmap, scalarRange)
+    # Specify the surface threshold value for visualization
+    vtkSegmentationCore.vtkFractionalOperations.SetThreshold(modifierLabelmap, thresholdValue)
+    # Specify the interpolation type for visualization
+    vtkSegmentationCore.vtkFractionalOperations.SetInterpolationType(modifierLabelmap, interpolationType)
 
   def clearPreviewDisplay(self):
     for sliceWidget, pipeline in self.previewPipelines.iteritems():

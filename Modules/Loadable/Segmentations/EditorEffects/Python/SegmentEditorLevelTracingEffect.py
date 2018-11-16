@@ -199,5 +199,19 @@ class LevelTracingPipeline:
     if lines.GetNumberOfCells() == 0:
       return
 
+    import vtkSegmentationCorePython as vtkSegmentationCore
+    segmentation = self.effect.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
+    masterRepresentationIsFractionalLabelmap = (segmentation.GetMasterRepresentationName() ==
+      vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
+
+    if (masterRepresentationIsFractionalLabelmap):
+      vtkSegmentationCore.vtkFractionalOperations.CopyFractionalParameters(modifierLabelmap, segmentation)
+      # TODO: get type if neccissary
+      modifierLabelmap.AllocateScalars(vtk.VTK_CHAR, 1)
+
     # Apply poly data on modifier labelmap
-    self.effect.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget)
+    self.effect.scriptedEffect.appendPolyMask(modifierLabelmap, self.polyData, self.sliceWidget, masterRepresentationIsFractionalLabelmap)
+    self.effect.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
+
+    if (masterRepresentationIsFractionalLabelmap):
+      vtkSegmentationCore.vtkFractionalOperations.ClearFractionalParameters(modifierLabelmap)
