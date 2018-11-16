@@ -2,6 +2,7 @@ set(SegmentStatisticsPlugins_PYTHON_SCRIPTS
   __init__
   SegmentStatisticsPluginBase
   LabelmapSegmentStatisticsPlugin
+  FractionalLabelmapSegmentStatisticsPlugin
   ScalarVolumeSegmentStatisticsPlugin
   ClosedSurfaceSegmentStatisticsPlugin
   )

@@ -66,10 +66,12 @@ vtkMRMLSegmentationDisplayNode::vtkMRMLSegmentationDisplayNode()
   , Opacity3D(1.0)
   , Opacity2DFill(0.5)
   , Opacity2DOutline(1.0)
+  , FractionalEdgeName(NULL)
 {
   this->SetBackfaceCulling(0); // segment models are not necessarily closed surfaces (e.g., ribbon models)
   this->Visibility2D = 1; // show slice intersections by default
 
+  this->SetFractionalEdgeName("Hard");
   this->SegmentationDisplayProperties.clear();
 }
 
@@ -78,6 +80,7 @@ vtkMRMLSegmentationDisplayNode::~vtkMRMLSegmentationDisplayNode()
 {
   this->SetPreferredDisplayRepresentationName2D(nullptr);
   this->SetPreferredDisplayRepresentationName3D(nullptr);
+  this->SetFractionalEdgeName(NULL);
   this->SegmentationDisplayProperties.clear();
 }
 

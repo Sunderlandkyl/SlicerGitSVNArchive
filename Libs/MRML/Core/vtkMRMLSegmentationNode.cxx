@@ -27,6 +27,7 @@
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkCalculateOversamplingFactor.h"
+#include "vtkFractionalOperations.h"
 
 // MRML includes
 #include <vtkEventBroker.h>
@@ -52,6 +53,8 @@
 #include <vtkStringArray.h>
 #include <vtkMatrix4x4.h>
 #include <vtkTransform.h>
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 
 // STD includes
 #include <algorithm>
@@ -368,7 +371,8 @@ void vtkMRMLSegmentationNode::OnSubjectHierarchyUIDAdded(
     else if (referencedVolumeFound && !warningLogged)
       {
       vtkWarningMacro("vtkMRMLSegmentationNode::OnSubjectHierarchyUIDAdded: Referenced volume for segmentation '"
-        << this->Name << "' found (" << referencedVolumeNode->GetName() << "), but some referenced UIDs are not present in it! (maybe only partial volume was loaded?)");
+        << this->Name << "' found (" << referencedVolumeNode->GetName()
+        << "), but some referenced UIDs are not present in it! (maybe only partial volume was loaded?)");
       // Only log warning once for this node
       warningLogged = true;
       }
@@ -522,9 +526,16 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
     vtkErrorMacro("GenerateMergedLabelmap: Invalid segmentation");
     return false;
     }
-  if (!this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()))
+
+  bool masterRepresentationIsFractionalLabelmap =
+  this->GetSegmentation()->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName();
+
+  if (!( this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) &&
+         !masterRepresentationIsFractionalLabelmap ) &&
+      !( this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())
+         && masterRepresentationIsFractionalLabelmap))
     {
-    vtkErrorMacro("GenerateMergedLabelmap: Segmentation does not contain binary labelmap representation");
+    vtkErrorMacro("GenerateMergedLabelmap: Segmentation does not contain a labelmap representation");
     return false;
     }
 
@@ -591,7 +602,21 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
     }
 
   const short backgroundColorIndex = 0;
-  vtkOrientedImageDataResample::FillImage(mergedImageData, backgroundColorIndex);
+
+  double scalarRange[2] = {0.0, 1.0};
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkFractionalOperations::GetScalarRange(this->Segmentation, scalarRange);
+    }
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    vtkOrientedImageDataResample::FillImage(mergedImageData, scalarRange[0]);
+    }
+  else
+    {
+    vtkOrientedImageDataResample::FillImage(mergedImageData, backgroundColorIndex);
+    }
 
   // Skip the rest if there are no segments
   if (this->Segmentation->GetNumberOfSegments() == 0)
@@ -611,42 +636,71 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
       continue;
       }
 
-    // Get binary labelmap from segment
-    vtkOrientedImageData* representationBinaryLabelmap = vtkOrientedImageData::SafeDownCast(
-      currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) );
-    // If binary labelmap is empty then skip
-    if (representationBinaryLabelmap->IsEmpty())
+    // Get labelmap from segment
+    vtkOrientedImageData* representationLabelmap;
+
+    if (masterRepresentationIsFractionalLabelmap)
+      {
+      representationLabelmap = vtkOrientedImageData::SafeDownCast(
+        currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()) );
+      }
+    else
+      {
+      representationLabelmap = vtkOrientedImageData::SafeDownCast(
+        currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) );
+      }
+
+    // If labelmap is empty then skip
+    if (representationLabelmap->IsEmpty())
       {
       continue;
       }
 
     // Set oriented image data used for merging to the representation (may change later if resampling is needed)
-    vtkOrientedImageData* binaryLabelmap = representationBinaryLabelmap;
+    vtkOrientedImageData* labelmap = representationLabelmap;
 
     // If labelmap geometries (origin, spacing, and directions) do not match reference then resample temporarily
-    vtkSmartPointer<vtkOrientedImageData> resampledBinaryLabelmap;
-    if (!vtkOrientedImageDataResample::DoGeometriesMatch(commonGeometryImage, representationBinaryLabelmap))
+    vtkSmartPointer<vtkOrientedImageData> resampledLabelmap;
+    if (!vtkOrientedImageDataResample::DoGeometriesMatch(commonGeometryImage, representationLabelmap))
       {
-      resampledBinaryLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      resampledLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
 
       // Resample segment labelmap for merging
-      if (!vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(representationBinaryLabelmap, mergedImageToWorldMatrix, resampledBinaryLabelmap))
+      if (!vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(representationLabelmap, mergedImageToWorldMatrix, resampledLabelmap,
+          masterRepresentationIsFractionalLabelmap))
         {
         continue;
         }
 
       // Use resampled labelmap for merging
-      binaryLabelmap = resampledBinaryLabelmap;
+      labelmap = resampledLabelmap;
       }
 
     // Copy image data voxels into merged labelmap with the proper color index
     vtkOrientedImageDataResample::ModifyImage(
           mergedImageData,
-          binaryLabelmap,
-          vtkOrientedImageDataResample::OPERATION_MASKING,
+          labelmap,
+          masterRepresentationIsFractionalLabelmap ?
+            vtkOrientedImageDataResample::OPERATION_FRACTIONAL_ADDITION : vtkOrientedImageDataResample::OPERATION_MASKING,
           nullptr,
           0,
-          colorIndex);
+          colorIndex,
+          masterRepresentationIsFractionalLabelmap ? scalarRange[0] : VTK_DOUBLE_MIN,
+          masterRepresentationIsFractionalLabelmap ? scalarRange[1] : VTK_DOUBLE_MAX);
+    }
+
+  if (masterRepresentationIsFractionalLabelmap)
+    {
+    // Specify the scalar range of values in the labelmap
+    vtkFractionalOperations::SetScalarRange(mergedImageData, scalarRange);
+
+    // Specify the surface threshold value for visualization
+    double threshold = vtkFractionalOperations::GetThreshold(this->Segmentation);
+    vtkFractionalOperations::SetThreshold(mergedImageData, threshold);
+
+    // Specify the interpolation type for visualization
+    vtkIdType interpolationType = vtkFractionalOperations::GetInterpolationType(this->Segmentation);
+    vtkFractionalOperations::SetInterpolationType(mergedImageData, interpolationType);
     }
 
   return true;
@@ -894,7 +948,8 @@ void vtkMRMLSegmentationNode::SetReferenceImageGeometryParameterFromVolumeNode(v
     if (vtkMRMLTransformNode::IsGeneralTransformLinear(volumeToSegmentationTransform))
       {
       vtkNew<vtkMatrix4x4> volumeToSegmentationMatrix;
-      vtkMRMLTransformNode::GetMatrixTransformBetweenNodes(volumeNode->GetParentTransformNode(), this->GetParentTransformNode(), volumeToSegmentationMatrix.GetPointer());
+      vtkMRMLTransformNode::GetMatrixTransformBetweenNodes(volumeNode->GetParentTransformNode(), this->GetParentTransformNode(),
+        volumeToSegmentationMatrix.GetPointer());
       vtkMatrix4x4::Multiply4x4(volumeToSegmentationMatrix.GetPointer(), volumeIjkToRasMatrix, volumeIjkToRasMatrix);
       }
     }

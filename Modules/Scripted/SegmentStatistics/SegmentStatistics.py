@@ -351,7 +351,7 @@ class SegmentStatisticsLogic(ScriptedLoadableModuleLogic):
   Uses ScriptedLoadableModuleLogic base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
-  registeredPlugins = [LabelmapSegmentStatisticsPlugin, ScalarVolumeSegmentStatisticsPlugin,
+  registeredPlugins = [LabelmapSegmentStatisticsPlugin, FractionalLabelmapSegmentStatisticsPlugin, ScalarVolumeSegmentStatisticsPlugin,
                            ClosedSurfaceSegmentStatisticsPlugin]
 
   @staticmethod

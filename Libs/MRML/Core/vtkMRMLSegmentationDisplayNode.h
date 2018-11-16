@@ -110,6 +110,11 @@ public:
   /// Set name of representation that is displayed in the 3D view if exists
   vtkSetStringMacro(PreferredDisplayRepresentationName3D);
 
+  /// Get name of the fractional edge representation that is displayed in the 2D view if exists
+  vtkGetStringMacro(FractionalEdgeName);
+  /// Set name of the fractional edge representation that is displayed in the 2D view if exists
+  vtkSetStringMacro(FractionalEdgeName);
+
   /// Get/Set 2D fill visibility
   vtkGetMacro(Visibility2DFill, bool);
   vtkSetMacro(Visibility2DFill, bool);
@@ -289,6 +294,9 @@ protected:
   /// If does not exist, then master representation is displayed if poly data,
   /// otherwise the first poly data representation if any.
   char* PreferredDisplayRepresentationName3D;
+
+  /// Name of the representation type that is used to display the fractional labelmap in the 2D views
+  char* FractionalEdgeName;
 
   /// List of segment display properties for all segments in associated segmentation.
   /// Maps segment identifier string (segment name by default) to properties.
