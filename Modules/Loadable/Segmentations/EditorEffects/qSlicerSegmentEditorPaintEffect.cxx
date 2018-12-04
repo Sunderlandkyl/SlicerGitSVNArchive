@@ -741,15 +741,14 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     << "        }" << std::endl
     << "      }" << std::endl
     << "    }" << std::endl
-    //<< "  fragColor = vec4( sum / pow(oversamplingFactor, 3) );" << std::endl
-    << "  fragColor = vec4( 1.0 );" << std::endl
+    << "  fragColor = vec4( sum / pow(oversamplingFactor, 3) );" << std::endl
     << "}" << std::endl;
 
   vtkNew<vtkOpenGLShaderComputation> shaderComputation;
   shaderComputation->SetFragmentShaderSource(fragmentSource.str().c_str());
 
   vtkNew<vtkOpenGLTextureImage> targetTextureImage;
-  targetTextureImage->SetInterpolate(true);
+  targetTextureImage->SetInterpolate(false);
   targetTextureImage->SetShaderComputation(shaderComputation.GetPointer());
 
   vtkNew<vtkImageShiftScale> scale;
@@ -814,15 +813,15 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
       << "  interpolatedTextureCoordinate = vec3( textureCoordinateAttribute, slice + " << +0.5 / dimensions[2] << ");" << std::endl
       << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl
       << "}" << std::endl;
+    shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
 
     vtkSmartPointer<vtkOrientedImageData> orientedBrushPositionerOutput = vtkSmartPointer<vtkOrientedImageData>::New();
     orientedBrushPositionerOutput->SetExtent(brushExtent);
     orientedBrushPositionerOutput->SetImageToWorldMatrix(imageToWorldMatrix);
-    orientedBrushPositionerOutput->AllocateScalars(VTK_SHORT, 1);
-
-    shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
-    targetTextureImage->SetImageData(orientedBrushPositionerOutput);
+    orientedBrushPositionerOutput->AllocateScalars(VTK_UNSIGNED_SHORT, 1);
     shaderComputation->SetResultImageData(orientedBrushPositionerOutput);
+
+    targetTextureImage->SetImageData(orientedBrushPositionerOutput);
 
     for (float slice = 0; slice < dimensions[2]; ++slice)
     {
@@ -852,7 +851,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::applyFractionalBrush(qMRMLWidget* v
     }
 
     scale->SetInputData(orientedBrushPositionerOutput);
-    scale->SetScale((scalarRange[1] - scalarRange[0]) / (VTK_SHORT_MAX));
+    scale->SetScale((scalarRange[1] - scalarRange[0]) / (VTK_UNSIGNED_SHORT_MAX));
     shift->SetShift(scalarRange[0]);
     shift->SetInputConnection(scale->GetOutputPort());
     shift->SetOutputScalarType(scalarType);

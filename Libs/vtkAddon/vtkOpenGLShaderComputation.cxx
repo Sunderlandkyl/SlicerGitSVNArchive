@@ -463,14 +463,14 @@ void vtkOpenGLShaderComputation::Compute(float slice)
     }
 
   for (std::map<std::string, vtkVariant>::iterator uniformIt = this->Uniforms.begin(); uniformIt != this->Uniforms.end(); ++uniformIt)
-  {
+    {
     // TODO: uniform support
     std::string uniformString = uniformIt->first;
     float uniform = uniformIt->second.ToFloat();
 
     GLint uniformLocation = glGetUniformLocation(this->ProgramObject, uniformString.c_str());
     glUniform1f(uniformLocation, uniform);
-  }
+    }
 
   //
   // GO!

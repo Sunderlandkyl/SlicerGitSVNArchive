@@ -322,14 +322,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
       segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
 
-      # Perform thresholding
-      thresh = vtk.vtkImageThreshold()
-      thresh.SetInputData(masterImageData)
-      thresh.ThresholdBetween(minThreshold, maxThreshold)
-      thresh.SetInValue(1)
-      thresh.SetOutValue(0)
-      thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
-
       masterRepresentationIsFractionalLabelmap = (segmentation.GetMasterRepresentationName() ==
         vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationFractionalLabelmapRepresentationName())
 
@@ -337,6 +329,13 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
         self.FractionalShaderThreshold(masterImageData, modifierLabelmap, minThreshold, maxThreshold)
 
       else:
+        # Perform thresholding
+        thresh = vtk.vtkImageThreshold()
+        thresh.SetInputData(masterImageData)
+        thresh.ThresholdBetween(minThreshold, maxThreshold)
+        thresh.SetInValue(1)
+        thresh.SetOutValue(0)
+        thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
         thresh.Update()
         modifierLabelmap.DeepCopy(thresh.GetOutput())
     except IndexError:
@@ -399,7 +398,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       uniform float slice;
       uniform sampler3D textureUnit0;
       in vec3 interpolatedTextureCoordinate;
-      out vec4 fragColor;
+      layout(location = 0) out vec4 fragColor;
       void main()
       {
 
@@ -447,6 +446,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
         {
         fragColor = vec4(0.);
         }
+        fragColor = vec4(1.);
       }
     """ % {
     'oversamplingFactor' : 6,

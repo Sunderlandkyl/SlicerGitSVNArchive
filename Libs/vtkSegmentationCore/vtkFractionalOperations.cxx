@@ -140,6 +140,7 @@ void vtkFractionalOperations::ConvertFractionalImage(vtkOrientedImageData* input
   vtkFractionalOperations::ConvertFractionalImage(input, output, templateLablemap);
 }
 
+//----------------------------------------------------------------------------
 void vtkFractionalOperations::ConvertFractionalImage(vtkOrientedImageData* input, vtkOrientedImageData* output, vtkOrientedImageData* outputTemplate)
 {
   if (!input || !output || !outputTemplate)
@@ -203,6 +204,7 @@ void vtkFractionalOperations::ConvertFractionalImage(vtkOrientedImageData* input
 
 }
 
+//----------------------------------------------------------------------------
 template<class InputScalarType>
 void vtkFractionalOperations::ConvertFractionalImageGeneric(vtkOrientedImageData* input, vtkOrientedImageData* output, InputScalarType* inputScalarTypePointer)
 {
@@ -217,6 +219,7 @@ void vtkFractionalOperations::ConvertFractionalImageGeneric(vtkOrientedImageData
     }
 }
 
+//----------------------------------------------------------------------------
 template<class InputScalarType, class OutputScalarType>
 void vtkFractionalOperations::ConvertFractionalImageGeneric2(vtkOrientedImageData* input, vtkOrientedImageData* output,
                                                               InputScalarType* inputScalarTypePointer, OutputScalarType* outputScalarTypePointer)
