@@ -72,6 +72,8 @@ public:
   void OnRightButtonUp() override;
   void OnMouseWheelForward() override;
   void OnMouseWheelBackward() override;
+  virtual void OnPinch() override;
+  virtual void OnRotate() override;
 
   /// Keyboard functions
   void OnChar() override;

@@ -236,6 +236,26 @@ void vtkSliceViewInteractorStyle::OnLeave()
 }
 
 //----------------------------------------------------------------------------
+void vtkSliceViewInteractorStyle::OnPinch()
+{
+  if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::PinchEvent))
+    {
+    return;
+    }
+  this->Superclass::OnPinch();
+}
+
+//----------------------------------------------------------------------------
+void vtkSliceViewInteractorStyle::OnRotate()
+{
+  if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::RotateEvent))
+    {
+    return;
+    }
+  this->Superclass::OnRotate();
+}
+
+//----------------------------------------------------------------------------
 void vtkSliceViewInteractorStyle::OnMouseWheelForward()
 {
   if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::MouseWheelForwardEvent))

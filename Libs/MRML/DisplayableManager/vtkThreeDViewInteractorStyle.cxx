@@ -534,6 +534,42 @@ void vtkThreeDViewInteractorStyle::OnLeave()
 }
 
 //----------------------------------------------------------------------------
+void vtkThreeDViewInteractorStyle::OnPinch()
+{
+  int pointer = this->Interactor->GetPointerIndex();
+
+  this->FindPokedRenderer(this->Interactor->GetEventPositions(pointer)[0],
+                          this->Interactor->GetEventPositions(pointer)[1]);
+
+  if ( this->CurrentRenderer == nullptr )
+    {
+    return;
+    }
+
+  this->GrabFocus(this->EventCallbackCommand);
+  this->StartDolly();
+  this->Dolly(this->Interactor->GetScale());
+  this->EndDolly();
+  this->ReleaseFocus();
+}
+
+//----------------------------------------------------------------------------
+void vtkThreeDViewInteractorStyle::OnRotate()
+{
+  if (this->CurrentRenderer == nullptr)
+    {
+  return;
+    }
+
+  vtkCamera *camera = this->CurrentRenderer->GetActiveCamera();
+  camera->Roll(-1.0*(this->Interactor->GetRotation() - this->Interactor->GetLastRotation()));
+  camera->OrthogonalizeViewUp();
+
+  this->Interactor->Render();
+  this->InvokeEvent(vtkCommand::RotateEvent);
+}
+
+//----------------------------------------------------------------------------
 void vtkThreeDViewInteractorStyle::OnMouseWheelForward()
 {
   this->FindPokedRenderer(this->Interactor->GetEventPosition()[0],
