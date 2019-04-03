@@ -64,6 +64,9 @@ public:
   void OnMouseWheelBackward() override;
   void OnPinch() override;
   void OnRotate() override;
+  void OnPan() override;
+  void OnTap() override;
+  void OnLongTap() override;
 
   /// Keyboard functions
   void OnChar() override;

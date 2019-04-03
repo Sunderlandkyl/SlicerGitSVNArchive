@@ -89,6 +89,15 @@ public:
   enum
     {
     WidgetEventTouchpadRotateSliceIntersection = WidgetEventUser,
+    WidgetEventTouchpadZoomSliceIntersection,
+    WidgetEventTouchpadPinchStart,
+    WidgetEventTouchpadPinch,
+    WidgetEventTouchpadPinchEnd,
+    WidgetEventTouchpadPanStart,
+    WidgetEventTouchpadPan,
+    WidgetEventTouchpadPanEnd,
+    WidgetEventTouchpadTap,
+    WidgetEventTouchpadLongTap,
     WidgetEventBlendStart,
     WidgetEventBlendEnd,
     WidgetEventToggleLabelOpacity,
@@ -176,6 +185,14 @@ protected:
   void ProcessAdjustWindowLevel(vtkMRMLInteractionEventData* eventData);
 
   bool ProcessZoomSlice(vtkMRMLInteractionEventData* eventData);
+
+  bool ProcessStartPinch(vtkMRMLInteractionEventData* eventData);
+  bool ProcessPinch(vtkMRMLInteractionEventData* eventData);
+  bool ProcessEndPinch(vtkMRMLInteractionEventData* eventData);
+
+  bool ProcessStartPan(vtkMRMLInteractionEventData* eventData);
+  bool ProcessPan(vtkMRMLInteractionEventData* eventData);
+  bool ProcessEndPan(vtkMRMLInteractionEventData* eventData);
 
   /// Rotate the message by the specified amount. Used for touchpad events.
   bool Rotate(double sliceRotationAngleRad);

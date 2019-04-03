@@ -256,6 +256,36 @@ void vtkSliceViewInteractorStyle::OnRotate()
 }
 
 //----------------------------------------------------------------------------
+void vtkSliceViewInteractorStyle::OnPan()
+{
+  if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::PanEvent))
+    {
+    return;
+    }
+  this->Superclass::OnPan();
+}
+
+//----------------------------------------------------------------------------
+void vtkSliceViewInteractorStyle::OnTap()
+{
+  if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::TapEvent))
+    {
+    return;
+    }
+  this->Superclass::OnTap();
+}
+
+//----------------------------------------------------------------------------
+void vtkSliceViewInteractorStyle::OnLongTap()
+{
+  if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::LongTapEvent))
+    {
+    return;
+    }
+  this->Superclass::OnLongTap();
+}
+
+//----------------------------------------------------------------------------
 void vtkSliceViewInteractorStyle::OnMouseWheelForward()
 {
   if (this->ForwardInteractionEventToDisplayableManagers(vtkCommand::MouseWheelForwardEvent))
