@@ -73,45 +73,53 @@ public:
     {
     WidgetStateFollowCursor = WidgetStateUser,
     WidgetStateSpin,
-    WidgetEventSpinStart,
-    WidgetEventSpinEnd,
+    WidgetStateTouchGesture,
     };
 
   /// Widget events
   enum
     {
-    WidgetCameraRotateToRight = WidgetEventUser,
-    WidgetCameraRotateToLeft,
-    WidgetCameraRotateToAnterior,
-    WidgetCameraRotateToPosterior,
-    WidgetCameraRotateToSuperior,
-    WidgetCameraRotateToInferior,
+    WidgetEventSpinStart = WidgetEventUser,
+    WidgetEventSpinEnd,
 
-    WidgetCameraTranslateForwardX,
-    WidgetCameraTranslateBackwardX,
-    WidgetCameraTranslateForwardY,
-    WidgetCameraTranslateBackwardY,
-    WidgetCameraTranslateForwardZ,
-    WidgetCameraTranslateBackwardZ,
+    WidgetEventCameraRotateToRight,
+    WidgetEventCameraRotateToLeft,
+    WidgetEventCameraRotateToAnterior,
+    WidgetEventCameraRotateToPosterior,
+    WidgetEventCameraRotateToSuperior,
+    WidgetEventCameraRotateToInferior,
 
-    WidgetCameraRotateCcwX,
-    WidgetCameraRotateCwX,
-    WidgetCameraRotateCcwY,
-    WidgetCameraRotateCwY,
-    WidgetCameraRotateCcwZ,
-    WidgetCameraRotateCwZ,
+    WidgetEventCameraTranslateForwardX,
+    WidgetEventCameraTranslateBackwardX,
+    WidgetEventCameraTranslateForwardY,
+    WidgetEventCameraTranslateBackwardY,
+    WidgetEventCameraTranslateForwardZ,
+    WidgetEventCameraTranslateBackwardZ,
 
-    WidgetCameraZoomIn,
-    WidgetCameraZoomOut,
-    WidgetCameraWheelZoomIn, // same as WidgetCameraZoomIn but with using wheel scaling factor
-    WidgetCameraWheelZoomOut,
+    WidgetEventCameraRotateCcwX,
+    WidgetEventCameraRotateCwX,
+    WidgetEventCameraRotateCcwY,
+    WidgetEventCameraRotateCwY,
+    WidgetEventCameraRotateCcwZ,
+    WidgetEventCameraRotateCwZ,
 
-    WidgetCameraReset,
-    WidgetCameraResetTranslation,
-    WidgetCameraResetRotation,
+    WidgetEventCameraZoomIn,
+    WidgetEventCameraZoomOut,
+    WidgetEventCameraWheelZoomIn, // same as WidgetEventCameraZoomIn but with using wheel scaling factor
+    WidgetEventCameraWheelZoomOut,
 
-    WidgetCameraRotate,
-    WidgetCameraPan,
+    WidgetEventCameraReset,
+    WidgetEventCameraResetTranslation,
+    WidgetEventCameraResetRotation,
+
+    WidgetEventCameraRotate,
+    WidgetEventCameraPan,
+
+    WidgetEventTouchGestureStart,
+    WidgetEventTouchGestureEnd,
+    WidgetEventTouchSpinCamera,
+    WidgetEventTouchPinchZoom,
+    WidgetEventTouchPanTranslate,
 
     WidgetEventSetCrosshairPosition,
     };
@@ -138,6 +146,12 @@ protected:
   bool ProcessSpin(vtkMRMLInteractionEventData* eventData);
   bool ProcessSetCrosshair(vtkMRMLInteractionEventData* eventData);
 
+  bool ProcessTouchGestureStart(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchGestureEnd(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchCameraSpin(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchCameraZoom(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchCameraTranslate(vtkMRMLInteractionEventData* eventData);
+
   bool Dolly(double factor);
   vtkCamera* GetCamera();
 
@@ -158,6 +172,7 @@ protected:
   /// This is used to require shift-up before returning to default mode.
   bool ModifierKeyPressedSinceLastMouseButtonRelease;
 
+  int GesturesInProgressCount;
 
 private:
   vtkMRMLCameraWidget(const vtkMRMLCameraWidget&) = delete;
