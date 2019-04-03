@@ -139,6 +139,7 @@ void vtkMRMLSliceIntersectionWidget::UpdateInteractionEventMapping()
     this->SetKeyboardEventTranslation(WidgetStateIdle, vtkEvent::NoModifier, 0, 0, "b", WidgetEventDecrementSlice);
     this->SetEventTranslation(WidgetStateIdle, vtkCommand::MouseWheelForwardEvent, vtkEvent::NoModifier, WidgetEventIncrementSlice);
     this->SetEventTranslation(WidgetStateIdle, vtkCommand::MouseWheelBackwardEvent, vtkEvent::NoModifier, WidgetEventDecrementSlice);
+    this->SetEventTranslation(WidgetStateIdle, vtkCommand::SwipeEvent, vtkEvent::NoModifier, WidgetEventTouchSwipe);
     }
   if (this->GetActionEnabled(ActionShowSlice))
     {
@@ -421,6 +422,16 @@ bool vtkMRMLSliceIntersectionWidget::ProcessInteractionEvent(vtkMRMLInteractionE
       this->CycleVolumeLayer(LayerForeground, 1);
       break;
 
+    case WidgetEventTouchSwipe:
+      if (eventData->GetRotation() >= 0 && eventData->GetRotation() <= 180)
+        {
+        this->IncrementSlice();
+        }
+      else
+        {
+        this->DecrementSlice();
+        }
+      break;
 
     default:
       processedEvent = false;
