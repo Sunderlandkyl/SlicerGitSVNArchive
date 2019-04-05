@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Site BuildName="(empty)"
+	BuildStamp="20181126-1922-Experimental"
+	Name="(empty)"
+	Generator="ctest-3.12.4"
+	CompilerName=""
+	CompilerVersion=""
+	OSName="Mac OS X"
+	Hostname="Cvppas-MacBook-Air.local"
+	OSRelease="10.12.6"
+	OSVersion="16G1618"
+	OSPlatform="x86_64"
+	Is64Bits="1"
+	VendorString="GenuineIntel"
+	VendorID="Intel Corporation"
+	FamilyID="6"
+	ModelID="61"
+	ProcessorCacheSize="32768"
+	NumberOfLogicalCPU="4"
+	NumberOfPhysicalCPU="2"
+	TotalVirtualMemory="1024"
+	TotalPhysicalMemory="8192"
+	LogicalProcessorsPerPhysical="8"
+	ProcessorClockFrequency="1800"
+	>
+	<Testing>
+		<StartDateTime>Nov 26 14:22 EST</StartDateTime>
+		<StartTestTime>1543260121</StartTestTime>
+		<TestList/>
+		<EndDateTime>Nov 26 14:22 EST</EndDateTime>
+		<EndTestTime>1543260121</EndTestTime>
+		<ElapsedMinutes>0</ElapsedMinutes>
+	</Testing>
+</Site>

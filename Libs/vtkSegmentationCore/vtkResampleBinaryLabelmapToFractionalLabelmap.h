@@ -53,9 +53,9 @@ public:
   virtual void SetOutput(vtkOrientedImageData* output);
 
 protected:
-  int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
-  virtual int FillOutputPortInformation(int, vtkInformation*);
-  virtual int FillInputPortInformation(int, vtkInformation*);
+  int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *) override;
+  virtual int FillOutputPortInformation(int, vtkInformation*) override;
+  virtual int FillInputPortInformation(int, vtkInformation*) override;
 
 private:
   int OversamplingFactor;
