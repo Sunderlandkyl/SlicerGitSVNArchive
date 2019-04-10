@@ -1,6 +1,7 @@
 import os
 import vtk, qt, ctk, slicer, math
 import logging
+import vtkAddon
 from SegmentEditorEffects import *
 
 class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
@@ -24,13 +25,13 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     import vtkITK
     self.autoThresholdCalculator = vtkITK.vtkITKImageThresholdCalculator()
 
-    self.imageToGPUImageFilter = vtk.vtkImageToGPUImageFilter()
+    self.imageToGPUImageFilter = vtkAddon.vtkImageToGPUImageFilter()
 
-    self.fractionalThresholdFilter = vtk.vtkGPUSimpleImageFilter()
+    self.fractionalThresholdFilter = vtkAddon.vtkGPUSimpleImageFilter()
     self.fractionalThresholdFilter.SetInputConnection(self.imageToGPUImageFilter.GetOutputPort())
     self.fractionalThresholdFilter.SetOutputScalarTypeToSignedChar()
 
-    self.gpuImageToImageFilter = vtk.vtkGPUImageToImageFilter()
+    self.gpuImageToImageFilter = vtkAddon.vtkGPUImageToImageFilter()
     self.gpuImageToImageFilter.SetInputConnection(self.fractionalThresholdFilter.GetOutputPort())
 
     self.castGPUImage = vtk.vtkImageShiftScale()

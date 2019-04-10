@@ -513,17 +513,17 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
           {
           if (constrainFractionalValues) // TODO
             {
-              vtkSmartPointer<vtkOrientedImageData> segmentLabelmap = vtkOrientedImageData::SafeDownCast(
-                segmentationNode->GetSegmentation()->GetSegmentRepresentation(*segmentIDIt,
-                  vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
-              vtkNew<vtkOrientedImageData> outputLabelmap;
-              outputLabelmap->DeepCopy(segmentLabelmap);
-              vtkFractionalOperations::VoxelContentsConstraintMask( modifierLabelmap, mergedLabelmap.GetPointer(), segmentLabelmap,
-                                                                    outputLabelmap.GetPointer(), effectiveExtent);
-              if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
-                outputLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_REPLACE, outputLabelmap->GetExtent()))
+            vtkSmartPointer<vtkOrientedImageData> segmentLabelmap = vtkOrientedImageData::SafeDownCast(
+              segmentationNode->GetSegmentation()->GetSegmentRepresentation(*segmentIDIt,
+                vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()));
+            vtkNew<vtkOrientedImageData> outputLabelmap;
+            outputLabelmap->DeepCopy(segmentLabelmap);
+            vtkFractionalOperations::VoxelContentsConstraintMask( modifierLabelmap, mergedLabelmap.GetPointer(), segmentLabelmap,
+                                                                  outputLabelmap.GetPointer(), effectiveExtent);
+            if (!vtkSlicerSegmentationsModuleLogic::SetFractionalLabelmapToSegment(
+              outputLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_REPLACE, outputLabelmap->GetExtent()))
               {
-                qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+              qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
               }
             }
           else

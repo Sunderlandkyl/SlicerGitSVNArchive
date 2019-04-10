@@ -72,6 +72,19 @@ set(vtkAddon_SRCS
   vtkStreamingVolumeCodecFactory.h
   vtkRawRGBVolumeCodec.cxx
   vtkRawRGBVolumeCodec.h
+  vtkRawRGBVolumeCodec.h
+  vtkGPUAbstractImageFilter.cxx
+  vtkGPUAbstractImageFilter.h
+  vtkGPUImageGaussianFilter.cxx
+  vtkGPUImageGaussianFilter.h
+  vtkGPUImageData.cxx
+  vtkGPUImageData.h
+  vtkGPUImageToImageFilter.cxx
+  vtkGPUImageToImageFilter.h
+  vtkGPUSimpleImageFilter.cxx
+  vtkGPUSimpleImageFilter.h
+  vtkImageToGPUImageFilter.cxx
+  vtkImageToGPUImageFilter.h
 )
 
 if(Slicer_VTK_RENDERING_USE_OpenGL2_BACKEND)
