@@ -75,6 +75,7 @@ public:
     WidgetStateSpin,
     WidgetEventSpinStart,
     WidgetEventSpinEnd,
+    WidgetStateTouchGesture,
     };
 
   /// Widget events
@@ -113,9 +114,11 @@ public:
     WidgetEventCameraRotate,
     WidgetEventCameraPan,
 
-    WidgetEventTouchpadSpinCamera,
-    WidgetEventTouchpadPinchZoom,
-    WidgetEventTouchpadPanTranslate,
+    WidgetEventTouchGestureStart,
+    WidgetEventTouchGestureEnd,
+    WidgetEventTouchSpinCamera,
+    WidgetEventTouchPinchZoom,
+    WidgetEventTouchPanTranslate,
 
     WidgetEventSetCrosshairPosition,
     };
@@ -142,9 +145,11 @@ protected:
   bool ProcessSpin(vtkMRMLInteractionEventData* eventData);
   bool ProcessSetCrosshair(vtkMRMLInteractionEventData* eventData);
 
-  bool ProcessTouchpadCameraSpin(vtkMRMLInteractionEventData* eventData);
-  bool ProcessTouchpadCameraZoom(vtkMRMLInteractionEventData* eventData);
-  bool ProcessTouchpadCameraTranslate(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchGestureStart(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchGestureEnd(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchCameraSpin(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchCameraZoom(vtkMRMLInteractionEventData* eventData);
+  bool ProcessTouchCameraTranslate(vtkMRMLInteractionEventData* eventData);
 
   bool Dolly(double factor);
   vtkCamera* GetCamera();
@@ -166,6 +171,7 @@ protected:
   /// This is used to require shift-up before returning to default mode.
   bool ModifierKeyPressedSinceLastMouseButtonRelease;
 
+  int GesturesInProgressCount;
 
 private:
   vtkMRMLCameraWidget(const vtkMRMLCameraWidget&) = delete;
