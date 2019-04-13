@@ -21,6 +21,7 @@
 #include "vtkCamera.h"
 #include "vtkEvent.h"
 #include "vtkInteractorStyle.h"
+#include "vtkPlane.h"
 #include "vtkRenderer.h"
 #include "vtkRenderWindow.h"
 #include "vtkRenderWindowInteractor.h"
@@ -728,33 +729,36 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraSpin(vtkMRMLInteractionEventData* ev
     {
     return false;
     }
-  //bool wasCameraNodeModified = this->CameraModifyStart();
-  return true;
-  double oldWorldPosition[3] = { 0,0,0 };
-  eventData->GetWorldPosition(oldWorldPosition);
+
+  bool wasCameraNodeModified = this->CameraModifyStart();
 
   int pinchPostionDisplay[2] = { 0,0 };
   eventData->GetDisplayPosition(pinchPostionDisplay);
 
+  double oldWorldPosition[4] = { 0,0,0,0 };
+  vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], pinchPostionDisplay[2], oldWorldPosition);
+
   camera->Roll(-1.0*(eventData->GetRotation() - eventData->GetLastRotation()));
   camera->OrthogonalizeViewUp();
-  //this->Dolly(eventData->GetScale());
 
-  double worldFocus[4];
-  camera->GetFocalPoint(worldFocus);
-
-  double newWorldPosition[4];
+  double newWorldPosition[4] = { 0,0,0,0 };
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], pinchPostionDisplay[2], newWorldPosition);
 
-  double deltaWorld[4];
-  vtkMath::Subtract(newWorldPosition, oldWorldPosition, deltaWorld);
+  vtkNew<vtkPlane> plane;
+  plane->SetOrigin(camera->GetFocalPoint());
+  plane->SetNormal(camera->GetViewPlaneNormal());
+  plane->ProjectPoint(newWorldPosition, newWorldPosition);
+  plane->ProjectPoint(oldWorldPosition, oldWorldPosition);
+
+  double deltaWorld[3] = { 0,0,0 };
+  vtkMath::Subtract(oldWorldPosition, newWorldPosition, deltaWorld);
 
   vtkNew<vtkTransform> deltaWorldTransform;
   deltaWorldTransform->Identity();
   deltaWorldTransform->Translate(deltaWorld);
   camera->ApplyTransform(deltaWorldTransform);
 
-  //this->CameraModifyEnd(wasCameraNodeModified, false, true);
+  this->CameraModifyEnd(wasCameraNodeModified, false, true);
   return true;
 }
 
@@ -773,19 +777,25 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraZoom(vtkMRMLInteractionEventData* ev
 
   bool wasCameraNodeModified = this->CameraModifyStart();
 
-  int pinchPostionDisplay[2] = { 0,0 };
+  int pinchPostionDisplay[3] = { 0,0,0 };
   eventData->GetDisplayPosition(pinchPostionDisplay);
 
-  double oldWorldPosition[4];
+  double oldWorldPosition[4] = { 0,0,0,0 };
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], pinchPostionDisplay[2], oldWorldPosition);
 
   this->Dolly(eventData->GetScale());
 
-  double newWorldPosition[4];
+  double newWorldPosition[4] = { 0,0,0,0 };
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], pinchPostionDisplay[2], newWorldPosition);
 
-  double deltaWorld[4];
-  vtkMath::Subtract(newWorldPosition, oldWorldPosition, deltaWorld);
+  vtkNew<vtkPlane> plane;
+  plane->SetOrigin(camera->GetFocalPoint());
+  plane->SetNormal(camera->GetViewPlaneNormal());
+  plane->ProjectPoint(newWorldPosition, newWorldPosition);
+  plane->ProjectPoint(oldWorldPosition, oldWorldPosition);
+
+  double deltaWorld[3] = { 0,0,0 };
+  vtkMath::Subtract(oldWorldPosition, newWorldPosition, deltaWorld);
 
   vtkNew<vtkTransform> deltaWorldTransform;
   deltaWorldTransform->Identity();
@@ -810,7 +820,6 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraTranslate(vtkMRMLInteractionEventDat
 
   double worldFocus[4];
   camera->GetFocalPoint(worldFocus);
-
   double viewFocus[4];
   vtkInteractorObserver::ComputeWorldToDisplay(this->Renderer, worldFocus[0], worldFocus[1], worldFocus[2], viewFocus);
 
