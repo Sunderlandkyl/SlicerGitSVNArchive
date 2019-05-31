@@ -59,6 +59,8 @@
 #include "vtkMRMLSubjectHierarchyNode.h"
 
 // VTK includes
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageShiftScale.h>
 #include <vtkImageThreshold.h>
@@ -71,8 +73,6 @@
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
 #include <vtkWeakPointer.h>
-#include <vtkDoubleArray.h>
-#include <vtkFieldData.h>
 
 #include <vtkOrientedImageDataResample.h>
 

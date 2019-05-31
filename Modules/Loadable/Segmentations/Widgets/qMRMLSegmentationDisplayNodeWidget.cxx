@@ -98,7 +98,7 @@ void qMRMLSegmentationDisplayNodeWidgetPrivate::init()
     q, SLOT(onRepresentation3DChanged(int)) );
   QObject::connect(this->comboBox_DisplayedRepresentation2D, SIGNAL(currentIndexChanged(int)),
     q, SLOT(onRepresentation2DChanged(int)) );
-    QObject::connect(this->comboBox_FractionalEdge, SIGNAL(currentIndexChanged(int)),
+  QObject::connect(this->comboBox_FractionalEdge, SIGNAL(currentIndexChanged(int)),
     q, SLOT(onFractionalEdgeChanged(int)));
 
   // Selected segment visibility and opacity settings
@@ -428,19 +428,14 @@ void qMRMLSegmentationDisplayNodeWidget::populateFractionalEdgeCombobox()
   }
 
   // Prevent selecting incrementally added representations thus changing MRML properties
-  d->comboBox_FractionalEdge->blockSignals(true);
+  bool wasBlocking = d->comboBox_FractionalEdge->blockSignals(true);
   d->comboBox_FractionalEdge->clear();
-
-  //TODO: add string function somewhere
   d->comboBox_FractionalEdge->addItem("Hard");
   d->comboBox_FractionalEdge->addItem("Smooth");
-
-  // Unblock signals
-  d->comboBox_FractionalEdge->blockSignals(false);
+  d->comboBox_FractionalEdge->blockSignals(wasBlocking);
 
   // Set selection from display node
   d->comboBox_FractionalEdge->setCurrentIndex(d->comboBox_FractionalEdge->findText(d->SegmentationDisplayNode->GetFractionalEdgeName()));
-
 }
 
 //-----------------------------------------------------------------------------

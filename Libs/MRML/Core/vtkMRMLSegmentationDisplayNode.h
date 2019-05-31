@@ -295,7 +295,7 @@ protected:
   /// otherwise the first poly data representation if any.
   char* PreferredDisplayRepresentationName3D;
 
-  /// TODO:
+  /// Name of the representation type that is used to display the fractional labelmap in the 2D views
   char* FractionalEdgeName;
 
   /// List of segment display properties for all segments in associated segmentation.

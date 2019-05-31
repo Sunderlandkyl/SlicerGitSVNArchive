@@ -22,13 +22,13 @@
 #include "qSlicerSegmentEditorAbstractLabelEffect.h"
 #include "qSlicerSegmentEditorAbstractLabelEffect_p.h"
 
+#include "vtkFractionalOperations.h"
 #include "vtkOrientedImageData.h"
 #include "vtkOrientedImageDataResample.h"
 #include "vtkMRMLSegmentationNode.h"
 #include "vtkMRMLSegmentEditorNode.h"
 #include "vtkSlicerSegmentationsModuleLogic.h"
 #include "vtkResampleBinaryLabelmapToFractionalLabelmap.h"
-#include "vtkFractionalOperations.h" //TODO
 
 // Qt includes
 #include <QDebug>
@@ -39,15 +39,15 @@
 #include "ctkRangeWidget.h"
 
 // VTK includes
-#include <vtkMatrix4x4.h>
-#include <vtkTransform.h>
+#include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageMask.h>
-#include <vtkImageThreshold.h>
-#include <vtkPolyData.h>
 #include <vtkImageMathematics.h>
-#include <vtkFieldData.h>
-#include <vtkDoubleArray.h>
+#include <vtkMatrix4x4.h>
+#include <vtkImageThreshold.h>
+#include <vtkTransform.h>
+#include <vtkPolyData.h>
 
 // Slicer includes
 #include "qMRMLSliceWidget.h"

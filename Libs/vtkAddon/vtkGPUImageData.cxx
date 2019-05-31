@@ -48,13 +48,64 @@ vtkGPUImageData::vtkGPUImageData()
 //----------------------------------------------------------------------------
 vtkGPUImageData::~vtkGPUImageData()
 {
+  this->SetTextureObject(nullptr);
 }
 
 //----------------------------------------------------------------------------
 void vtkGPUImageData::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
+  os << "Dimensions:" << std::endl;
+  os << indent;
+  for (int i = 0; i < 3; ++i)
+  {
+    if (i != 0)
+    {
+      os << ", ";
+    }
+    os << this->Dimensions[i];
+  }
+  os << std::endl;
 
+  os << "Extent:" << std::endl;
+  os << indent;
+  for (int i = 0; i < 6; ++i)
+  {
+    if (i != 0)
+    {
+      os << ", ";
+    }
+    os << this->Extent[i];
+  }
+  os << std::endl;
+
+  os << "Spacing:" << std::endl;
+  os << indent;
+  for (int i = 0; i < 3; ++i)
+  {
+    if (i != 0)
+    {
+      os << ", ";
+    }
+    os << this->Spacing[i];
+  }
+  os << std::endl;
+
+  os << "Origin:" << std::endl;
+  os << indent;
+  for (int i = 0; i < 3; ++i)
+  {
+    if (i != 0)
+    {
+      os << ", ";
+    }
+    os << this->Origin[i];
+  }
+  os << std::endl;
+
+  os << indent << this->Extent[0] << ", " << this->Extent[1] << ", " << this->Extent[2];
+  os << "TextureObject:" << std::endl;
+  os << indent << this->TextureObject << std::endl;
 }
 
 //----------------------------------------------------------------------------

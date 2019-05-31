@@ -178,7 +178,7 @@ If segments overlap, segment higher in the segments table will have priority. <b
     try:
 
       # Get master volume image data
-      import vtkSegmentationCorePython as vtkSegmentationCore
+      import vtkSegmentationCorePython
 
       # Get modifier labelmap
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()

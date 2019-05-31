@@ -20,6 +20,7 @@
 
 // Segmentations includes
 #include "vtkSlicerSegmentationsModuleLogic.h"
+#include <vtkGPUImageThresholdFilter.h>
 
 // SegmentationCore includes
 #include "vtkBinaryLabelmapToClosedSurfaceConversionRule.h"
@@ -30,10 +31,6 @@
 #include "vtkOrientedImageDataResample.h"
 #include "vtkSegmentationConverterFactory.h"
 #include "vtkFractionalOperations.h"
-
-// vtkAddon includes
-#include "vtkOpenGLShaderComputation.h"
-#include "vtkOpenGLTextureImage.h"
 
 // Terminologies includes
 #include "vtkSlicerTerminologiesModuleLogic.h"
@@ -71,6 +68,10 @@
 #include <vtkImageMask.h>
 #include <vtkImageShiftScale.h>
 #include <vtksys/RegularExpression.hxx>
+
+// vtkAddon includes
+#include <vtkImageToGPUImageFilter.h>
+#include <vtkGPUImageToImageFilter.h>
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -2566,108 +2567,20 @@ bool vtkSlicerSegmentationsModuleLogic::CreateFractionalThreshold(vtkOrientedIma
   int inputDimensions[3] = { 0, 0, 0 };
   inputImageData->GetDimensions(inputDimensions);
 
-  vtkSmartPointer<vtkOpenGLShaderComputation> shaderComputation = vtkSmartPointer<vtkOpenGLShaderComputation>::New();
+  vtkNew<vtkImageToGPUImageFilter> imageToGPUImageFilter;
+  imageToGPUImageFilter->SetInputDataObject(inputImageData);
 
-  std::stringstream vertexSource;
-  vertexSource << "#version 330" << std::endl;
-  vertexSource << "uniform float slice;" << std::endl;
-  vertexSource << "in vec3 vertexAttribute;" << std::endl;
-  vertexSource << "in vec2 textureCoordinateAttribute;" << std::endl;
-  vertexSource << "out vec3 interpolatedTextureCoordinate;" << std::endl;
-  vertexSource << "void main()" << std::endl;
-  vertexSource << "{" << std::endl;
-  vertexSource << "  interpolatedTextureCoordinate = vec3(textureCoordinateAttribute, slice + " << 0.5 / inputDimensions[2] << "); " << std::endl;
-  vertexSource << "  gl_Position = vec4(vertexAttribute, 1.);" << std::endl;
-  vertexSource << "}" << std::endl;
-  shaderComputation->SetVertexShaderSource(vertexSource.str().c_str());
+  vtkNew<vtkGPUImageThresholdFilter> fractionalThresholdFilter;
+  fractionalThresholdFilter->SetInputConnection(imageToGPUImageFilter->GetOutputPort());
+  fractionalThresholdFilter->SetOversamplingFactor(6);
+  fractionalThresholdFilter->SetOutputScalarTypeToSignedChar();
 
-  std::stringstream fragmentSource;
-  fragmentSource << "#version 330" << std::endl;
-  fragmentSource << "uniform float slice;" << std::endl;
-  fragmentSource << "uniform sampler3D textureUnit0;" << std::endl;
-  fragmentSource << "in vec3 interpolatedTextureCoordinate;" << std::endl;
-  fragmentSource << "out vec4 fragColor;" << std::endl;
-  fragmentSource << "void main()" << std::endl;
-  fragmentSource << "{" << std::endl;
-  fragmentSource << "float oversamplingFactor = " << oversamplingFactor << ";" << std::endl;
-  fragmentSource << "// Can't have an oversampling factor that is less than zero." << std::endl;
-  fragmentSource << "if ( oversamplingFactor > 0.0)" << std::endl;
-  fragmentSource << "{" << std::endl;
-  fragmentSource << "  vec3 resolution = vec3("<< inputDimensions[0] <<","<< inputDimensions[1] <<","<< inputDimensions[2] <<");" << std::endl;
-  fragmentSource << "  float offsetStart = -(oversamplingFactor - 1.) / (2. * oversamplingFactor);" << std::endl;
-  fragmentSource << "  float stepSize = 1. / oversamplingFactor;" << std::endl;
-  fragmentSource << "  float sum = 0.;" << std::endl;
-  fragmentSource << "  // Iterate over 216 offset points." << std::endl;
-  fragmentSource << "  for (int k = 0; k < oversamplingFactor; ++k)" << std::endl;
-  fragmentSource << "  {" << std::endl;
-  fragmentSource << "      for (int j = 0; j < oversamplingFactor; ++j)" << std::endl;
-  fragmentSource << "      {" << std::endl;
-  fragmentSource << "        for (int i = 0; i < oversamplingFactor; ++i)" << std::endl;
-  fragmentSource << "        {" << std::endl;
-  fragmentSource << "          // Calculate the current offset." << std::endl;
-  fragmentSource << "          vec3 offset = vec3(" << std::endl;
-  fragmentSource << "                      (offsetStart + stepSize*i) / (resolution.x)," << std::endl;
-  fragmentSource << "                      (offsetStart + stepSize*j) / (resolution.y)," << std::endl;
-  fragmentSource << "                      (offsetStart + stepSize*k) / (resolution.z));" << std::endl;
-  fragmentSource << "          vec3 offsetTextureCoordinate = interpolatedTextureCoordinate + offset;" << std::endl;
-  fragmentSource << "          // If the value of the interpolated offset pixel is greater than the threshold, then" << std::endl;
-  fragmentSource << "          // increment the fractional sum." << std::endl;
-  fragmentSource << "          vec4 referenceSample = texture(textureUnit0, offsetTextureCoordinate);" << std::endl;
-  fragmentSource << "          if (referenceSample.r >= " << scale*(thresholdRange[0] - low) / VTK_UNSIGNED_SHORT_MAX;
-  fragmentSource << " && referenceSample.r <= " << scale*(thresholdRange[1] - low) / VTK_UNSIGNED_SHORT_MAX << ")" << std::endl;
-  fragmentSource << "          {" << std::endl;
-  fragmentSource << "            ++sum;" << std::endl;
-  fragmentSource << "          }" << std::endl;
-  fragmentSource << "        }" << std::endl;
-  fragmentSource << "      }" << std::endl;
-  fragmentSource << "    }" << std::endl;
-  fragmentSource << "    // Calculate the fractional value of the pixel." << std::endl;
-  fragmentSource << "    fragColor = vec4(vec3(sum / pow(oversamplingFactor, 3.)), 1.0);" << std::endl;
-  fragmentSource << "  }" << std::endl;
-  fragmentSource << "  else" << std::endl;
-  fragmentSource << "  {" << std::endl;
-  fragmentSource << "    fragColor = vec4(0.);" << std::endl;
-  fragmentSource << "  }" << std::endl;
-  fragmentSource << "}" << std::endl;
-  shaderComputation->SetFragmentShaderSource(fragmentSource.str().c_str());
+  vtkNew<vtkGPUImageToImageFilter> gpuImageToImageFilter;
+  gpuImageToImageFilter->SetInputConnection(fractionalThresholdFilter->GetOutputPort());
 
-
-  vtkSmartPointer<vtkOrientedImageData> outputImage = vtkSmartPointer<vtkOrientedImageData>::New();
-  outputImage->SetExtent(inputImageData->GetExtent());
-  outputImage->AllocateScalars(shiftScale->GetOutput()->GetScalarType(), 1);
-
-  vtkSmartPointer<vtkOpenGLTextureImage> targetTextureImage = vtkSmartPointer<vtkOpenGLTextureImage>::New();
-  targetTextureImage->SetImageData(outputImage);
-  targetTextureImage->SetInterpolate(true);
-  targetTextureImage->SetShaderComputation(shaderComputation);
-
-  vtkSmartPointer<vtkOrientedImageData> shiftedInput = vtkSmartPointer<vtkOrientedImageData>::New();
-  shiftedInput->DeepCopy(shiftScale->GetOutput());
-
-  vtkSmartPointer<vtkOpenGLTextureImage> inputTextureImage = vtkSmartPointer<vtkOpenGLTextureImage>::New();
-  inputTextureImage->SetImageData(shiftedInput);
-  inputTextureImage->SetInterpolate(true);
-  inputTextureImage->SetShaderComputation(shaderComputation);
-  inputTextureImage->Activate(1);
-
-  for (float slice = 0; slice < inputDimensions[2]; ++slice)
-    {
-    targetTextureImage->AttachAsDrawTarget(0, slice);
-    shaderComputation->Compute(slice / inputDimensions[2]);
-    }
-  targetTextureImage->ReadBack();
-
-  vtkNew<vtkImageShiftScale> imageScale;
-  imageScale->SetScale(216. / VTK_UNSIGNED_SHORT_MAX);
-  imageScale->SetInputData(outputImage);
-  imageScale->SetOutputScalarTypeToUnsignedChar();
-  imageScale->ClampOverflowOn();
   vtkNew<vtkImageShiftScale> imageShift;
-  imageShift->SetInputConnection(imageScale->GetOutputPort());
-  imageShift->SetShift(-108);
   imageShift->SetOutputScalarTypeToChar();
-  imageShift->ClampOverflowOn();
-  imageShift->Update();
+  imageShift->SetInputConnection(gpuImageToImageFilter->GetOutputPort());
 
   outputImageData->DeepCopy(imageShift->GetOutput());
   outputImageData->CopyDirections(inputImageData);
