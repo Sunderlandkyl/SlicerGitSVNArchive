@@ -26,12 +26,14 @@
 
 #include "qSlicerSegmentEditorAbstractLabelEffect.h"
 
+// VTK includes
+#include <vtkNew.h>
+
 class qSlicerSegmentEditorPaintEffectPrivate;
 class vtkPolyData;
 class vtkImageToGPUImage;
 class vtkGPUSimpleImageFilter;
 class vtkGPUImageToImageFilter;
-#include <vtkNew.h>
 
 /// \ingroup SlicerRt_QtModules_Segmentations
 class Q_SLICER_SEGMENTATIONS_EFFECTS_EXPORT qSlicerSegmentEditorPaintEffect :
@@ -115,8 +117,8 @@ protected:
 protected:
   QScopedPointer<qSlicerSegmentEditorPaintEffectPrivate> d_ptr;
 
-  vtkNew<vtkGPUSimpleImageFilter> fractionalPaintGPUFilter;
-  vtkNew<vtkGPUImageToImageFilter> gpuImageToImageFilter;
+  vtkNew<vtkGPUSimpleImageFilter> m_FractionalPaintGPUFilter;
+  vtkNew<vtkGPUImageToImageFilter> m_GPUImageToImageFilter;
 
 private:
   Q_DECLARE_PRIVATE(qSlicerSegmentEditorPaintEffect);

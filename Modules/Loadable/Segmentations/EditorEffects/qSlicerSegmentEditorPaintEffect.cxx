@@ -654,9 +654,9 @@ gl_FragData[0] = vec4(vec3(sum), 1.0);
 }
 )";
 
-  q->fractionalPaintGPUFilter->GetShaderProperty()->SetFragmentShaderCode(fragmentSource.c_str());
-  q->fractionalPaintGPUFilter->SetOutputScalarTypeToSignedChar();
-  q->gpuImageToImageFilter->SetInputConnection(q->fractionalPaintGPUFilter->GetOutputPort());
+  q->m_FractionalPaintGPUFilter->GetShaderProperty()->SetFragmentShaderCode(fragmentSource.c_str());
+  q->m_FractionalPaintGPUFilter->SetOutputScalarTypeToSignedChar();
+  q->m_GPUImageToImageFilter->SetInputConnection(q->m_FractionalPaintGPUFilter->GetOutputPort());
 
   vtkIdType numberOfPoints = this->PaintCoordinates_World->GetNumberOfPoints();
   int updateExtent[6] = { 0, -1, 0, -1, 0, -1 };
@@ -723,17 +723,17 @@ gl_FragData[0] = vec4(vec3(sum), 1.0);
       sliceSpacing = qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget);
       }
 
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformMatrix4x4("matTexToRAS", texToRas);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformi("useCylinderBrush", useCylinderBrush);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformf("brushRadiusMm", radiusMm);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformf("oversamplingFactor", 6.0);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformf("sliceSpacing", sliceSpacing);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("brushCenterRAS", currentPoint);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("xAxisSlice", xAxisSlice);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("yAxisSlice", yAxisSlice);
-    q->fractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("zAxisSlice", zAxisSlice);
-    q->fractionalPaintGPUFilter->SetOutputExtent(brushExtent);
-    q->gpuImageToImageFilter->Update();
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformMatrix4x4("matTexToRAS", texToRas);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformi("useCylinderBrush", useCylinderBrush);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformf("brushRadiusMm", radiusMm);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformf("oversamplingFactor", 6.0);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniformf("sliceSpacing", sliceSpacing);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("brushCenterRAS", currentPoint);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("xAxisSlice", xAxisSlice);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("yAxisSlice", yAxisSlice);
+    q->m_FractionalPaintGPUFilter->GetShaderProperty()->GetFragmentCustomUniforms()->SetUniform3f("zAxisSlice", zAxisSlice);
+    q->m_FractionalPaintGPUFilter->SetOutputExtent(brushExtent);
+    q->m_GPUImageToImageFilter->Update();
 
     vtkSmartPointer<vtkOrientedImageData> orientedBrushPositionerOutput = vtkSmartPointer<vtkOrientedImageData>::New();
     if (pointIndex == 0)
@@ -754,7 +754,7 @@ gl_FragData[0] = vec4(vec3(sum), 1.0);
           }
         }
       }
-    orientedBrushPositionerOutput->DeepCopy(q->gpuImageToImageFilter->GetOutput());
+    orientedBrushPositionerOutput->DeepCopy(q->m_GPUImageToImageFilter->GetOutput());
     orientedBrushPositionerOutput->SetImageToWorldMatrix(imageToWorldMatrix);
 
     vtkOrientedImageDataResample::ModifyImage(modifierLabelmap, orientedBrushPositionerOutput, vtkOrientedImageDataResample::OPERATION_MAXIMUM, NULL, 0,
