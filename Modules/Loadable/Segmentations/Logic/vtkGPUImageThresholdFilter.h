@@ -22,7 +22,7 @@
 #ifndef vtkGPUImageThresholdFilter_h
 #define vtkGPUImageThresholdFilter_h
 
-#include "vtkRenderingOpenGL2Module.h" // For export macro
+#include "vtkSlicerSegmentationsModuleLogicExport.h" // For export macro
 #include "vtkGPUAbstractImageFilter.h"
 
 class VTK_SLICER_SEGMENTATIONS_LOGIC_EXPORT vtkGPUImageThresholdFilter : public vtkGPUAbstractImageFilter
@@ -45,6 +45,8 @@ public:
 protected:
   vtkGPUImageThresholdFilter();
   ~vtkGPUImageThresholdFilter() VTK_OVERRIDE;
+
+  void UpdateCustomUniformsFragment() override;
 
 private:
   vtkGPUImageThresholdFilter(const vtkGPUImageThresholdFilter&) = delete;

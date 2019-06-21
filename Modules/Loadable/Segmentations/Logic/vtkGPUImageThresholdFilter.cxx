@@ -16,10 +16,11 @@
 #include "vtkGPUImageThresholdFilter.h"
 #include "vtkObjectFactory.h"
 #include "vtkOpenGLShaderProperty.h"
+#include "vtkUniforms.h"
 
 vtkStandardNewMacro(vtkGPUImageThresholdFilter);
 
-// ----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
 vtkGPUImageThresholdFilter::vtkGPUImageThresholdFilter()
 {
   // Fragment shader adapted from https://www.shadertoy.com/view/XdfGDH
@@ -78,12 +79,21 @@ if (oversamplingFactor > 0.0)
 )");
 }
 
-// ----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+void vtkGPUImageThresholdFilter::UpdateCustomUniformsFragment()
+{
+  vtkUniforms* fragmentUniforms = this->ShaderProperty->GetFragmentCustomUniforms();
+  fragmentUniforms->SetUniformi("OversamplingFactor", this->OversamplingFactor);
+  fragmentUniforms->SetUniformf("MaxThreshold", this->MaxThreshold);
+  fragmentUniforms->SetUniformf("MinThreshold", this->MinThreshold);
+}
+
+//----------------------------------------------------------------------------
 vtkGPUImageThresholdFilter::~vtkGPUImageThresholdFilter()
 {
 }
 
-// ----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
 void vtkGPUImageThresholdFilter::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os,indent);
