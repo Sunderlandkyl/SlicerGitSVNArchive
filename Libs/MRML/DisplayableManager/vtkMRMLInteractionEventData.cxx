@@ -264,7 +264,9 @@ void vtkMRMLInteractionEventData::SetAttributesFromInteractor(vtkRenderWindowInt
   this->LastRotation = interactor->GetLastRotation();
 
   this->Scale = interactor->GetScale();
+  this->LastScale = interactor->GetLastScale();
   this->SetTranslation(interactor->GetTranslation());
+  this->SetLastTranslation(interactor->GetLastTranslation());
 }
 
 //---------------------------------------------------------------------------
@@ -366,6 +368,18 @@ double vtkMRMLInteractionEventData::GetScale() const
 }
 
 //---------------------------------------------------------------------------
+void vtkMRMLInteractionEventData::SetLastScale(double lastScale)
+{
+  this->LastScale = lastScale;
+}
+
+//---------------------------------------------------------------------------
+double vtkMRMLInteractionEventData::GetLastScale() const
+{
+  return this->LastScale;
+}
+
+//---------------------------------------------------------------------------
 void vtkMRMLInteractionEventData::SetTranslation(const double translation[2])
 {
   this->Translation[0] = translation[0];
@@ -376,4 +390,17 @@ void vtkMRMLInteractionEventData::SetTranslation(const double translation[2])
 const double* vtkMRMLInteractionEventData::GetTranslation() const
 {
   return this->Translation;
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLInteractionEventData::SetLastTranslation(const double lastTranslation[2])
+{
+  this->LastTranslation[0] = lastTranslation[0];
+  this->LastTranslation[1] = lastTranslation[1];
+}
+
+//---------------------------------------------------------------------------
+const double* vtkMRMLInteractionEventData::GetLastTranslation() const
+{
+  return this->LastTranslation;
 }

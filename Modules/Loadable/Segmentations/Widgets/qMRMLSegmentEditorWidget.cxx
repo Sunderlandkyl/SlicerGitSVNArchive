@@ -61,6 +61,7 @@
 #include <vtkRenderWindow.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
+#include <vtkTimerLog.h>
 #include <vtkWeakPointer.h>
 
 // Slicer includes
@@ -290,6 +291,8 @@ public:
 
   QAction* SurfaceSmoothingEnabledAction;
   ctkSliderWidget* SurfaceSmoothingSlider;
+
+  bool TabletModeEnabled;
 };
 
 //-----------------------------------------------------------------------------
@@ -311,6 +314,7 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   , MaskModeComboBoxFixedItemsCount(0)
   , EffectButtonStyle(Qt::ToolButtonTextUnderIcon)
   , RotateWarningInNodeSelectorLayout(true)
+  , TabletModeEnabled(false)
 {
   this->AlignedMasterVolume = vtkOrientedImageData::New();
   this->ModifierLabelmap = vtkOrientedImageData::New();
@@ -2533,6 +2537,12 @@ void qMRMLSegmentEditorWidget::setupViewObservations()
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::KeyReleaseEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EnterEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::LeaveEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletEnterProximityEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletLeaveProximityEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletMoveEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletPressEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletReleaseEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletTrackingChangeEvent, interactorObservation.CallbackCommand, 1.0);
     d->EventObservations << interactorObservation;
 
     // Slice node observation
@@ -2723,6 +2733,48 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
   vtkMRMLAbstractViewNode* callerViewNode = vtkMRMLAbstractViewNode::SafeDownCast(caller);
   if (callerInteractor)
     {
+
+    //if (self->d_func()->TabletModeEnabled)
+    //{
+      switch (eid)
+        {
+        case vtkCommand::TabletPressEvent:
+          eid = vtkCommand::LeftButtonPressEvent;
+          break;
+        case vtkCommand::TabletMoveEvent:
+          static double lastTouchTime = vtkTimerLog::GetUniversalTime();
+          eid = 0;
+          if (lastTouchTime < vtkTimerLog::GetUniversalTime() - 0.05)
+          {
+            lastTouchTime = vtkTimerLog::GetUniversalTime();
+            eid = vtkCommand::MouseMoveEvent;
+          }
+          break;
+        case vtkCommand::TabletReleaseEvent:
+          eid = vtkCommand::LeftButtonReleaseEvent;
+          break;
+        case vtkCommand::KeyPressEvent:
+          if (callerInteractor->GetKeySym())
+          {
+            if (strcmp(callerInteractor->GetKeySym(), "Meta") == 0)
+            {
+              self->setActiveEffect(self->d_func()->LastActiveEffect);
+            }
+            else if (strcmp(callerInteractor->GetKeySym(), "F20") == 0)
+            {
+              self->setActiveEffect(self->d_func()->LastActiveEffect);
+            }
+          }
+          break;
+        case vtkCommand::MouseMoveEvent:
+        case vtkCommand::LeftButtonPressEvent:
+        case vtkCommand::LeftButtonReleaseEvent:
+        case vtkCommand::RightButtonPressEvent:
+        case vtkCommand::RightButtonReleaseEvent:
+          eid = 0;
+        }
+    //}
+
     bool abortEvent = activeEffect->processInteractionEvents(callerInteractor, eid, viewWidget);
     if (abortEvent)
       {
@@ -2996,6 +3048,12 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut);
   toggleActiveEffectShortcut->setProperty("effectIndex", -1);
   QObject::connect(toggleActiveEffectShortcut, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
+
+  // Space => activate/deactivate last effect
+  QShortcut* toggleActiveEffectShortcut2 = new QShortcut(QKeySequence(Qt::Key_Meta + Qt::Key_F20), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut2);
+  toggleActiveEffectShortcut2->setProperty("effectIndex", -1);
+  QObject::connect(toggleActiveEffectShortcut2, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
 
   // z, y => undo, redo
   QShortcut* undoShortcut = new QShortcut(QKeySequence(Qt::Key_Z), parent);

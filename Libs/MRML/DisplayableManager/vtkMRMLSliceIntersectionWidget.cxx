@@ -74,6 +74,18 @@ vtkMRMLSliceIntersectionWidget::vtkMRMLSliceIntersectionWidget()
 
   this->ModifierKeyPressedSinceLastMouseButtonRelease = true;
 
+  this->TouchRotationThreshold = 10.0;
+  this->TouchZoomThreshold = 0.1;
+  this->TouchTranslationThreshold = 25.0;
+
+  this->TotalTouchRotation = 0.0;
+  this->TouchRotateEnabled = false;
+  this->TotalTouchZoom = 0.0;
+  this->TouchZoomEnabled = false;
+  this->TotalTouchTranslation = 0.0;
+  this->TouchTranslationEnabled = false;
+
+
   this->SliceLogicsModifiedCommand->SetClientData(this);
   this->SliceLogicsModifiedCommand->SetCallback(vtkMRMLSliceIntersectionWidget::SliceLogicsModifiedCallback);
 
@@ -128,8 +140,9 @@ void vtkMRMLSliceIntersectionWidget::UpdateInteractionEventMapping()
     this->SetKeyboardEventTranslation(WidgetStateIdle, vtkEvent::NoModifier, 0, 0, "b", WidgetEventDecrementSlice);
     this->SetEventTranslation(WidgetStateIdle, vtkCommand::MouseWheelForwardEvent, vtkEvent::NoModifier, WidgetEventIncrementSlice);
     this->SetEventTranslation(WidgetStateIdle, vtkCommand::MouseWheelBackwardEvent, vtkEvent::NoModifier, WidgetEventDecrementSlice);
+    this->SetEventTranslation(WidgetStateIdle, vtkCommand::SwipeEvent, vtkEvent::NoModifier, WidgetEventTouchSwipe);
     }
-  if (this->GetActionEnabled(ActionShowSlice))
+    if (this->GetActionEnabled(ActionShowSlice))
     {
     this->SetKeyboardEventTranslation(WidgetStateIdle, vtkEvent::NoModifier, 0, 0, "v", WidgetEventToggleSliceVisibility);
     this->SetKeyboardEventTranslation(WidgetStateIdle, vtkEvent::AnyModifier, 0, 0, "V", WidgetEventToggleAllSlicesVisibility);
@@ -410,7 +423,16 @@ bool vtkMRMLSliceIntersectionWidget::ProcessInteractionEvent(vtkMRMLInteractionE
       this->CycleVolumeLayer(LayerForeground, 1);
       break;
 
-
+    case WidgetEventTouchSwipe:
+      if (eventData->GetRotation() >= 0 && eventData->GetRotation() <= 180)
+        {
+        this->IncrementSlice();
+        }
+      else
+        {
+        this->DecrementSlice();
+        }
+      break;
     default:
       processedEvent = false;
     }
@@ -500,7 +522,6 @@ bool vtkMRMLSliceIntersectionWidget::ProcessEndMouseDrag(vtkMRMLInteractionEvent
 //-------------------------------------------------------------------------
 bool vtkMRMLSliceIntersectionWidget::ProcessTouchGestureStart(vtkMRMLInteractionEventData* eventData)
 {
-  this->GesturesInProgressCount++;
   this->SetWidgetState(WidgetStateTouchGesture);
   return true;
 }
@@ -508,45 +529,62 @@ bool vtkMRMLSliceIntersectionWidget::ProcessTouchGestureStart(vtkMRMLInteraction
 //-------------------------------------------------------------------------
 bool vtkMRMLSliceIntersectionWidget::ProcessTouchGestureEnd(vtkMRMLInteractionEventData* eventData)
 {
-  if (this->GesturesInProgressCount > 0)
-  {
-    this->GesturesInProgressCount--;
-  }
-  if (this->GesturesInProgressCount <= 0)
-  {
-    this->SetWidgetState(WidgetStateIdle);
-  }
+  this->TotalTouchRotation = 0.0;
+  this->TouchRotateEnabled = false;
+  this->TotalTouchZoom = 0.0;
+  this->TouchZoomEnabled = false;
+  this->TotalTouchTranslation = 0.0;
+  this->TouchTranslationEnabled = false;
+  this->SetWidgetState(WidgetStateIdle);
   return true;
 }
 
 //-------------------------------------------------------------------------
 bool vtkMRMLSliceIntersectionWidget::ProcessTouchRotate(vtkMRMLInteractionEventData* eventData)
 {
-  this->Rotate(-1.0*vtkMath::RadiansFromDegrees(eventData->GetRotation() - eventData->GetLastRotation()));
+  this->TotalTouchRotation += eventData->GetRotation() - eventData->GetLastRotation();
+  if (this->TouchRotateEnabled || std::abs(this->TotalTouchRotation) >= this->TouchRotationThreshold)
+    {
+    this->Rotate(vtkMath::RadiansFromDegrees(eventData->GetRotation() - eventData->GetLastRotation()));
+    this->TouchRotateEnabled = true;
+    }
   return true;
 }
 
 //-------------------------------------------------------------------------
 bool vtkMRMLSliceIntersectionWidget::ProcessTouchZoom(vtkMRMLInteractionEventData* eventData)
 {
-  this->ScaleZoom(1.0/eventData->GetScale(), eventData);
+  this->TotalTouchZoom += eventData->GetLastScale() / eventData->GetScale();
+  if (this->TouchZoomEnabled || std::abs(this->TotalTouchZoom - 1.0) > this->TouchZoomThreshold)
+    {
+    this->ScaleZoom(eventData->GetLastScale() / eventData->GetScale(), eventData);
+    this->TouchZoomEnabled = true;
+    }
   return true;
 }
 
 //-------------------------------------------------------------------------
 bool vtkMRMLSliceIntersectionWidget::ProcessTouchTranslate(vtkMRMLInteractionEventData* eventData)
 {
-  vtkMRMLSliceNode *sliceNode = this->SliceLogic->GetSliceNode();
+  vtkMRMLSliceNode* sliceNode = this->SliceLogic->GetSliceNode();
 
   vtkMatrix4x4* xyToSlice = sliceNode->GetXYToSlice();
-  const double* delta = eventData->GetTranslation();
+  const double* translate = eventData->GetTranslation();
+  double translation[2] = {
+    xyToSlice->GetElement(0, 0) * translate[0],
+    xyToSlice->GetElement(1, 1) * translate[1]
+  };
 
-  double deltaX = xyToSlice->GetElement(0, 0)*(delta[0]);
-  double deltaY = xyToSlice->GetElement(1, 1)*(delta[1]);
 
-  double sliceOrigin[3];
-  sliceNode->GetXYZOrigin(sliceOrigin);
-  sliceNode->SetSliceOrigin(sliceOrigin[0] - deltaX, sliceOrigin[1] - deltaY, 0);
+  this->TotalTouchTranslation += vtkMath::Norm2D(translate);
+
+  if (this->TouchTranslationEnabled || this->TotalTouchTranslation >= this->TouchTranslationThreshold)
+    {
+    double sliceOrigin[3];
+    sliceNode->GetXYZOrigin(sliceOrigin);
+    sliceNode->SetSliceOrigin(sliceOrigin[0] - translation[0], sliceOrigin[1] - translation[1], 0);
+    this->TouchTranslationEnabled = true;
+    }
 
   return true;
 }

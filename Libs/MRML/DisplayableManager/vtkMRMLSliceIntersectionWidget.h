@@ -113,6 +113,7 @@ public:
     WidgetEventZoomSliceStart,
     WidgetEventZoomSliceEnd,
     WidgetEventSetCrosshairPosition,
+    WidgetEventTouchSwipe
     };
 
   /// Action State values and management
@@ -249,6 +250,15 @@ protected:
   int ActionsEnabled;
 
   int GesturesInProgressCount;
+  double TouchRotationThreshold;
+  double TouchTranslationThreshold;
+  double TouchZoomThreshold;
+  double TotalTouchRotation;
+  bool TouchRotateEnabled;
+  double TotalTouchTranslation;
+  bool TouchTranslationEnabled;
+  double TotalTouchZoom;
+  bool TouchZoomEnabled;
 
 private:
   vtkMRMLSliceIntersectionWidget(const vtkMRMLSliceIntersectionWidget&) = delete;

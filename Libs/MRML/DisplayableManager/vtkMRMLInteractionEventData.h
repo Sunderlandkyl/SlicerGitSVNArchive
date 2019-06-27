@@ -93,9 +93,13 @@ public:
 
   void SetScale(double scale);
   double GetScale() const;
+  void SetLastScale(double scale);
+  double GetLastScale() const;
 
   void SetTranslation(const double translation[2]);
   const double *GetTranslation() const;
+  void SetLastTranslation(const double translation[2]);
+  const double* GetLastTranslation() const;
 
   /// Set Modifiers and Key... attributes from interactor
   void SetAttributesFromInteractor(vtkRenderWindowInteractor* interactor);
@@ -129,7 +133,9 @@ protected:
   double Rotation;
   double LastRotation;
   double Scale;
+  double LastScale;
   double Translation[2];
+  double LastTranslation[2];
 
   bool Equivalent(const vtkEventData *e) const override;
 

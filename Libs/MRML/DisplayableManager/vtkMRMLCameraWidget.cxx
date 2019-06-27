@@ -766,7 +766,7 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraSpin(vtkMRMLInteractionEventData* ev
   double oldWorldPosition[4] = { 0,0,0,0 };
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], 0, oldWorldPosition);
 
-  camera->Roll(-1.0*(eventData->GetRotation() - eventData->GetLastRotation()));
+  camera->Roll(eventData->GetRotation() - eventData->GetLastRotation());
   camera->OrthogonalizeViewUp();
 
   double newWorldPosition[4] = { 0,0,0,0 };
@@ -808,11 +808,15 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraZoom(vtkMRMLInteractionEventData* ev
   int pinchPostionDisplay[3] = { 0,0,0 };
   eventData->GetDisplayPosition(pinchPostionDisplay);
 
+  // Remember the position of the center of the pinch in world coordinates
+  // This position should stay in the same location on the screen after the dolly has been performed
   double oldWorldPosition[4] = { 0,0,0,0 };
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], pinchPostionDisplay[2], oldWorldPosition);
 
-  this->Dolly(eventData->GetScale());
+  // Perform the zoom
+  this->Dolly(eventData->GetScale() / eventData->GetLastScale());
 
+  // New position at the center of the pinch gesture
   double newWorldPosition[4] = { 0,0,0,0 };
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, pinchPostionDisplay[0], pinchPostionDisplay[1], pinchPostionDisplay[2], newWorldPosition);
 
@@ -822,9 +826,11 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraZoom(vtkMRMLInteractionEventData* ev
   plane->ProjectPoint(newWorldPosition, newWorldPosition);
   plane->ProjectPoint(oldWorldPosition, oldWorldPosition);
 
+  // Determine how far the pinch center has been shifted from it's original location
   double deltaWorld[3] = { 0,0,0 };
   vtkMath::Subtract(oldWorldPosition, newWorldPosition, deltaWorld);
 
+  // Translate the camera to compensate for the shift of the pinch center
   vtkNew<vtkTransform> deltaWorldTransform;
   deltaWorldTransform->Identity();
   deltaWorldTransform->Translate(deltaWorld);
@@ -849,11 +855,18 @@ bool vtkMRMLCameraWidget::ProcessTouchCameraTranslate(vtkMRMLInteractionEventDat
   double worldFocus[4];
   camera->GetFocalPoint(worldFocus);
   double viewFocus[4];
-  vtkInteractorObserver::ComputeWorldToDisplay(this->Renderer, worldFocus[0], worldFocus[1], worldFocus[2], viewFocus);
+  vtkInteractorObserver::ComputeWorldToDisplay(this->Renderer,
+                                               worldFocus[0],
+                                               worldFocus[1],
+                                               worldFocus[2],
+                                               viewFocus);
 
   double newWorldFocus[4];
   vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer,
-    viewFocus[0] + deltaView[0], viewFocus[1] + deltaView[1], viewFocus[2] + deltaView[2], newWorldFocus);
+                                               viewFocus[0] + deltaView[0],
+                                               viewFocus[1] + deltaView[1],
+                                               viewFocus[2] + deltaView[2],
+                                               newWorldFocus);
 
   double deltaWorld[4];
   vtkMath::Subtract(newWorldFocus, worldFocus, deltaWorld);
