@@ -12,6 +12,7 @@ set(SegmentEditorEffects_PYTHON_SCRIPTS
   SegmentEditorDrawEffect
   SegmentEditorFillBetweenSlicesEffect
   SegmentEditorGrowFromSeedsEffect
+  SegmentEditorGPUGrowFromSeedsEffect
   SegmentEditorHollowEffect
   SegmentEditorIslandsEffect
   SegmentEditorLevelTracingEffect

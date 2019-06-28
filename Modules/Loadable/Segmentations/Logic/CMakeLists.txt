@@ -18,6 +18,8 @@ set(${KIT}_SRCS
   vtkImageGrowCutSegment.h
   vtkGPUImageThresholdFilter.cxx
   vtkGPUImageThresholdFilter.h
+  vtkGPUGrowCutFilter.cxx
+  vtkGPUGrowCutFilter.h
   FibHeap.cxx
   )
 

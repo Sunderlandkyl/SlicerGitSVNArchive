@@ -23,7 +23,6 @@ vtkStandardNewMacro(vtkGPUImageThresholdFilter);
 //----------------------------------------------------------------------------
 vtkGPUImageThresholdFilter::vtkGPUImageThresholdFilter()
 {
-  // Fragment shader adapted from https://www.shadertoy.com/view/XdfGDH
   this->ShaderProperty->SetFragmentShaderCode(R"(
 //VTK::System::Dec
 varying vec2 tcoordVSOutput;
@@ -83,9 +82,9 @@ if (oversamplingFactor > 0.0)
 void vtkGPUImageThresholdFilter::UpdateCustomUniformsFragment()
 {
   vtkUniforms* fragmentUniforms = this->ShaderProperty->GetFragmentCustomUniforms();
-  fragmentUniforms->SetUniformi("OversamplingFactor", this->OversamplingFactor);
-  fragmentUniforms->SetUniformf("MaxThreshold", this->MaxThreshold);
-  fragmentUniforms->SetUniformf("MinThreshold", this->MinThreshold);
+  fragmentUniforms->SetUniformi("oversamplingFactor", this->OversamplingFactor);
+  fragmentUniforms->SetUniformf("maxThreshold", this->MaxThreshold);
+  fragmentUniforms->SetUniformf("minThreshold", this->MinThreshold);
 }
 
 //----------------------------------------------------------------------------
