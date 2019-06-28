@@ -417,7 +417,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     else:
       self.imageToGPUImageFilter.SetInputDataObject(masterImageData)
 
-    shaderProperty = self.fractionalThresholdFilter.GetShaderProperty()
     self.fractionalThresholdFilter.SetOversamplingFactor(6)
     self.fractionalThresholdFilter.SetMinThreshold(minThreshold)
     self.fractionalThresholdFilter.SetMaxThreshold(maxThreshold)
