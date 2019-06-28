@@ -71,7 +71,7 @@ if (oversamplingFactor > 0.0)
     }
   // Calculate the fractional value of the pixel.
   sum = sum - 108;
-  sum = sum / (outputScale + outputShift);
+  sum = sum / (outputScale0 + outputShift0);
   gl_FragData[0] = vec4( vec3(sum), 1.0 );
   }
 }
