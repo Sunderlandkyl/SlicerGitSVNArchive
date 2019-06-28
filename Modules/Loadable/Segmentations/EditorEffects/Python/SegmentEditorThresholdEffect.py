@@ -26,7 +26,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     self.imageToGPUImageFilter = vtk.vtkImageToGPUImageFilter()
 
-    self.fractionalThresholdFilter = vtk.vtkGPUSimpleImageFilter()
+    self.fractionalThresholdFilter = slicer.vtkGPUImageThresholdFilter()
     self.fractionalThresholdFilter.SetInputConnection(self.imageToGPUImageFilter.GetOutputPort())
     self.fractionalThresholdFilter.SetOutputScalarTypeToSignedChar()
 
@@ -37,8 +37,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.castGPUImage.SetOutputScalarTypeToChar()
     self.castGPUImage.SetInputConnection(self.gpuImageToImageFilter.GetOutputPort())
 
-    self.setupShader()
-
     self.timer = qt.QTimer()
     self.previewState = 0
     self.previewStep = 1
@@ -47,66 +45,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     self.previewPipelines = {}
     self.setupPreviewDisplay()
-
-  def setupShader(self):
-    # TODO: output of fragment shader should range from -108 to +108
-    fragmentShaderCode = """
-//VTK::System::Dec
-varying vec2 tcoordVSOutput;
-uniform float zPos;
-//VTK::AlgTexUniforms::Dec
-//VTK::CustomUniforms::Dec
-//VTK::Output::Dec
-void main()
-{
-// Can't have an oversampling factor that is less than zero.
-gl_FragData[0] = vec4(vec3(0.), 1.0);
-if (oversamplingFactor > 0.0)
-  {
-  float offsetStart = -(oversamplingFactor - 1)/(2 * oversamplingFactor);
-  float stepSize = 1.0/oversamplingFactor;
-  float sum = 0;
-
-  float scaledMin = max(minThreshold / (inputScale0 + inputShift0), -1.0);
-  float scaledMax = max(maxThreshold / (inputScale0 + inputShift0), -1.0);
-
-  // Iterate over 216 offset points.
-  for (int k = 0; k < oversamplingFactor; ++k)
-    {
-    for (int j = 0; j < oversamplingFactor; ++j)
-      {
-      for (int i = 0; i < oversamplingFactor; ++i)
-        {
-
-        // Calculate the current offset.
-        vec3 offset = vec3(
-          (offsetStart + stepSize*i)/(inputSize0.x),
-          (offsetStart + stepSize*j)/(inputSize0.y),
-          (offsetStart + stepSize*k)/(inputSize0.z));
-
-        vec3 offsetTextureCoordinate = vec3(tcoordVSOutput, zPos) + offset;
-
-        // If the value of the interpolated offset pixel is greater than the threshold, then
-        // increment the fractional sum.
-        vec4 referenceSample = texture(inputTex0, offsetTextureCoordinate);
-        if (referenceSample.r >= scaledMin && referenceSample.r <= scaledMax )
-          {
-          ++sum;
-          }
-        }
-      }
-    }
-  // Calculate the fractional value of the pixel.
-  sum = sum - 108;
-  sum = sum / (outputScale + outputShift);
-  gl_FragData[0] = vec4( vec3(sum), 1.0 );
-  }
-}
-    """
-    shaderProperty = self.fractionalThresholdFilter.GetShaderProperty()
-    shaderProperty.SetFragmentShaderCode(fragmentShaderCode)
-    fragmentUniforms = shaderProperty.GetFragmentCustomUniforms()
-    fragmentUniforms.SetUniformi("oversamplingFactor", 6)
 
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -480,9 +418,9 @@ if (oversamplingFactor > 0.0)
       self.imageToGPUImageFilter.SetInputDataObject(masterImageData)
 
     shaderProperty = self.fractionalThresholdFilter.GetShaderProperty()
-    fragmentUniforms = shaderProperty.GetFragmentCustomUniforms()
-    fragmentUniforms.SetUniformf("minThreshold", minThreshold)
-    fragmentUniforms.SetUniformf("maxThreshold", maxThreshold)
+    self.fractionalThresholdFilter.SetOversamplingFactor(6)
+    self.fractionalThresholdFilter.SetMinThreshold(minThreshold)
+    self.fractionalThresholdFilter.SetMaxThreshold(maxThreshold)
 
     self.castGPUImage.Update()
     modifierLabelmap.DeepCopy(self.castGPUImage.GetOutput())

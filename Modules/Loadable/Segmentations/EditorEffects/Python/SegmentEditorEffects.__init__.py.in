@@ -6,6 +6,7 @@ from .AbstractScriptedSegmentEditorAutoCompleteEffect import *
 from .SegmentEditorDrawEffect import *
 from .SegmentEditorFillBetweenSlicesEffect import *
 from .SegmentEditorGrowFromSeedsEffect import *
+from .SegmentEditorGPUGrowFromSeedsEffect import *
 from .SegmentEditorHollowEffect import *
 from .SegmentEditorIslandsEffect import *
 from .SegmentEditorLevelTracingEffect import *
@@ -23,6 +24,7 @@ editorEffectNames = [
   "SegmentEditorDrawEffect",
   "SegmentEditorFillBetweenSlicesEffect",
   "SegmentEditorGrowFromSeedsEffect",
+  "SegmentEditorGPUGrowFromSeedsEffect",
   "SegmentEditorHollowEffect",
   "SegmentEditorIslandsEffect",
   "SegmentEditorLevelTracingEffect",
