@@ -14,6 +14,9 @@ set(${KIT}_INCLUDE_DIRECTORIES
 set(${KIT}_SRCS
   qMRMLSegmentsTableView.cxx
   qMRMLSegmentsTableView.h
+  qMRMLSegmentsModel.cxx
+  qMRMLSegmentsModel.h
+  qMRMLSegmentsModel_p.h
   qMRMLSegmentationRepresentationsListView.cxx
   qMRMLSegmentationRepresentationsListView.h
   qMRMLSegmentationConversionParametersWidget.cxx
@@ -34,6 +37,7 @@ set(${KIT}_SRCS
 
 set(${KIT}_MOC_SRCS
   qMRMLSegmentsTableView.h
+  qMRMLSegmentsModel.h
   qMRMLSegmentationRepresentationsListView.h
   qMRMLSegmentationConversionParametersWidget.h
   qMRMLSegmentEditorWidget.h

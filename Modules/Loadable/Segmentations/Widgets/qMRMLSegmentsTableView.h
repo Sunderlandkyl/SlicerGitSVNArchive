@@ -37,7 +37,7 @@ class vtkMRMLNode;
 class vtkSegment;
 class qMRMLSegmentsTableViewPrivate;
 class QStringList;
-class QTableWidget;
+class QTableView;
 class QTableWidgetItem;
 class QItemSelection;
 class QContextMenuEvent;
@@ -75,7 +75,7 @@ public:
   Q_INVOKABLE vtkMRMLNode* segmentationNode();
 
   /// Get access to the table widget to allow low-level customization
-  Q_INVOKABLE QTableWidget* tableWidget();
+  //Q_INVOKABLE QTableView* tableView();
 
   /// Return number of segments (rows) in the table
   int segmentCount() const;
@@ -155,12 +155,6 @@ protected slots:
   void onVisibility2DFillActionToggled(bool visible);
   void onVisibility2DOutlineActionToggled(bool visible);
 
-  /// Populate segment table according to the segmentation node
-  void populateSegmentTable();
-
-  /// Update from segmentation node state (invoked when segment count stays the same)
-  void updateWidgetFromMRML();
-
   /// Handle MRML scene event
   void endProcessing();
 
@@ -178,6 +172,10 @@ protected:
 
   /// Handle context menu events
   void contextMenuEvent(QContextMenuEvent* event) override;
+
+  virtual bool clickDecoration(QMouseEvent* e);
+
+  static const std::string STATUS_TAG_NAME;
 
 protected:
   QScopedPointer<qMRMLSegmentsTableViewPrivate> d_ptr;

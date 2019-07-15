@@ -26,7 +26,16 @@
    <string>qMRMLSegmentsTableView</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <property name="margin">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
     <number>0</number>
    </property>
    <item row="0" column="0">
@@ -55,7 +64,7 @@
     </widget>
    </item>
    <item row="1" column="0">
-    <widget class="QTableWidget" name="SegmentsTable">
+    <widget class="QTableView" name="SegmentsTable">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Ignored" vsizetype="MinimumExpanding">
        <horstretch>0</horstretch>
@@ -77,7 +86,7 @@
      <property name="alternatingRowColors">
       <bool>true</bool>
      </property>
-     <property name="columnCount">
+     <property name="columnCount" stdset="0">
       <number>6</number>
      </property>
      <attribute name="horizontalHeaderDefaultSectionSize">
@@ -89,54 +98,6 @@
      <attribute name="verticalHeaderVisible">
       <bool>false</bool>
      </attribute>
-     <column>
-      <property name="text">
-       <string/>
-      </property>
-      <property name="toolTip">
-       <string>Segment visibility in 3D (click on header to change all)</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string/>
-      </property>
-      <property name="toolTip">
-       <string>Segment fill visibility in 2D (click on header to change all)</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string/>
-      </property>
-      <property name="toolTip">
-       <string>Segment outline visibility in 2D (click on header to change all)</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Color</string>
-      </property>
-      <property name="toolTip">
-       <string>Segment color</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Opacity</string>
-      </property>
-      <property name="toolTip">
-       <string>Segment opacity (all views)</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Name</string>
-      </property>
-      <property name="toolTip">
-       <string>Segment name</string>
-      </property>
-     </column>
     </widget>
    </item>
   </layout>
