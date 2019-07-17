@@ -1,7 +1,5 @@
 /*==============================================================================
 
-  Program: 3D Slicer
-
   Copyright (c) Laboratory for Percutaneous Surgery (PerkLab)
   Queen's University, Kingston, ON, Canada. All Rights Reserved.
 
@@ -15,8 +13,8 @@
   limitations under the License.
 
   This file was originally developed by Kyle Sunderland, PerkLab, Queen's University
-  and was supported through the Applied Cancer Research Unit program of Cancer Care
-  Ontario with funds provided by the Ontario Ministry of Health and Long-Term Care
+  and was supported through CANARIE's Research Software Program, and Cancer
+  Care Ontario.
 
 ==============================================================================*/
 
@@ -67,9 +65,6 @@ public:
   virtual ~qMRMLSegmentsModelPrivate();
   void init();
 
-  /// Convenience function to get name for subject hierarchy item
-  QString segmentsItemName(std::string segmentID);
-
 public:
   vtkSmartPointer<vtkCallbackCommand> CallBack;
   int PendingItemModified;
@@ -85,7 +80,7 @@ public:
 
   QIcon NotStartedIcon;
   QIcon InProgressIcon;
-  QIcon FlagForReviewIcon;
+  QIcon FlaggedIcon;
   QIcon CompletedIcon;
 
   /// Subject hierarchy node
@@ -94,6 +89,9 @@ public:
   vtkWeakPointer<vtkMRMLScene> MRMLScene;
 
   QStandardItem* qMRMLSegmentsModelPrivate::insertSegment(std::string segmentID, int index);
+
+  /// Get string to pass terminology information via table widget item
+  QString getTerminologyUserDataForSegment(vtkSegment* segment);
 };
 
 #endif

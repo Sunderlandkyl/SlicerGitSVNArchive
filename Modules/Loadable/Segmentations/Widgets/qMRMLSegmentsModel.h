@@ -1,7 +1,5 @@
 /*==============================================================================
 
-  Program: 3D Slicer
-
   Copyright (c) Laboratory for Percutaneous Surgery (PerkLab)
   Queen's University, Kingston, ON, Canada. All Rights Reserved.
 
@@ -15,8 +13,8 @@
   limitations under the License.
 
   This file was originally developed by Kyle Sunderland, PerkLab, Queen's University
-  and was supported through the Applied Cancer Research Unit program of Cancer Care
-  Ontario with funds provided by the Ontario Ministry of Health and Long-Term Care
+  and was supported through CANARIE's Research Software Program, and Cancer
+  Care Ontario.
 
 ==============================================================================*/
 
@@ -37,6 +35,7 @@ class qMRMLSegmentsModelPrivate;
 class vtkMRMLSegmentationNode;
 class vtkMRMLNode;
 class vtkMRMLScene;
+class vtkSegment;
 
 /// \brief Item model for segments
 ///
@@ -71,20 +70,29 @@ class Q_SLICER_MODULE_SEGMENTATIONS_WIDGETS_EXPORT qMRMLSegmentsModel : public Q
   Q_PROPERTY(int statusColumn READ statusColumn WRITE setStatusColumn)
 
 public:
+
+  enum SegmentTableItemDataRole
+  {
+    /// Unique ID of the item (segment ID)
+    SegmentIDRole = Qt::UserRole + 1,
+    /// Integer that contains the visibility property of a segment.
+    /// It is closely related to the item icon.
+    VisibilityRole,
+    StatusRole,
+  };
+
+  enum SegmentStatus
+  {
+    NotStarted,
+    InProgress,
+    Completed,
+    Flagged,
+    LastStatus
+  };
+
   typedef QStandardItemModel Superclass;
   qMRMLSegmentsModel(QObject *parent=nullptr);
   ~qMRMLSegmentsModel() override;
-
-  enum ItemDataRole
-    {
-    /// Unique ID of the item, typed vtkIdType
-    SegmentsItemIDRole = Qt::UserRole + 1,
-    /// Integer that contains the visibility property of an item.
-    /// It is closely related to the item icon.
-    VisibilityRole,
-    /// Must stay the last enum in the list.
-    LastRole
-    };
 
   int nameColumn()const;
   void setNameColumn(int column);
@@ -118,6 +126,9 @@ public:
 
   virtual void setSegmentationNode(vtkMRMLSegmentationNode* segmentation);
 
+  int getStatus(vtkSegment* segment);
+  std::string getStatusTagName();
+
 signals:
   /// Signal requesting selecting items in the tree
   void requestSelectItems(QList<vtkIdType> itemIDs);
@@ -127,12 +138,6 @@ protected slots:
   virtual void onSegmentAdded(std::string segmentID);
   virtual void onSegmentRemoved(std::string segmentID);
   virtual void onSegmentModified(std::string segmentID);
-
-  virtual void onMRMLSceneImported(vtkMRMLScene* scene);
-  virtual void onMRMLSceneClosed(vtkMRMLScene* scene);
-  virtual void onMRMLSceneStartBatchProcess(vtkMRMLScene* scene);
-  virtual void onMRMLSceneEndBatchProcess(vtkMRMLScene* scene);
-  virtual void onMRMLNodeRemoved(vtkMRMLNode* node);
 
   virtual void onItemChanged(QStandardItem* item);
 
@@ -146,7 +151,7 @@ protected:
   virtual void updateFromSegments();
   virtual QStandardItem* insertSegment(std::string segmentID, int row=-1);
 
-  virtual QFlags<Qt::ItemFlag> segmentFlags(std::string segmentID, int column)const;
+  virtual Qt::ItemFlags segmentFlags(std::string segmentID, int column)const;
 
   virtual void updateItemFromSegment(
     QStandardItem* item, std::string segmentID, int column );
@@ -170,7 +175,5 @@ private:
   Q_DECLARE_PRIVATE(qMRMLSegmentsModel);
   Q_DISABLE_COPY(qMRMLSegmentsModel);
 };
-
-void printStandardItem(QStandardItem* item, const QString& offset);
 
 #endif

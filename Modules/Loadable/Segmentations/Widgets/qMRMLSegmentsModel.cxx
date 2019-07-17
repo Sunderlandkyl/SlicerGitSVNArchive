@@ -1,7 +1,5 @@
 /*==============================================================================
 
-  Program: 3D Slicer
-
   Copyright (c) Laboratory for Percutaneous Surgery (PerkLab)
   Queen's University, Kingston, ON, Canada. All Rights Reserved.
 
@@ -15,17 +13,17 @@
   limitations under the License.
 
   This file was originally developed by Kyle Sunderland, PerkLab, Queen's University
-  and was supported through the Applied Cancer Research Unit program of Cancer Care
-  Ontario with funds provided by the Ontario Ministry of Health and Long-Term Care
+  and was supported through CANARIE's Research Software Program, and Cancer
+  Care Ontario.
 
 ==============================================================================*/
 
 // Qt includes
+#include <QApplication>
 #include <QColor>
 #include <QDebug>
-#include <QMimeData>
-#include <QApplication>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QTimer>
 
 // qMRML includes
@@ -41,9 +39,16 @@
 #include <vtkMRMLSegmentationDisplayNode.h>
 #include <vtkMRMLSegmentationNode.h>
 
+// Terminology includes
 #include "qSlicerTerminologyItemDelegate.h"
+
+// Polyseg includes
 #include "vtkSegment.h"
+
+// Segmentations includes
 #include "qMRMLSegmentsTableView.h"
+
+const std::string STATUS_TAG_NAME = "Segmentation.Status";
 
 //------------------------------------------------------------------------------
 qMRMLSegmentsModelPrivate::qMRMLSegmentsModelPrivate(qMRMLSegmentsModel& object)
@@ -61,6 +66,11 @@ qMRMLSegmentsModelPrivate::qMRMLSegmentsModelPrivate(qMRMLSegmentsModel& object)
 
   this->HiddenIcon = QIcon(":Icons/VisibleOff.png");
   this->VisibleIcon = QIcon(":Icons/VisibleOn.png");
+
+  this->NotStartedIcon = QIcon(":Icons/Dot.png");
+  this->InProgressIcon = QIcon(":Icons/Edit.png");
+  this->FlaggedIcon = QIcon(":Icons/Flag.png");
+  this->CompletedIcon = QIcon(":Icons/Present.png");
 
   qRegisterMetaType<QStandardItem*>("QStandardItem*");
 }
@@ -94,30 +104,18 @@ void qMRMLSegmentsModelPrivate::init()
   q->setStatusColumn(4);
 
   q->setHorizontalHeaderLabels(
-    QStringList() << "" /*visibility*/ << "Color" << "Opacity" << "Name" << "Status" );
+    QStringList() << "" /*Visibility*/ << "" /*Color*/ << "Opacity" << "Name" << "" /*"Status"*/ );
 
-  q->horizontalHeaderItem(q->nameColumn())->setToolTip(qMRMLSegmentsModel::tr("Name")); //TODO
-  q->horizontalHeaderItem(q->visibilityColumn())->setToolTip(qMRMLSegmentsModel::tr("Visibility"));
-  q->horizontalHeaderItem(q->colorColumn())->setToolTip(qMRMLSegmentsModel::tr("Color"));
-  q->horizontalHeaderItem(q->opacityColumn())->setToolTip(qMRMLSegmentsModel::tr("Opacity"));
-  q->horizontalHeaderItem(q->statusColumn())->setToolTip(qMRMLSegmentsModel::tr("Status"));
+  q->horizontalHeaderItem(q->nameColumn())->setToolTip(qMRMLSegmentsModel::tr("Segment name")); //TODO
+  q->horizontalHeaderItem(q->visibilityColumn())->setToolTip(qMRMLSegmentsModel::tr("Segment visibility")); //TODO
+  q->horizontalHeaderItem(q->colorColumn())->setToolTip(qMRMLSegmentsModel::tr("Segment color"));
+  q->horizontalHeaderItem(q->opacityColumn())->setToolTip(qMRMLSegmentsModel::tr("Segment opacity (all views)"));
+  q->horizontalHeaderItem(q->statusColumn())->setToolTip(qMRMLSegmentsModel::tr("Segment status"));
 
   q->horizontalHeaderItem(q->visibilityColumn())->setIcon(QIcon(":/Icons/Small/SlicerVisibleInvisible.png"));
   q->horizontalHeaderItem(q->colorColumn())->setIcon(QIcon(":/Icons/Colors.png"));
+  q->horizontalHeaderItem(q->statusColumn())->setIcon(QIcon(":/Icons/Flag.png"));
 }
-
-//------------------------------------------------------------------------------
-QString qMRMLSegmentsModelPrivate::segmentsItemName(std::string segmentID)
-{
-  if (!this->SegmentationNode)
-    {
-    qCritical() << Q_FUNC_INFO << ": Invalid subject hierarchy";
-    return "Error";
-    }
-  //return QString(this->SegmentationNode->GetItemName(itemID).c_str());
-  return QString(""); // TODO
-}
-
 
 //------------------------------------------------------------------------------
 QStandardItem* qMRMLSegmentsModelPrivate::insertSegment(std::string segmentID, int index)
@@ -137,6 +135,19 @@ QStandardItem* qMRMLSegmentsModelPrivate::insertSegment(std::string segmentID, i
     return nullptr;
   }
   return item;
+}
+
+//------------------------------------------------------------------------------
+QString qMRMLSegmentsModelPrivate::getTerminologyUserDataForSegment(vtkSegment* segment)
+{
+  if (!segment)
+  {
+    qCritical() << Q_FUNC_INFO << ": Invalid segment given";
+    return QString();
+  }
+
+  std::string tagValue;
+  return (segment->GetTag(vtkSegment::GetTerminologyEntryTagName(), tagValue) ? QString(tagValue.c_str()) : QString());
 }
 
 
@@ -159,7 +170,6 @@ qMRMLSegmentsModel::qMRMLSegmentsModel(qMRMLSegmentsModelPrivate* pimpl, QObject
   Q_D(qMRMLSegmentsModel);
   d->init();
 }
-
 
 //------------------------------------------------------------------------------
 qMRMLSegmentsModel::~qMRMLSegmentsModel()
@@ -229,7 +239,6 @@ void qMRMLSegmentsModel::setSegmentationNode(vtkMRMLSegmentationNode* segmentati
     segmentationNode->AddObserver(vtkSegmentation::SegmentAdded, d->CallBack);
     segmentationNode->AddObserver(vtkSegmentation::SegmentRemoved, d->CallBack);
     segmentationNode->AddObserver(vtkSegmentation::SegmentModified, d->CallBack);
-    segmentationNode->AddObserver(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->CallBack);
     segmentationNode->AddObserver(vtkSegmentation::MasterRepresentationModified, d->CallBack);
     }
 }
@@ -239,6 +248,12 @@ vtkMRMLSegmentationNode* qMRMLSegmentsModel::segmentationNode()const
 {
   Q_D(const qMRMLSegmentsModel);
   return d->SegmentationNode;
+}
+
+// -----------------------------------------------------------------------------
+std::string qMRMLSegmentsModel::getStatusTagName()
+{
+  return STATUS_TAG_NAME;
 }
 
 // -----------------------------------------------------------------------------
@@ -255,12 +270,12 @@ std::string qMRMLSegmentsModel::segmentIDFromItem(QStandardItem* item)const
     {
     return ""; //TODO
     }
-  QVariant segmentID = item->data(qMRMLSegmentsModel::SegmentsItemIDRole);
+  QVariant segmentID = item->data(qMRMLSegmentsModel::SegmentIDRole);
   if (!segmentID.isValid())
     {
     return ""; //TODO
     }
-  return item->data(qMRMLSegmentsModel::SegmentsItemIDRole).toString().toStdString();
+  return item->data(qMRMLSegmentsModel::SegmentIDRole).toString().toStdString();
 }
 //------------------------------------------------------------------------------
 QStandardItem* qMRMLSegmentsModel::itemFromSegmentID(std::string segmentID, int column/*=0*/)const
@@ -292,7 +307,7 @@ QModelIndex qMRMLSegmentsModel::indexFromSegmentID(std::string segmentID, int co
   //  {
   //  // An entry found in the cache. If the item at the cached index matches the requested item ID then we use it.
   //  QStandardItem* item = this->itemFromIndex(rowCacheIt.value());
-  //  if (item && item->data(qMRMLSegmentsModel::SegmentsItemIDRole).toLongLong() == itemID)
+  //  if (item && item->data(qMRMLSegmentsModel::SegmentIDRole).toLongLong() == itemID)
   //    {
   //    // ID matched
   //    itemIndex = rowCacheIt.value();
@@ -305,7 +320,7 @@ QModelIndex qMRMLSegmentsModel::indexFromSegmentID(std::string segmentID, int co
     QModelIndex startIndex = this->index(0, 0);
     // QAbstractItemModel::match doesn't browse through columns, we need to do it manually
     QModelIndexList itemIndexes = this->match(
-      startIndex, SegmentsItemIDRole, segmentID.c_str(), 1, Qt::MatchExactly | Qt::MatchRecursive);
+      startIndex, SegmentIDRole, segmentID.c_str(), 1, Qt::MatchExactly | Qt::MatchRecursive);
     if (itemIndexes.size() == 0)
       {
       //d->RowCache.remove(itemID);
@@ -329,34 +344,29 @@ QModelIndex qMRMLSegmentsModel::indexFromSegmentID(std::string segmentID, int co
     qCritical() << Q_FUNC_INFO << ": Invalid column " << column;
     return QModelIndex();
     }
-  return nodeParentIndex.child(row, column);
+
+  return this->index(row, column, itemIndex.parent());;
 }
 
 //------------------------------------------------------------------------------
 QModelIndexList qMRMLSegmentsModel::indexes(std::string segmentID) const
 {
-  //QModelIndex scene = this->segmentsSceneIndex();
-  //if (scene == QModelIndex())
-  //  {
-  //  return QModelIndexList();
-  //  }
-  //// QAbstractItemModel::match doesn't browse through columns, we need to do it manually
-  //QModelIndexList shItemIndexes = this->match(
-  //  scene, qMRMLSegmentsModel::SegmentsItemIDRole, QVariant(qlonglong(itemID)), 1, Qt::MatchExactly | Qt::MatchRecursive);
-  //if (shItemIndexes.size() != 1)
-  //  {
-  //  return QModelIndexList(); // If 0 it's empty, if >1 it's invalid (one item for each UID)
-  //  }
-  //// Add the QModelIndexes from the other columns
-  //const int row = shItemIndexes[0].row();
-  //QModelIndex shItemParentIndex = shItemIndexes[0].parent();
-  //const int sceneColumnCount = this->columnCount(shItemParentIndex);
-  //for (int col=1; col<sceneColumnCount; ++col)
-  //  {
-  //  shItemIndexes << this->index(row, col, shItemParentIndex);
-  //  }
-  //return shItemIndexes;
-  return QModelIndexList(); // TODO
+  QModelIndex startIndex = this->index(0, 0);
+  // QAbstractItemModel::match doesn't browse through columns, we need to do it manually
+  QModelIndexList itemIndexes = this->match(
+    startIndex, SegmentIDRole, segmentID.c_str(), 1, Qt::MatchExactly | Qt::MatchRecursive);
+  if (itemIndexes.size() != 1)
+    {
+    return QModelIndexList(); // If 0 it's empty, if >1 it's invalid (one item for each UID)
+    }
+  // Add the QModelIndexes from the other columns
+  const int row = itemIndexes[0].row();
+  QModelIndex itemParentIndex = itemIndexes[0].parent();
+  for (int col = 1; col < this->columnCount(); ++col)
+  {
+    itemIndexes << this->index(row, col);
+  }
+  return itemIndexes;
 }
 
 //------------------------------------------------------------------------------
@@ -431,47 +441,24 @@ QStandardItem* qMRMLSegmentsModel::insertSegment(std::string segmentID, int row/
 }
 
 //------------------------------------------------------------------------------
-QFlags<Qt::ItemFlag> qMRMLSegmentsModel::segmentFlags(std::string segmentID, int column)const
+Qt::ItemFlags qMRMLSegmentsModel::segmentFlags(std::string segmentID, int column)const
 {
   Q_D(const qMRMLSegmentsModel);
 
-  QFlags<Qt::ItemFlag> flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+  Qt::ItemFlags flags;
+  flags.setFlag(Qt::ItemIsEnabled);
+  flags.setFlag(Qt::ItemIsSelectable);
 
   if (!d->SegmentationNode)
     {
-    qCritical() << Q_FUNC_INFO << ": Invalid subject hierarchy";
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentation node";
     return flags;
     }
-  if (column == this->nameColumn() || column == this->colorColumn() || column == this->opacityColumn())
+
+  if (column != this->visibilityColumn() && column != this->statusColumn())
     {
-    flags |= Qt::ItemIsEditable;
+    flags.setFlag(Qt::ItemIsEditable);
     }
-
-  //if (this->canBeAChild(itemID))
-  //  {
-  //  flags |= Qt::ItemIsDragEnabled;
-  //  }
-  //if (this->canBeAParent(itemID))
-  //  {
-  //  flags |= Qt::ItemIsDropEnabled;
-  //  }
-
-  //// Drop is also enabled for virtual branches.
-  //// (a virtual branch is a branch where the children items do not correspond to actual MRML data nodes,
-  //// but to implicit items contained by the parent MRML node, e.g. in case of Markups or Segmentations)
-  //if ( d->SegmentationNode->HasItemAttribute( itemID,
-  //  vtkMRMLSegmentsConstants::GetSegmentsVirtualBranchAttributeName()) )
-  //  {
-  //  flags |= Qt::ItemIsDropEnabled;
-  //  }
-  //// Along the same logic, drop is not enabled to children nodes in virtual branches
-  //vtkIdType parentItemID = d->SegmentationNode->GetItemParent(itemID);
-  //if (parentItemID
-  //  && d->SegmentationNode->HasItemAttribute(
-  //       parentItemID, vtkMRMLSegmentsConstants::GetSegmentsVirtualBranchAttributeName()) )
-  //  {
-  //  flags &= ~Qt::ItemIsDropEnabled;
-  //  }
 
   return flags;
 }
@@ -483,12 +470,14 @@ void qMRMLSegmentsModel::updateItemFromSegment(QStandardItem* item, std::string 
   // We are going to make potentially multiple changes to the item. We want to refresh
   // the subject hierarchy item only once, so we "block" the updates in onItemChanged().
   d->PendingItemModified = 0;
-  item->setFlags(this->segmentFlags(segmentID, column));
+
+  Qt::ItemFlags flags = this->segmentFlags(segmentID, column);
+  item->setFlags(flags);
 
   // TODO
   //// Set ID
   bool blocked = this->blockSignals(true);
-  item->setData(segmentID.c_str(), qMRMLSegmentsModel::SegmentsItemIDRole);
+  item->setData(segmentID.c_str(), qMRMLSegmentsModel::SegmentIDRole);
   this->blockSignals(blocked);
 
   //// Update item data for the current column
@@ -497,26 +486,6 @@ void qMRMLSegmentsModel::updateItemFromSegment(QStandardItem* item, std::string 
   bool itemChanged = (d->PendingItemModified > 0);
   d->PendingItemModified = -1;
 
-  //if (this->canBeAChild(segmentID))
-  //  {
-  //  QStandardItem* parentItem = item->parent();
-  //  QStandardItem* newParentItem = this->itemFromSegmentID(this->parentSegmentsItem(segmentID));
-  //  if (!newParentItem)
-  //    {
-  //    newParentItem = this->segmentsSceneItem();
-  //    }
-  //  // If the item has no parent, then it means it hasn't been put into the hierarchy yet and it will do it automatically
-  //  if (parentItem && parentItem != newParentItem)
-  //    {
-  //    int newIndex = this->segmentsItemIndex(segmentID);
-  //    if (parentItem != newParentItem || newIndex != item->row())
-  //      {
-  //      // Reparent items
-  //      QList<QStandardItem*> children = parentItem->takeRow(item->row());
-  //      newParentItem->insertRow(newIndex, children);
-  //      }
-  //    }
-  //  }
   if (itemChanged)
     {
     this->onItemChanged(item);
@@ -533,74 +502,122 @@ void qMRMLSegmentsModel::updateItemDataFromSegment(QStandardItem* item, std::str
     return;
     }
 
-  vtkSegment* segment = d->SegmentationNode->GetSegmentation()->GetSegment(segmentID);
-
-  // Get segment display properties
-  vtkMRMLSegmentationDisplayNode* displayNode = vtkMRMLSegmentationDisplayNode::SafeDownCast(d->SegmentationNode->GetDisplayNode());
-  vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-  if (displayNode)
+  vtkSegmentation* segmentation = d->SegmentationNode->GetSegmentation();
+  if (!segmentation)
     {
-    displayNode->GetSegmentDisplayProperties(segmentID, properties);
+    qCritical() << Q_FUNC_INFO << ": Invalid segmentation";
+    return;
     }
 
-  // Owner plugin name is not set for subject hierarchy item. Show it as a regular node
+  vtkSegment* segment = segmentation->GetSegment(segmentID);
+  if (!segment)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid segment";
+    }
+
   if (column == this->nameColumn())
     {
     item->setText(segment->GetName());
     }
-  else if (column == this->colorColumn())
+  else if (column == this->statusColumn())
     {
-    // Set terminology information from segment to item
-    item->setData(segment->GetName(), qSlicerTerminologyItemDelegate::NameRole);
-    item->setData(segment->GetNameAutoGenerated(), qSlicerTerminologyItemDelegate::NameAutoGeneratedRole);
-    item->setData(segment->GetColorAutoGenerated(), qSlicerTerminologyItemDelegate::ColorAutoGeneratedRole);
-    //QString segmentTerminologyTagValue(d->getTerminologyUserDataForSegment(segment));
-    //if (segmentTerminologyTagValue != item->data(qSlicerTerminologyItemDelegate::TerminologyRole).toString())
-    //  {
-    //  item->setData(qSlicerTerminologyItemDelegate::TerminologyRole, segmentTerminologyTagValue);
-    //  item->setToolTip(qMRMLSegmentsTableView::terminologyTooltipForSegment(segment));
-    //  }
-    // Set color
-    double* colorArray = segment->GetColor();
-    QColor color = QColor::fromRgbF(colorArray[0], colorArray[1], colorArray[2]);
-    item->setData(color, Qt::DecorationRole);
-    }
-  else if (column == this->visibilityColumn())
-    {
-    // Have owner plugin give the visibility state and icon
-    bool visible = properties.Visible;
-    QIcon visibilityIcon = d->HiddenIcon;
-    if (visible)
+    int status = this->getStatus(segment);
+    QIcon statusIcon = d->NotStartedIcon;
+    QString statusTooltip = "";
+    switch (status)
       {
-      visibilityIcon = d->VisibleIcon;
+      case InProgress:
+        statusIcon = d->InProgressIcon;
+        statusTooltip = "In progress";
+        break;
+      case Completed:
+        statusIcon = d->CompletedIcon;
+        statusTooltip = "Completed";
+        break;
+      case Flagged:
+        statusIcon = d->FlaggedIcon;
+        statusTooltip = "Flagged";
+        break;
       }
-    // It should be fine to set the icon even if it is the same, but due
-    // to a bug in Qt (http://bugreports.qt.nokia.com/browse/QTBUG-20248),
-    // it would fire a superfluous itemChanged() signal.
-    if (item->data(VisibilityRole).isNull()
-      || item->data(VisibilityRole).toInt() != visible)
+      item->setIcon(statusIcon);
+      item->setToolTip(statusTooltip);
+      item->setData(status, StatusRole);
+    }
+  else
+    {
+    // Get segment display properties
+    vtkMRMLSegmentationDisplayNode* displayNode = vtkMRMLSegmentationDisplayNode::SafeDownCast(d->SegmentationNode->GetDisplayNode());
+    if (!displayNode)
       {
-      item->setData(visible, VisibilityRole);
-      if (!visibilityIcon.isNull())
+      qCritical() << Q_FUNC_INFO << ": Invalid segmentation display node";
+      }
+
+    vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
+    displayNode->GetSegmentDisplayProperties(segmentID, properties);
+
+    if (column == this->colorColumn())
+      {
+      // Set terminology information from segment to item
+      item->setData(segment->GetName(), qSlicerTerminologyItemDelegate::NameRole);
+      item->setData(segment->GetNameAutoGenerated(), qSlicerTerminologyItemDelegate::NameAutoGeneratedRole);
+      item->setData(segment->GetColorAutoGenerated(), qSlicerTerminologyItemDelegate::ColorAutoGeneratedRole);
+      QString segmentTerminologyTagValue(d->getTerminologyUserDataForSegment(segment));
+      if (segmentTerminologyTagValue != item->data(qSlicerTerminologyItemDelegate::TerminologyRole).toString())
         {
+        item->setData(segmentTerminologyTagValue, qSlicerTerminologyItemDelegate::TerminologyRole);
+        item->setToolTip(qMRMLSegmentsTableView::terminologyTooltipForSegment(segment));
+        }
+      // Set color
+      double* colorArray = segment->GetColor();
+      QColor color = QColor::fromRgbF(colorArray[0], colorArray[1], colorArray[2]);
+      item->setData(color, Qt::DecorationRole);
+      }
+    else if (column == this->visibilityColumn())
+      {
+      // Have owner plugin give the visibility state and icon
+      bool visible = properties.Visible && (properties.Visible3D || properties.Visible2DFill || properties.Visible2DOutline);
+      QIcon visibilityIcon = d->HiddenIcon;
+      if (visible)
+        {
+        visibilityIcon = d->VisibleIcon;
+        }
+      // It should be fine to set the icon even if it is the same, but due
+      // to a bug in Qt (http://bugreports.qt.nokia.com/browse/QTBUG-20248),
+      // it would fire a superfluous itemChanged() signal.
+      if (item->data(VisibilityRole).isNull()
+        || item->data(VisibilityRole).toInt() != visible)
+        {
+        item->setData(visible, VisibilityRole);
         item->setIcon(visibilityIcon);
         }
-      } //TODO
+      }
+    else if (column == this->opacityColumn())
+      {
+      QString displayedOpacityStr = QString::number(properties.Opacity3D, 'f', 2);
+      item->setData(displayedOpacityStr, Qt::EditRole);
+      }
     }
-  else if (column == this->opacityColumn())
+}
+
+//------------------------------------------------------------------------------
+int qMRMLSegmentsModel::getStatus(vtkSegment* segment)
+{
+  std::string value;
+  if (!segment->GetTag(STATUS_TAG_NAME, value))
     {
-    QString displayedOpacityStr = QString::number(properties.Opacity3D, 'f', 2);
-    item->setData(displayedOpacityStr, Qt::EditRole);
+    return NotStarted;
     }
+  return QVariant(value.c_str()).toInt();
 }
 
 //------------------------------------------------------------------------------
 void qMRMLSegmentsModel::updateSegmentFromItem(std::string segmentID, QStandardItem* item)
 {
   Q_D(qMRMLSegmentsModel);
-  int wasModifying = d->SegmentationNode->StartModify(); //TODO: Add feature to item if there are performance issues
+  //int wasModifying = d->SegmentationNode->StartModify(); //TODO: Add feature to item if there are performance issues
+  // Can't call StartModfiy/EndModify currently, since SegmentID will be lost (likely because the calldata is a std::string::c_str).
   this->updateSegmentFromItemData(segmentID, item);
-  d->SegmentationNode->EndModify(wasModifying);
+  //d->SegmentationNode->EndModify(wasModifying);
 }
 
 //------------------------------------------------------------------------------
@@ -624,6 +641,17 @@ void qMRMLSegmentsModel::updateSegmentFromItemData(std::string segmentID, QStand
       }
     std::string name = item->text().toStdString();
     segment->SetName(name.c_str());
+    }
+  else if (item->column() == this->statusColumn())
+    {
+    vtkSegment* segment = d->SegmentationNode->GetSegmentation()->GetSegment(segmentID);
+    if (!segment)
+      {
+      qCritical() << Q_FUNC_INFO << ": Segment with ID '" << segmentID.c_str() << "' not found in segmentation node " << d->SegmentationNode->GetName();
+      return;
+      }
+    std::string status = item->data(StatusRole).toString().toStdString();
+    segment->SetTag(STATUS_TAG_NAME, status);
     }
   else
     {
@@ -711,10 +739,6 @@ void qMRMLSegmentsModel::updateSegmentFromItemData(std::string segmentID, QStand
 void qMRMLSegmentsModel::updateModelItems(std::string segmentID)
 {
   Q_D(qMRMLSegmentsModel);
-  if (d->MRMLScene->IsClosing() || d->MRMLScene->IsBatchProcessing())
-    {
-    return;
-    }
 
   QModelIndexList itemIndexes = this->indexes(segmentID);
   if (!itemIndexes.count())
@@ -746,9 +770,8 @@ void qMRMLSegmentsModel::onEvent(
   vtkObject* caller, unsigned long event, void* clientData, void* callData )
 {
   vtkMRMLSegmentationNode* segmentationNode = reinterpret_cast<vtkMRMLSegmentationNode*>(caller);
-  vtkMRMLScene* scene = reinterpret_cast<vtkMRMLScene*>(caller);
   qMRMLSegmentsModel* model = reinterpret_cast<qMRMLSegmentsModel*>(clientData);
-  if (!model || (!segmentationNode && !scene))
+  if (!model || !segmentationNode)
     {
     qCritical() << Q_FUNC_INFO << ": Invalid event parameters";
     return;
@@ -765,29 +788,8 @@ void qMRMLSegmentsModel::onEvent(
       }
     }
 
-  // Get node for scene events
-  vtkMRMLNode* node = reinterpret_cast<vtkMRMLNode*>(callData);
-
   switch (event)
     {
-    case vtkCommand::ModifiedEvent:
-      //TODO
-      break;
-    case vtkMRMLScene::EndImportEvent:
-      model->onMRMLSceneImported(scene);
-      break;
-    case vtkMRMLScene::EndCloseEvent:
-      model->onMRMLSceneClosed(scene);
-      break;
-    case vtkMRMLScene::StartBatchProcessEvent:
-      model->onMRMLSceneStartBatchProcess(scene);
-      break;
-    case vtkMRMLScene::EndBatchProcessEvent:
-      model->onMRMLSceneEndBatchProcess(scene);
-      break;
-    case vtkMRMLScene::NodeRemovedEvent:
-      model->onMRMLNodeRemoved(node);
-      break;
     case vtkSegmentation::SegmentAdded:
       model->onSegmentAdded(segmentID);
       break;
@@ -820,44 +822,6 @@ void qMRMLSegmentsModel::onSegmentRemoved(std::string removedSegmentID)
 void qMRMLSegmentsModel::onSegmentModified(std::string segmentID)
 {
   this->updateModelItems(segmentID);
-}
-
-//------------------------------------------------------------------------------
-void qMRMLSegmentsModel::onMRMLSceneImported(vtkMRMLScene* scene)
-{
-  Q_UNUSED(scene);
-  this->updateFromSegments();
-}
-
-//------------------------------------------------------------------------------
-void qMRMLSegmentsModel::onMRMLSceneClosed(vtkMRMLScene* scene)
-{
-  // TODO
-}
-
-//------------------------------------------------------------------------------
-void qMRMLSegmentsModel::onMRMLSceneStartBatchProcess(vtkMRMLScene* scene)
-{
-  Q_UNUSED(scene);
-  // TODO
-}
-
-//------------------------------------------------------------------------------
-void qMRMLSegmentsModel::onMRMLSceneEndBatchProcess(vtkMRMLScene* scene)
-{
-  Q_UNUSED(scene);
-  this->updateFromSegments();
-}
-
-//------------------------------------------------------------------------------
-void qMRMLSegmentsModel::onMRMLNodeRemoved(vtkMRMLNode* node)
-{
-  Q_D(qMRMLSegmentsModel);
-  if (d->MRMLScene->IsClosing())
-    {
-    return;
-    }
-  // TODO
 }
 
 //------------------------------------------------------------------------------
@@ -1007,24 +971,4 @@ int qMRMLSegmentsModel::maxColumnId()const
   maxId = qMax(maxId, d->OpacityColumn);
   maxId = qMax(maxId, d->StatusColumn);
   return maxId;
-}
-
-//------------------------------------------------------------------------------
-void printStandardItem(QStandardItem* item, const QString& offset)
-{
-  // TODO
-  //if (!item)
-  //  {
-  //  return;
-  //  }
-  //qDebug() << offset << item << item->index() << item->text()
-  //         << item->data(qMRMLSegmentsModel::SegmentsItemIDRole).toString() << item->row()
-  //         << item->column() << item->rowCount() << item->columnCount();
-  //for(int i = 0; i < item->rowCount(); ++i )
-  //  {
-  //  for (int j = 0; j < item->columnCount(); ++j)
-  //    {
-  //    printStandardItem(item->child(i,j), offset + "   ");
-  //    }
-  //  }
 }

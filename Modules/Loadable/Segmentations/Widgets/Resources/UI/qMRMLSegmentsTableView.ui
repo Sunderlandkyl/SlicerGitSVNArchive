@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>315</width>
+    <width>183</width>
     <height>74</height>
    </rect>
   </property>
@@ -63,8 +63,11 @@
      </property>
     </widget>
    </item>
-   <item row="1" column="0">
+   <item row="3" column="0">
     <widget class="QTableView" name="SegmentsTable">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="sizePolicy">
       <sizepolicy hsizetype="Ignored" vsizetype="MinimumExpanding">
        <horstretch>0</horstretch>
@@ -86,6 +89,9 @@
      <property name="alternatingRowColors">
       <bool>true</bool>
      </property>
+     <property name="sortingEnabled">
+      <bool>false</bool>
+     </property>
      <property name="columnCount" stdset="0">
       <number>6</number>
      </property>
@@ -100,8 +106,92 @@
      </attribute>
     </widget>
    </item>
+   <item row="1" column="0">
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="FilterLabel">
+       <property name="text">
+        <string>Filter:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="FilterLineEdit"/>
+     </item>
+     <item>
+      <widget class="QToolButton" name="ShowNotStartedButton">
+       <property name="toolTip">
+        <string>Show/Hide not started segments</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset resource="../qSlicerSegmentationsModuleWidgets.qrc">
+         <normaloff>:/Icons/Dot.png</normaloff>:/Icons/Dot.png</iconset>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="ShowInProgressButton">
+       <property name="toolTip">
+        <string>Show/Hide in progress segments</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset resource="../qSlicerSegmentationsModuleWidgets.qrc">
+         <normaloff>:/Icons/Edit.png</normaloff>:/Icons/Edit.png</iconset>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="ShowCompletedButton">
+       <property name="toolTip">
+        <string>Show/Hide completed segments</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset resource="../qSlicerSegmentationsModuleWidgets.qrc">
+         <normaloff>:/Icons/Present.png</normaloff>:/Icons/Present.png</iconset>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="ShowFlaggedButton">
+       <property name="toolTip">
+        <string>Show/Hide flagged segments</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset resource="../qSlicerSegmentationsModuleWidgets.qrc">
+         <normaloff>:/Icons/Flag.png</normaloff>:/Icons/Flag.png</iconset>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
   </layout>
  </widget>
- <resources/>
+ <resources>
+  <include location="../qSlicerSegmentationsModuleWidgets.qrc"/>
+ </resources>
  <connections/>
 </ui>

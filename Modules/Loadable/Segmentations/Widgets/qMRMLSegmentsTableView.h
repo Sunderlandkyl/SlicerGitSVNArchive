@@ -41,21 +41,14 @@ class QTableView;
 class QTableWidgetItem;
 class QItemSelection;
 class QContextMenuEvent;
+class qMRMLSegmentsModel;
+class qMRMLSortFilterSegmentsProxyModel;
 
 /// \ingroup Slicer_QtModules_Segmentations_Widgets
 class Q_SLICER_MODULE_SEGMENTATIONS_WIDGETS_EXPORT qMRMLSegmentsTableView : public qMRMLWidget
 {
   Q_OBJECT
   QVTK_OBJECT
-
-  enum SegmentTableItemDataRole
-    {
-    /// Unique ID of the item (segment ID)
-    IDRole = Qt::UserRole + 1,
-    /// Integer that contains the visibility property of a segment.
-    /// It is closely related to the item icon.
-    VisibilityRole
-    };
 
 public:
   Q_PROPERTY(int selectionMode READ selectionMode WRITE setSelectionMode)
@@ -95,6 +88,7 @@ public:
   bool visibilityColumnVisible();
   bool colorColumnVisible();
   bool opacityColumnVisible();
+  bool statusColumnVisible();
   bool readOnly();
 
   /// Segments that have their ID listed in hideSegments are
@@ -104,6 +98,9 @@ public:
 
   /// Return list of visible segment IDs
   Q_INVOKABLE QStringList displayedSegmentIDs()const;
+
+  Q_INVOKABLE qMRMLSortFilterSegmentsProxyModel* sortFilterProxyModel()const;
+  Q_INVOKABLE qMRMLSegmentsModel* model()const;
 
 public slots:
   /// Set segmentation MRML node
@@ -120,6 +117,7 @@ public slots:
   void setVisibilityColumnVisible(bool visible);
   void setColorColumnVisible(bool visible);
   void setOpacityColumnVisible(bool visible);
+  void setStatusColumnVisible(bool visible);
   void setReadOnly(bool aReadOnly);
 
   /// Show only selected segments
@@ -155,6 +153,8 @@ protected slots:
   void onVisibility2DFillActionToggled(bool visible);
   void onVisibility2DOutlineActionToggled(bool visible);
 
+  void onSegmentsTableClicked(const QModelIndex& modelIndex);
+
   /// Handle MRML scene event
   void endProcessing();
 
@@ -165,17 +165,13 @@ protected:
   /// \param visible3D Visibility of the segment referenced from senderObject in 3D. If 0, then hide, if 1 then show, otherwise don't change
   /// \param visible2DFill Visibility of the segment referenced from senderObject for 2D fill. If 0, then hide, if 1 then show, otherwise don't change
   /// \param visible2DOutline Visibility of the segment referenced from senderObject for 2D outline. If 0, then hide, if 1 then show, otherwise don't change
-  void setSegmentVisibility(QObject* senderObject, int visible, int visible3D, int visible2DFill, int visible2DOutline);
+  void setSegmentVisibility(std::string segmentId, int visible, int visible3D, int visible2DFill, int visible2DOutline);
 
   /// To prevent accidentally moving out of the widget when pressing up/down arrows
   bool eventFilter(QObject* target, QEvent* event) override;
 
   /// Handle context menu events
   void contextMenuEvent(QContextMenuEvent* event) override;
-
-  virtual bool clickDecoration(QMouseEvent* e);
-
-  static const std::string STATUS_TAG_NAME;
 
 protected:
   QScopedPointer<qMRMLSegmentsTableViewPrivate> d_ptr;
