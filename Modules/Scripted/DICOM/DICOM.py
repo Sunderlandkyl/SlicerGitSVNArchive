@@ -94,6 +94,7 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     self.previousViewArrangement = layoutNode.GetViewArrangement()
 
     self.detailsPopup = None
+    viewWidget = None
     self.setDetailsPopup(DICOMWidget.getSavedDICOMDetailsWidgetType()())
 
     layoutManager = slicer.app.layoutManager()
@@ -143,8 +144,20 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
 
     self.detailsPopup = detailsPopup
     self.detailsPopup.setAutoFillBackground(True)
-    self.viewFactory.setWidget(self.detailsPopup)
     self.detailsPopup.closed.connect(self.onDetailsPopupClosed)
+
+    viewWidget = qt.QWidget(None)
+    viewWidget.setAutoFillBackground(True)
+    layout = qt.QVBoxLayout()
+    viewWidget.setLayout(layout)
+    label = qt.QLabel("DICOM Database")
+    layout.addWidget(label)
+    font = qt.QFont()
+    font.setBold(True)
+    font.setPointSize(14)
+    label.setFont(font)
+    layout.addWidget(self.detailsPopup)
+    self.viewFactory.setWidget(viewWidget)
 
   def onLayoutChanged(self, viewArrangement):
     self.previousViewArrangement = self.currentViewArrangement
@@ -366,6 +379,8 @@ class DICOMWidget(object):
       self.parent = parent
       self.layout = parent.layout()
 
+    self.detailsPopup = None
+
     globals()['d'] = self
 
   def enter(self):
@@ -380,6 +395,17 @@ class DICOMWidget(object):
 
   # sets up the widget
   def setup(self):
+
+    # subject hierarchy
+    self.subjectHierarchyFrame = ctk.ctkCollapsibleButton(self.parent)
+    self.subjectHierarchyFrame.setLayout(qt.QVBoxLayout())
+    self.subjectHierarchyFrame.setText("Loaded Data")
+    self.layout.addWidget(self.subjectHierarchyFrame)
+    self.subjectHierarchyFrame.collapsed = False
+
+    self.subjectHierarchyTree = slicer.qMRMLSubjectHierarchyTreeView()
+    self.subjectHierarchyTree.setMRMLScene(slicer.mrmlScene)
+    self.subjectHierarchyFrame.layout().addWidget(self.subjectHierarchyTree)
 
     #
     # servers
