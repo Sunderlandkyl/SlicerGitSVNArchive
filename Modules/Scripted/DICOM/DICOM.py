@@ -396,16 +396,27 @@ class DICOMWidget(object):
   # sets up the widget
   def setup(self):
 
-    # subject hierarchy
-    self.subjectHierarchyFrame = ctk.ctkCollapsibleButton(self.parent)
-    self.subjectHierarchyFrame.setLayout(qt.QVBoxLayout())
-    self.subjectHierarchyFrame.setText("Loaded Data")
-    self.layout.addWidget(self.subjectHierarchyFrame)
-    self.subjectHierarchyFrame.collapsed = False
+    # the Database frame (home of the ctkDICOM widget)
+    self.dicomFrame = ctk.ctkCollapsibleButton(self.parent)
+    self.dicomFrame.setLayout(qt.QVBoxLayout())
+    self.dicomFrame.setText("DICOM Database")
+    self.layout.addWidget(self.dicomFrame)
+
+    self.detailsPopup = None
+    self.setDetailsPopup(self.getSavedDICOMDetailsWidgetType()())
+
+    # XXX Slicer 4.5 - Remove these. Here only for backward compatibility.
+    self.dicomBrowser = self.detailsPopup.dicomBrowser
+    self.tables = self.detailsPopup.tables
+
+    # connect to the 'Show DICOM Browser' button
+    self.showBrowserButton = qt.QPushButton('Show DICOM Browser')
+    self.dicomFrame.layout().addWidget(self.showBrowserButton)
+    self.showBrowserButton.connect('clicked()', self.onOpenDetailsPopup)
 
     self.subjectHierarchyTree = slicer.qMRMLSubjectHierarchyTreeView()
+    self.dicomFrame.layout().addWidget(self.subjectHierarchyTree)
     self.subjectHierarchyTree.setMRMLScene(slicer.mrmlScene)
-    self.subjectHierarchyFrame.layout().addWidget(self.subjectHierarchyTree)
 
     #
     # servers
@@ -416,7 +427,7 @@ class DICOMWidget(object):
     self.localFrame.setLayout(qt.QVBoxLayout())
     self.localFrame.setText("Servers")
     self.layout.addWidget(self.localFrame)
-    self.localFrame.collapsed = False
+    self.localFrame.collapsed = True
 
     self.toggleServer = qt.QPushButton("Start Testing Server")
     self.localFrame.layout().addWidget(self.toggleServer)
@@ -448,24 +459,6 @@ class DICOMWidget(object):
     self.runListenerAtStart.checked = settingsValue('DICOM/RunListenerAtStart', False, converter=toBool)
     self.runListenerAtStart.connect('clicked()', self.onRunListenerAtStart)
 
-    # the Database frame (home of the ctkDICOM widget)
-    self.dicomFrame = ctk.ctkCollapsibleButton(self.parent)
-    self.dicomFrame.setLayout(qt.QVBoxLayout())
-    self.dicomFrame.setText("DICOM Database and Networking")
-    self.layout.addWidget(self.dicomFrame)
-
-    self.detailsPopup = None
-    self.setDetailsPopup(self.getSavedDICOMDetailsWidgetType()())
-
-    # XXX Slicer 4.5 - Remove these. Here only for backward compatibility.
-    self.dicomBrowser = self.detailsPopup.dicomBrowser
-    self.tables = self.detailsPopup.tables
-
-    # connect to the 'Show DICOM Browser' button
-    self.showBrowserButton = qt.QPushButton('Show DICOM Browser')
-    self.dicomFrame.layout().addWidget(self.showBrowserButton)
-    self.showBrowserButton.connect('clicked()', self.onOpenDetailsPopup)
-
     # connect to the main window's dicom button
     mw = slicer.util.mainWindow()
     if mw:
@@ -483,6 +476,7 @@ class DICOMWidget(object):
 
     # the recent activity frame
     self.activityFrame = ctk.ctkCollapsibleButton(self.parent)
+    self.activityFrame.collapsed = True
     self.activityFrame.setLayout(qt.QVBoxLayout())
     self.activityFrame.setText("Recent DICOM Activity")
     self.layout.addWidget(self.activityFrame)
