@@ -82,6 +82,7 @@ qSlicerSingletonViewFactory::qSlicerSingletonViewFactory(QObject* parent)
 qSlicerSingletonViewFactory::~qSlicerSingletonViewFactory()
 = default;
 
+
 //-----------------------------------------------------------------------------
 QWidget* qSlicerSingletonViewFactory::widget()
 {
@@ -93,15 +94,30 @@ QWidget* qSlicerSingletonViewFactory::widget()
 void qSlicerSingletonViewFactory::setWidget(QWidget* widget)
 {
   Q_D(qSlicerSingletonViewFactory);
+
   if (d->Widget == widget)
     {
     return;
     }
+
   if (d->Widget)
     {
-    d->Widget->deleteLater();
+    QObject::disconnect(d->Widget, &QWidget::destroyed, this, &qSlicerSingletonViewFactory::onWidgetDestroyed);
+    delete d->Widget;
+    d->Widget = nullptr;
     }
+
   d->Widget = widget;
+  if (d->Widget)
+    {
+    QObject::connect(d->Widget, &QWidget::destroyed, this, &qSlicerSingletonViewFactory::onWidgetDestroyed);
+    }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSingletonViewFactory::onWidgetDestroyed()
+{
+  this->setWidget(nullptr);
 }
 
 //-----------------------------------------------------------------------------
@@ -130,10 +146,10 @@ QWidget* qSlicerSingletonViewFactory::createViewFromXML(QDomElement layoutElemen
 {
   Q_UNUSED(layoutElement);
   Q_D(qSlicerSingletonViewFactory);
-  if (this->widget() && this->widget()->isVisible())
-    {
-    qCritical() << "qSlicerSingletonViewFactory::createViewFromXML - Widget for view \"" << d->TagName << "\" is already in use within the current layout!";
-    }
+  //if (d->Widget/* && d->Widget->isVisible()*/)
+  //  {
+  //  qCritical() << "qSlicerSingletonViewFactory::createViewFromXML - Widget for view \"" << d->TagName << "\" is already in use within the current layout!";
+  //  }
 
   return this->widget();
 }

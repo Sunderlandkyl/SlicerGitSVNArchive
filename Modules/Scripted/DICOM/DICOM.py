@@ -94,7 +94,7 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     self.previousViewArrangement = layoutNode.GetViewArrangement()
 
     self.detailsPopup = None
-    viewWidget = None
+    self.viewWidget = None
     self.setDetailsPopup(DICOMWidget.getSavedDICOMDetailsWidgetType()())
 
     layoutManager = slicer.app.layoutManager()
@@ -146,10 +146,10 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     self.detailsPopup.setAutoFillBackground(True)
     self.detailsPopup.closed.connect(self.onDetailsPopupClosed)
 
-    viewWidget = qt.QWidget(None)
-    viewWidget.setAutoFillBackground(True)
+    self.viewWidget = qt.QWidget()
+    self.viewWidget.setAutoFillBackground(True)
     layout = qt.QVBoxLayout()
-    viewWidget.setLayout(layout)
+    self.viewWidget.setLayout(layout)
     label = qt.QLabel("DICOM Database")
     layout.addWidget(label)
     font = qt.QFont()
@@ -157,7 +157,7 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     font.setPointSize(14)
     label.setFont(font)
     layout.addWidget(self.detailsPopup)
-    self.viewFactory.setWidget(viewWidget)
+    self.viewFactory.setWidget(self.viewWidget)
 
   def onLayoutChanged(self, viewArrangement):
     self.previousViewArrangement = self.currentViewArrangement
