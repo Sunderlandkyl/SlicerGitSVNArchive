@@ -95,6 +95,7 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
 
     self.detailsPopup = None
     self.viewWidget = None
+    self.browserSettingsWidget = None
     self.setDetailsPopup(DICOMWidget.getSavedDICOMDetailsWidgetType()())
 
     layoutManager = slicer.app.layoutManager()
@@ -146,18 +147,39 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     self.detailsPopup.setAutoFillBackground(True)
     self.detailsPopup.closed.connect(self.onDetailsPopupClosed)
 
+    tempWidget = self.viewWidget
     self.viewWidget = qt.QWidget()
     self.viewWidget.setAutoFillBackground(True)
     layout = qt.QVBoxLayout()
     self.viewWidget.setLayout(layout)
     label = qt.QLabel("DICOM Database")
+    label.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Fixed)
     layout.addWidget(label)
     font = qt.QFont()
     font.setBold(True)
-    font.setPointSize(14)
+    font.setPointSize(12)
     label.setFont(font)
     layout.addWidget(self.detailsPopup)
     self.viewFactory.setWidget(self.viewWidget)
+
+
+    #if self.browserSettingsWidget:
+    #  dicomWidget.dicomFrame.layout().removeWidget(self.browserSettingsWidget)
+    #if not self.browserSettingsWidget:
+    #  self.browserSettingsWidget = ctk.ctkCollapsibleGroupBox()
+    #  self.browserSettingsWidget.setLayout(qt.QVBoxLayout())
+    #  databaseLayout = qt.QHBoxLayout()
+    #  databaseNameLabel = self.detailsPopup.dicomBrowser.findChild("QLabel", "DatabaseNameLabel")
+    #  directoryButton = self.detailsPopup.dicomBrowser.findChild("ctkDirectoryButton", "DirectoryButton")
+    #  #databaseNameLabel = self.detailsPopup.dicomBrowser.ui.DatabaseNameLabel
+    #  #directoryButton = self.detailsPopup.dicomBrowser.ui.DirectoryButton
+    #  if databaseNameLabel:
+    #    databaseLayout.addWidget(databaseNameLabel)
+    #  if directoryButton:
+    #    databaseLayout.addWidget(directoryButton)
+    #  self.browserSettingsWidget.layout().addLayout(databaseLayout)
+    #  dicomWidget = slicer.modules.DICOMWidget
+    #  dicomWidget.dicomFrame.layout().addWidget(self.browserSettingsWidget)
 
   def onLayoutChanged(self, viewArrangement):
     self.previousViewArrangement = self.currentViewArrangement
@@ -166,6 +188,7 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     if self.currentViewArrangement == slicer.vtkMRMLLayoutNode.SlicerLayoutDicomBrowserView:
       # View has been changed to the DICOM browser view
       self.wasDataProbeVisible = dataProbe.isVisible()
+      self.detailsPopup.show()
       dataProbe.setVisible(False)
       self.detailsPopup.closeButton.setVisible(True)
     elif self.previousViewArrangement == slicer.vtkMRMLLayoutNode.SlicerLayoutDicomBrowserView:
@@ -405,6 +428,8 @@ class DICOMWidget(object):
     self.detailsPopup = None
     self.setDetailsPopup(self.getSavedDICOMDetailsWidgetType()())
 
+    self.browserSettingsWidget = None
+
     # XXX Slicer 4.5 - Remove these. Here only for backward compatibility.
     self.dicomBrowser = self.detailsPopup.dicomBrowser
     self.tables = self.detailsPopup.tables
@@ -495,6 +520,27 @@ class DICOMWidget(object):
   def onOpenDetailsPopup(self):
     if not isinstance(self.detailsPopup, self.getSavedDICOMDetailsWidgetType()):
       self.setDetailsPopup(self.getSavedDICOMDetailsWidgetType()())
+
+    if not self.browserSettingsWidget:
+      self.browserSettingsWidget = ctk.ctkCollapsibleGroupBox()
+      self.browserSettingsWidget.setTitle("DICOM table settings")
+      self.browserSettingsWidget.collapsed = True
+      self.browserSettingsWidget.setLayout(qt.QFormLayout())
+
+      self.detailsPopup.findChild("ctkExpandButton", "").hide()
+      #databaseNameLabel = self.detailsPopup.dicomBrowser.ui.DatabaseNameLabel
+      #directoryButton = self.detailsPopup.dicomBrowser.ui.DirectoryButton
+
+      directoryButton = self.detailsPopup.findChild("QWidget", "DirectoryButton")
+      self.browserSettingsWidget.layout().addRow("Local database", directoryButton)
+      directoryButton.show()
+
+      tableDensityComboBox = self.detailsPopup.findChild("QWidget", "tableDensityComboBox")
+      self.browserSettingsWidget.layout().addRow("Table density: ", tableDensityComboBox)
+      tableDensityComboBox.show()
+
+      dicomWidget = slicer.modules.DICOMWidget
+      dicomWidget.dicomFrame.layout().addWidget(self.browserSettingsWidget)
 
     slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutDicomBrowserView)
 
