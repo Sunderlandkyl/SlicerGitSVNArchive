@@ -38,6 +38,9 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     self.parent.icon = qt.QIcon(':Icons/Medium/SlicerLoadDICOM.png')
     self.parent.dependencies = ["SubjectHierarchy"]
 
+    self.detailsPopup = None
+    self.viewWidget = None
+    self.browserSettingsWidget = None
 
     # Tasks to execute after the application has started up
     slicer.app.connect("startupCompleted()", self.performPostModuleDiscoveryTasks)
@@ -48,7 +51,8 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
 
     self.viewFactory = slicer.qSlicerSingletonViewFactory()
     self.viewFactory.setTagName("dicombrowser")
-    slicer.app.layoutManager().registerViewFactory(self.viewFactory)
+    if slicer.app.layoutManager() is not None:
+      slicer.app.layoutManager().registerViewFactory(self.viewFactory)
 
   def performPostModuleDiscoveryTasks(self):
     """Since dicom plugins are discovered while the application
@@ -86,29 +90,28 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
       self.settingsPanel = DICOMSettingsPanel()
       slicer.app.settingsDialog().addPanel("DICOM", self.settingsPanel)
 
-    dataProbe = slicer.util.mainWindow().findChild("QWidget", "DataProbeCollapsibleWidget")
-    self.wasDataProbeVisible = dataProbe.isVisible()
+      dataProbe = slicer.util.mainWindow().findChild("QWidget", "DataProbeCollapsibleWidget")
+      self.wasDataProbeVisible = dataProbe.isVisible()
 
-    layoutNode = slicer.app.layoutManager().layoutLogic().GetLayoutNode()
-    self.currentViewArrangement = layoutNode.GetViewArrangement()
-    self.previousViewArrangement = layoutNode.GetViewArrangement()
+      layoutNode = slicer.app.layoutManager().layoutLogic().GetLayoutNode()
+      layoutManager = slicer.app.layoutManager()
+      layoutManager.connect('layoutChanged(int)', self.onLayoutChanged)
+      layout = (
+        "<layout type=\"horizontal\">"
+        " <item>"
+        "  <dicombrowser></dicombrowser>"
+        " </item>"
+        "</layout>"
+      )
+      layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(
+        slicer.vtkMRMLLayoutNode.SlicerLayoutDicomBrowserView, layout)
+      self.currentViewArrangement = layoutNode.GetViewArrangement()
+      self.previousViewArrangement = layoutNode.GetViewArrangement()
 
     self.detailsPopup = None
     self.viewWidget = None
     self.browserSettingsWidget = None
     self.setDetailsPopup(DICOMWidget.getSavedDICOMDetailsWidgetType()())
-
-    layoutManager = slicer.app.layoutManager()
-    layoutManager.connect('layoutChanged(int)', self.onLayoutChanged)
-    layout = (
-      "<layout type=\"horizontal\">"
-      " <item>"
-      "  <dicombrowser></dicombrowser>"
-      " </item>"
-      "</layout>"
-    )
-    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(
-      slicer.vtkMRMLLayoutNode.SlicerLayoutDicomBrowserView, layout)
 
   def startListener(self):
     # the dicom listener is also global, but only started on app start if
@@ -184,6 +187,7 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
   def onLayoutChanged(self, viewArrangement):
     self.previousViewArrangement = self.currentViewArrangement
     self.currentViewArrangement = viewArrangement
+
     dataProbe = slicer.util.mainWindow().findChild("QWidget", "DataProbeCollapsibleWidget")
     if self.currentViewArrangement == slicer.vtkMRMLLayoutNode.SlicerLayoutDicomBrowserView:
       # View has been changed to the DICOM browser view

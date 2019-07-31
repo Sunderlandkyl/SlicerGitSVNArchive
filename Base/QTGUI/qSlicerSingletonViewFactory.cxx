@@ -81,7 +81,6 @@ qSlicerSingletonViewFactory::qSlicerSingletonViewFactory(QObject* parent)
 qSlicerSingletonViewFactory::~qSlicerSingletonViewFactory()
 = default;
 
-
 //-----------------------------------------------------------------------------
 QWidget* qSlicerSingletonViewFactory::widget()
 {
