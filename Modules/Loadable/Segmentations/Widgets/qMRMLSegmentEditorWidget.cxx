@@ -61,6 +61,7 @@
 #include <vtkRenderWindow.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
+#include <vtkTimerLog.h>
 #include <vtkWeakPointer.h>
 
 // Slicer includes
@@ -106,6 +107,7 @@
 #include <QScrollArea>
 #include <QShortcut>
 #include <QTableView>
+#include <QTabletEvent>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidgetAction>
@@ -120,6 +122,22 @@ static const int BINARY_LABELMAP_SCALAR_TYPE = VTK_UNSIGNED_CHAR;
 static const unsigned char BINARY_LABELMAP_VOXEL_EMPTY = 0;
 
 static const char NULL_EFFECT_NAME[] = "NULL";
+
+//---------------------------------------------------------------------------
+bool qSegmentEditorApplicationEventFilter::eventFilter(QObject* object, QEvent* event)
+{
+  if (event->type() == QEvent::TabletEnterProximity)
+    {
+    QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+    this->tabletEnterProximity(tabletEvent->pointerType());
+    }
+  else if (event->type() == QEvent::TabletLeaveProximity)
+    {
+    QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+    this->tabletLeaveProximity(tabletEvent->pointerType());
+    }
+  return QObject::eventFilter(object, event);
+};
 
 //---------------------------------------------------------------------------
 class vtkSegmentEditorEventCallbackCommand : public vtkCallbackCommand
@@ -293,6 +311,10 @@ public:
 
   QAction* SurfaceSmoothingEnabledAction;
   ctkSliderWidget* SurfaceSmoothingSlider;
+
+  QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
+
+  int CurrentPointer;
 };
 
 //-----------------------------------------------------------------------------
@@ -314,6 +336,7 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   , MaskModeComboBoxFixedItemsCount(0)
   , EffectButtonStyle(Qt::ToolButtonTextUnderIcon)
   , RotateWarningInNodeSelectorLayout(true)
+  , CurrentPointer(-1)
 {
   this->AlignedMasterVolume = vtkOrientedImageData::New();
   this->ModifierLabelmap = vtkOrientedImageData::New();
@@ -331,6 +354,9 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
     // Global splitting, merging
     << "Scissors" << "Islands" << "Logical operators";
   this->UnorderedEffectsVisible = true;
+
+  this->ApplicationEventFilter = QSharedPointer<qSegmentEditorApplicationEventFilter>(new qSegmentEditorApplicationEventFilter());
+
 }
 
 //-----------------------------------------------------------------------------
@@ -463,6 +489,11 @@ void qMRMLSegmentEditorWidgetPrivate::init()
   QObject::connect( this->RedoButton, SIGNAL(clicked()), q, SLOT(redo()) );
 
   QObject::connect( this->EffectHelpBrowser, SIGNAL(anchorClicked(QUrl)), q, SLOT(anchorClicked(QUrl)), Qt::QueuedConnection );
+
+  QObject::connect(this->ApplicationEventFilter.get(), &qSegmentEditorApplicationEventFilter::tabletEnterProximity,
+                   q, &qMRMLSegmentEditorWidget::onTabletEnterProximity);
+  QObject::connect(this->ApplicationEventFilter.get(), &qSegmentEditorApplicationEventFilter::tabletLeaveProximity,
+                   q, &qMRMLSegmentEditorWidget::onTabletLeaveProximity);
 
   q->qvtkConnect(this->SegmentationHistory, vtkCommand::ModifiedEvent,
     q, SLOT(onSegmentationHistoryChanged()));
@@ -2571,6 +2602,15 @@ void qMRMLSegmentEditorWidget::setupViewObservations()
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::KeyReleaseEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EnterEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::LeaveEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletMoveEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletPressEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletReleaseEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::StartPanEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EndPanEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::StartPinchEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EndPinchEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::StartRotateEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EndRotateEvent, interactorObservation.CallbackCommand, 1.0);
     d->EventObservations << interactorObservation;
 
     // Slice node observation
@@ -2761,36 +2801,96 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
   vtkMRMLAbstractViewNode* callerViewNode = vtkMRMLAbstractViewNode::SafeDownCast(caller);
   if (callerInteractor)
     {
-
-    // Do not process events while a touch gesture is in progress (e.g., do not paint in the view
-    // while doing multi-touch pinch/rotate).
+    vtkNew<vtkCollection> displayManagers;
     qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
     if (sliceWidget)
       {
-      vtkMRMLCrosshairDisplayableManager* crosshairDisplayableManager = vtkMRMLCrosshairDisplayableManager::SafeDownCast(
-        sliceWidget->sliceView()->displayableManagerByClassName("vtkMRMLCrosshairDisplayableManager"));
-      if (crosshairDisplayableManager)
-        {
-        int widgetState = crosshairDisplayableManager->GetSliceIntersectionWidget()->GetWidgetState();
-        if (widgetState == vtkMRMLSliceIntersectionWidget::WidgetStateTouchGesture)
-          {
-          return;
-          }
-        }
+      sliceWidget->sliceView()->getDisplayableManagers(displayManagers);
       }
     qMRMLThreeDWidget* threeDWidget = qobject_cast<qMRMLThreeDWidget*>(viewWidget);
     if (threeDWidget)
       {
-      vtkMRMLCameraDisplayableManager* cameraDisplayableManager = vtkMRMLCameraDisplayableManager::SafeDownCast(
-        threeDWidget->threeDView()->displayableManagerByClassName("vtkMRMLCameraDisplayableManager"));
-      if (cameraDisplayableManager)
+      threeDWidget->threeDView()->getDisplayableManagers(displayManagers);
+      }
+
+    vtkMRMLCrosshairDisplayableManager* crosshairDisplayableManager = nullptr;
+    vtkMRMLCameraDisplayableManager* cameraDisplayableManager = nullptr;
+    for (int i = 0; i < displayManagers->GetNumberOfItems(); ++i)
+      {
+      vtkObject* object = displayManagers->GetItemAsObject(i);
+      if (object->IsA("vtkMRMLCrosshairDisplayableManager"))
         {
-        int widgetState = cameraDisplayableManager->GetCameraWidget()->GetWidgetState();
-        if (widgetState == vtkMRMLCameraWidget::WidgetStateTouchGesture)
-          {
-          return;
-          }
+        crosshairDisplayableManager = vtkMRMLCrosshairDisplayableManager::SafeDownCast(object);
+        break;
         }
+      else if (object->IsA("vtkMRMLCameraDisplayableManager"))
+        {
+        cameraDisplayableManager = vtkMRMLCameraDisplayableManager::SafeDownCast(object);
+        }
+      }
+
+    if (crosshairDisplayableManager)
+      {
+      int widgetState = crosshairDisplayableManager->GetSliceIntersectionWidget()->GetWidgetState();
+      if (widgetState == vtkMRMLSliceIntersectionWidget::WidgetStateTouchGesture)
+        {
+        return;
+        }
+      }
+    else if (cameraDisplayableManager)
+      {
+      int widgetState = cameraDisplayableManager->GetCameraWidget()->GetWidgetState();
+      if (widgetState == vtkMRMLCameraWidget::WidgetStateTouchGesture)
+        {
+        return;
+        }
+      }
+
+    static double lastTabletMoveEvent = -1;
+    double timeSinceLastEvent;
+    switch (eid)
+      {
+      case vtkCommand::TabletPressEvent:
+        if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::LeftButton)
+          {
+          eid = vtkCommand::LeftButtonPressEvent;
+          }
+        else if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::RightButton)
+          {
+          eid = vtkCommand::RightButtonReleaseEvent;
+          }
+        if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
+          {
+          activeEffect->setCommonParameter("TabletPressure", callerInteractor->GetTabletPressure());
+          }
+        else
+          {
+          activeEffect->setCommonParameter("TabletPressure", 0.0);
+          }
+        break;
+      case vtkCommand::TabletMoveEvent:
+        timeSinceLastEvent = vtkTimerLog::GetUniversalTime() - lastTabletMoveEvent;
+        if (lastTabletMoveEvent < 0 || timeSinceLastEvent >= 0.05)
+          {
+          eid = vtkCommand::MouseMoveEvent;
+          lastTabletMoveEvent = vtkTimerLog::GetUniversalTime();
+          if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
+            {
+            activeEffect->setCommonParameter("TabletPressure", callerInteractor->GetTabletPressure());
+            }
+          else
+            {
+            activeEffect->setCommonParameter("TabletPressure", 0.0);
+            }
+          }
+        else
+          {
+          eid = 0;
+          }
+        break;
+      case vtkCommand::TabletReleaseEvent:
+        eid = vtkCommand::LeftButtonReleaseEvent;
+        break;
       }
 
     bool abortEvent = activeEffect->processInteractionEvents(callerInteractor, eid, viewWidget);
@@ -2821,11 +2921,6 @@ void qMRMLSegmentEditorWidget::onMasterVolumeIntensityMaskChecked(bool checked)
     return;
     }
   d->ParameterSetNode->SetMasterVolumeIntensityMask(checked);
-  /*
-  this->ThresholdRangeWidget->blockSignals(true);
-  this->ThresholdRangeWidget->setVisible(checked);
-  this->ThresholdRangeWidget->blockSignals(false);
-  */
 }
 
 //-----------------------------------------------------------------------------
@@ -3067,6 +3162,24 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   toggleActiveEffectShortcut->setProperty("effectIndex", -1);
   QObject::connect(toggleActiveEffectShortcut, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
 
+  // Microsoft surface pen click
+  QShortcut* toggleActiveEffectShortcut2 = new QShortcut(QKeySequence(Qt::Key_F20 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut2);
+  toggleActiveEffectShortcut2->setProperty("effectIndex", -1);
+  QObject::connect(toggleActiveEffectShortcut2, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
+
+  // Microsoft surface pen double-click
+  QShortcut* toggleActiveEffectShortcut3 = new QShortcut(QKeySequence(Qt::Key_F18 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut3);
+  toggleActiveEffectShortcut3->setProperty("effectIndex", -1);
+  QObject::connect(toggleActiveEffectShortcut3, SIGNAL(activated()), this, SLOT(onSelectEffectOffsetShortcut()));
+
+  // Microsoft surface pen long-click
+  QShortcut* toggleActiveEffectShortcut4 = new QShortcut(QKeySequence(Qt::Key_F19 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut4);
+  toggleActiveEffectShortcut4->setProperty("effectIndex", +1);
+  QObject::connect(toggleActiveEffectShortcut4, SIGNAL(activated()), this, SLOT(onSelectEffectOffsetShortcut()));
+
   // z, y => undo, redo
   QShortcut* undoShortcut = new QShortcut(QKeySequence(Qt::Key_Z), parent);
   d->KeyboardShortcuts.push_back(undoShortcut);
@@ -3107,6 +3220,10 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   QShortcut* toggleMasterVolumeIntensityMaskShortcut = new QShortcut(QKeySequence(Qt::Key_I), parent);
   d->KeyboardShortcuts.push_back(toggleMasterVolumeIntensityMaskShortcut);
   QObject::connect(toggleMasterVolumeIntensityMaskShortcut, SIGNAL(activated()), this, SLOT(toggleMasterVolumeIntensityMaskEnabled()));
+
+  qSlicerApplication::application()->installEventFilter(d->ApplicationEventFilter.get());
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, true);
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_SynthesizeMouseForUnhandledTabletEvents, false);
 }
 
 //-----------------------------------------------------------------------------
@@ -3120,6 +3237,68 @@ void qMRMLSegmentEditorWidget::uninstallKeyboardShortcuts()
     delete shortcut;
     }
   d->KeyboardShortcuts.clear();
+
+  qSlicerApplication::application()->removeEventFilter(d->ApplicationEventFilter.get());
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, false);
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentEditorWidget::onTabletEnterProximity(int pointerType)
+{
+  Q_D(qMRMLSegmentEditorWidget);
+
+  if (pointerType == QTabletEvent::PointerType::Eraser)
+    {
+    this->setActiveEffectByName("Erase");
+    }
+  d->CurrentPointer = pointerType;
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
+{
+  Q_D(qMRMLSegmentEditorWidget);
+
+  qSlicerSegmentEditorAbstractEffect* lastEffect = d->LastActiveEffect;
+  if (pointerType == QTabletEvent::PointerType::Eraser)
+    {
+    if (this->activeEffect() && this->activeEffect()->name() == "Erase")
+      {
+      this->setActiveEffect(d->LastActiveEffect);
+      }
+    }
+  d->LastActiveEffect = lastEffect;
+  d->CurrentPointer = -1;
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentEditorWidget::onSelectEffectOffsetShortcut()
+{
+  Q_D(qMRMLSegmentEditorWidget);
+  QShortcut* shortcut = qobject_cast<QShortcut*>(sender());
+  if (shortcut == nullptr || d->Locked)
+    {
+    return;
+    }
+
+  int indexOffset = shortcut->property("effectIndex").toInt();
+  qSlicerSegmentEditorAbstractEffect* activeEffect = this->activeEffect();
+  int nextEffect = -1;
+  for (int i = 0; i < this->effectCount(); ++i)
+    {
+    qSlicerSegmentEditorAbstractEffect* effect = this->effectByIndex(i);
+    if (activeEffect != effect)
+      {
+      continue;
+      }
+    nextEffect = (i + indexOffset) % this->effectCount();
+    }
+  if (nextEffect < 0)
+    {
+    return;
+    }
+  qSlicerSegmentEditorAbstractEffect* selectedEffect = this->effectByIndex(nextEffect);
+  this->setActiveEffect(selectedEffect);
 }
 
 //-----------------------------------------------------------------------------

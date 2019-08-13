@@ -53,6 +53,7 @@
 
 class BrushPipeline;
 class ctkDoubleSlider;
+class ctkRangeWidget;
 class QPoint;
 class QIcon;
 class QFrame;
@@ -65,6 +66,7 @@ class vtkGlyph3D;
 class vtkPoints;
 class vtkPolyDataNormals;
 class vtkPolyDataToImageStencil;
+class ctkSliderWidget;
 
 /// \ingroup SlicerRt_QtModules_Segmentations
 /// \brief Private implementation of the segment editor paint effect
@@ -132,7 +134,7 @@ public slots:
   void onDiameterUnitsClicked();
   void onQuickDiameterButtonClicked();
   void onDiameterValueChanged(double);
-
+  void onPressureRangeChanged(double);
 public:
   QIcon PaintIcon;
 
@@ -171,6 +173,7 @@ public:
   QFrame* BrushDiameterFrame;
   qMRMLSpinBox* BrushDiameterSpinBox;
   ctkDoubleSlider* BrushDiameterSlider;
+  ctkSliderWidget* BrushPressureRangeSlider;
   QToolButton* BrushDiameterRelativeToggle;
   QCheckBox* BrushSphereCheckbox;
   QCheckBox* EditIn3DViewsCheckbox;

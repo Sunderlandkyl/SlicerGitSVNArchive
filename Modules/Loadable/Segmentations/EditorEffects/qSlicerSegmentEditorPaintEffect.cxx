@@ -72,8 +72,12 @@
 #include <vtkSmartPointer.h>
 #include <vtkStringArray.h>
 #include <vtkWorldPointPicker.h>
+
 // CTK includes
 #include "ctkDoubleSlider.h"
+#include "ctkDoubleRangeSlider.h"
+#include "ctkRangeWidget.h"
+#include "ctkSliderWidget.h"
 
 // MRML includes
 #include <vtkEventBroker.h>
@@ -226,6 +230,7 @@ qSlicerSegmentEditorPaintEffectPrivate::qSlicerSegmentEditorPaintEffectPrivate(q
   , BrushDiameterFrame(nullptr)
   , BrushDiameterSpinBox(nullptr)
   , BrushDiameterSlider(nullptr)
+  , BrushPressureRangeSlider(nullptr)
   , BrushDiameterRelativeToggle(nullptr)
   , BrushSphereCheckbox(nullptr)
   , EditIn3DViewsCheckbox(nullptr)
@@ -331,7 +336,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintAddPoint(qMRMLWidget* viewWidg
   if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint)
     {
     this->paintApply(viewWidget);
-    qSlicerSegmentEditorAbstractEffect::forceRender(viewWidget); // TODO: repaint all?
+    qSlicerSegmentEditorAbstractEffect::scheduleRender(viewWidget); // TODO: repaint all?
     }
 }
 
@@ -681,6 +686,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::onDiameterValueChanged(double value
 }
 
 //-----------------------------------------------------------------------------
+void qSlicerSegmentEditorPaintEffectPrivate::onPressureRangeChanged(double range)
+{
+  Q_Q(qSlicerSegmentEditorPaintEffect);
+  q->setCommonParameter("BrushPressureRange", range);
+}
+
+//-----------------------------------------------------------------------------
 void qSlicerSegmentEditorPaintEffectPrivate::updateAbsoluteBrushDiameter()
 {
   Q_Q(qSlicerSegmentEditorPaintEffect);
@@ -776,6 +788,16 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrushModel(qMRMLWidget* viewW
   this->updateAbsoluteBrushDiameter();
 
   double diameterMm = q->doubleParameter("BrushAbsoluteDiameter");
+
+  // TODO: Dynamic brush size is not currently supported with delayed paint.
+  if (!this->DelayedPaint && q->commonParameterDefined("TabletPressure") && q->commonParameterDefined("BrushPressureRange"))
+    {
+    double tabletPressure = q->doubleParameter("TabletPressure");
+    double pressureRange = q->doubleParameter("BrushPressureRange");
+    //diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 1 + 2 * pressureRange)));
+    //diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 10)));
+    diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 10)));
+    }
 
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   if (!sliceWidget || q->integerParameter("BrushSphere"))
@@ -1119,6 +1141,11 @@ bool qSlicerSegmentEditorPaintEffect::processInteractionEvents(
 {
   Q_D(qSlicerSegmentEditorPaintEffect);
 
+  if (eid == 0)
+    {
+    return false;
+    }
+
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   qMRMLThreeDWidget* threeDWidget = qobject_cast<qMRMLThreeDWidget*>(viewWidget);
 
@@ -1320,8 +1347,7 @@ bool qSlicerSegmentEditorPaintEffect::processInteractionEvents(
   d->updateBrushModel(viewWidget, brushPosition_World);
   d->updateBrushes();
 
-  qSlicerSegmentEditorAbstractEffect::forceRender(viewWidget);
-
+  qSlicerSegmentEditorAbstractEffect::scheduleRender(viewWidget);
   return abortEvent;
 }
 
@@ -1413,6 +1439,18 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   d->BrushDiameterSlider->setOrientation(Qt::Horizontal);
   this->addOptionsWidget(d->BrushDiameterSlider);
 
+
+  QLabel* pressureLabel = new QLabel("Pressure range:", d->BrushDiameterFrame);
+  this->addOptionsWidget(pressureLabel);
+
+
+  d->BrushPressureRangeSlider = new ctkSliderWidget();
+  d->BrushPressureRangeSlider->setMinimum(0.0);
+  d->BrushPressureRangeSlider->setMaximum(1.0);
+  d->BrushPressureRangeSlider->setSingleStep(0.01);
+  d->BrushPressureRangeSlider->setValue(0.5);
+  this->addOptionsWidget(d->BrushPressureRangeSlider);
+
   // Create options frame for this effect
   QHBoxLayout* hbox = new QHBoxLayout();
 
@@ -1455,6 +1493,7 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   QObject::connect(d->BrushPixelModeCheckbox, SIGNAL(clicked()), this, SLOT(updateMRMLFromGUI()));
   QObject::connect(d->BrushDiameterSlider, SIGNAL(valueChanged(double)), d, SLOT(onDiameterValueChanged(double)));
   QObject::connect(d->BrushDiameterSpinBox, SIGNAL(valueChanged(double)), d, SLOT(onDiameterValueChanged(double)));
+  QObject::connect(d->BrushPressureRangeSlider, SIGNAL(valueChanged(double)), d, SLOT(onPressureRangeChanged(double)));
 }
 
 //-----------------------------------------------------------------------------
@@ -1472,6 +1511,8 @@ void qSlicerSegmentEditorPaintEffect::setMRMLDefaults()
   this->setParameterDefault("ColorSmudge", 0);
   this->setParameterDefault("EraseAllSegments", 0);
   this->setCommonParameterDefault("BrushPixelMode", 0);
+  this->setCommonParameterDefault("BrushPressureRange", 0.0);
+  this->setCommonParameterDefault("TabletPressure", 0.0);
 }
 
 //-----------------------------------------------------------------------------
@@ -1540,6 +1581,9 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
     }
   d->BrushDiameterSlider->blockSignals(false);
 
+  d->BrushPressureRangeSlider->blockSignals(true);
+  d->BrushPressureRangeSlider->setValue(this->doubleParameter("BrushPressureRange"));
+  d->BrushPressureRangeSlider->blockSignals(false);
 
   d->BrushDiameterSpinBox->blockSignals(true);
   d->BrushDiameterSpinBox->setMRMLScene(this->scene());
@@ -1593,14 +1637,7 @@ void qSlicerSegmentEditorPaintEffect::updateMRMLFromGUI()
 
   bool isBrushDiameterRelative = (d->BrushDiameterRelativeToggle->text() == "%");
   this->setCommonParameter("BrushDiameterIsRelative", isBrushDiameterRelative ? 1 : 0);
-  if (isBrushDiameterRelative)
-    {
-    this->setCommonParameter("BrushRelativeDiameter", d->BrushDiameterSlider->value());
-    }
-  else
-    {
-    this->setCommonParameter("BrushAbsoluteDiameter", d->BrushDiameterSlider->value());
-    }
+  d->onDiameterValueChanged(d->BrushDiameterSlider->value());
 
   // If pixel mode changed, then other GUI changes are due
   if (pixelModeChanged)
