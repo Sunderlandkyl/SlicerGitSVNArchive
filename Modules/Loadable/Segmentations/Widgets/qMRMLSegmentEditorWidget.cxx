@@ -102,6 +102,7 @@
 #include <QScrollArea>
 #include <QShortcut>
 #include <QTableView>
+#include <QTabletEvent>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidgetAction>
@@ -116,6 +117,23 @@ static const int BINARY_LABELMAP_SCALAR_TYPE = VTK_UNSIGNED_CHAR;
 static const unsigned char BINARY_LABELMAP_VOXEL_EMPTY = 0;
 
 static const char NULL_EFFECT_NAME[] = "NULL";
+
+//---------------------------------------------------------------------------
+bool qSegmentEditorApplicationEventFilter::eventFilter(QObject* object, QEvent* event)
+{
+  if (event->type() == QEvent::TabletEnterProximity)
+  {
+    QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+    this->tabletEnterProximity(tabletEvent->pointerType());
+    return true;
+  }
+  else if (event->type() == QEvent::TabletLeaveProximity)
+  {
+    QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+    this->tabletLeaveProximity(tabletEvent->pointerType());
+  }
+  return false;
+};
 
 //---------------------------------------------------------------------------
 class vtkSegmentEditorEventCallbackCommand : public vtkCallbackCommand
@@ -289,6 +307,8 @@ public:
 
   QAction* SurfaceSmoothingEnabledAction;
   ctkSliderWidget* SurfaceSmoothingSlider;
+
+  QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
 };
 
 //-----------------------------------------------------------------------------
@@ -327,6 +347,8 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
     // Global splitting, merging
     << "Scissors" << "Islands" << "Logical operators";
   this->UnorderedEffectsVisible = true;
+
+  this->ApplicationEventFilter = QSharedPointer<qSegmentEditorApplicationEventFilter>(new qSegmentEditorApplicationEventFilter());
 }
 
 //-----------------------------------------------------------------------------
@@ -459,6 +481,11 @@ void qMRMLSegmentEditorWidgetPrivate::init()
   QObject::connect( this->RedoButton, SIGNAL(clicked()), q, SLOT(redo()) );
 
   QObject::connect( this->EffectHelpBrowser, SIGNAL(anchorClicked(QUrl)), q, SLOT(anchorClicked(QUrl)), Qt::QueuedConnection );
+
+  QObject::connect(this->ApplicationEventFilter.get(), &qSegmentEditorApplicationEventFilter::tabletEnterProximity,
+                   q, &qMRMLSegmentEditorWidget::onTabletEnterProximity);
+  QObject::connect(this->ApplicationEventFilter.get(), &qSegmentEditorApplicationEventFilter::tabletLeaveProximity,
+                   q, &qMRMLSegmentEditorWidget::onTabletLeaveProximity);
 
   q->qvtkConnect(this->SegmentationHistory, vtkCommand::ModifiedEvent,
     q, SLOT(onSegmentationHistoryChanged()));
@@ -2567,6 +2594,12 @@ void qMRMLSegmentEditorWidget::setupViewObservations()
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::KeyReleaseEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EnterEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::LeaveEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletEnterProximityEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletLeaveProximityEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletMoveEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletPressEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletReleaseEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletTrackingChangeEvent, interactorObservation.CallbackCommand, 1.0);
     d->EventObservations << interactorObservation;
 
     // Slice node observation
@@ -2757,6 +2790,36 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
   vtkMRMLAbstractViewNode* callerViewNode = vtkMRMLAbstractViewNode::SafeDownCast(caller);
   if (callerInteractor)
     {
+
+    if (self->d_func()->TabletEnabledCheckBox->isChecked())
+    {
+      switch (eid)
+        {
+        case vtkCommand::TabletPressEvent:
+          if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::LeftButton)
+            {
+            eid = vtkCommand::LeftButtonPressEvent;
+            }
+          else if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::RightButton)
+            {
+            eid = vtkCommand::RightButtonReleaseEvent;
+            }
+          break;
+        case vtkCommand::TabletMoveEvent:
+          eid = vtkCommand::MouseMoveEvent;
+          break;
+        case vtkCommand::TabletReleaseEvent:
+          eid = vtkCommand::LeftButtonReleaseEvent;
+          break;
+        case vtkCommand::MouseMoveEvent:
+        case vtkCommand::LeftButtonPressEvent:
+        case vtkCommand::LeftButtonReleaseEvent:
+        case vtkCommand::RightButtonPressEvent:
+        case vtkCommand::RightButtonReleaseEvent:
+          eid = 0;
+        }
+    }
+
     bool abortEvent = activeEffect->processInteractionEvents(callerInteractor, eid, viewWidget);
     if (abortEvent)
       {
@@ -3031,6 +3094,12 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   toggleActiveEffectShortcut->setProperty("effectIndex", -1);
   QObject::connect(toggleActiveEffectShortcut, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
 
+  // Space => activate/deactivate last effect
+  QShortcut* toggleActiveEffectShortcut2 = new QShortcut(QKeySequence(Qt::Key_F20 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut2);
+  toggleActiveEffectShortcut2->setProperty("effectIndex", -1);
+  QObject::connect(toggleActiveEffectShortcut2, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
+
   // z, y => undo, redo
   QShortcut* undoShortcut = new QShortcut(QKeySequence(Qt::Key_Z), parent);
   d->KeyboardShortcuts.push_back(undoShortcut);
@@ -3071,6 +3140,8 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   QShortcut* toggleMasterVolumeIntensityMaskShortcut = new QShortcut(QKeySequence(Qt::Key_I), parent);
   d->KeyboardShortcuts.push_back(toggleMasterVolumeIntensityMaskShortcut);
   QObject::connect(toggleMasterVolumeIntensityMaskShortcut, SIGNAL(activated()), this, SLOT(toggleMasterVolumeIntensityMaskEnabled()));
+
+  qSlicerApplication::application()->installEventFilter(d->ApplicationEventFilter.get());
 }
 
 //-----------------------------------------------------------------------------
@@ -3084,6 +3155,44 @@ void qMRMLSegmentEditorWidget::uninstallKeyboardShortcuts()
     delete shortcut;
     }
   d->KeyboardShortcuts.clear();
+
+  qSlicerApplication::application()->removeEventFilter(d->ApplicationEventFilter.get());
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, true);
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentEditorWidget::onTabletEnterProximity(int pointerType)
+{
+  Q_D(qMRMLSegmentEditorWidget);
+
+  if (!d->TabletEnabledCheckBox->isChecked())
+    {
+    return;
+    }
+
+  if (pointerType == QTabletEvent::PointerType::Eraser)
+    {
+    this->setActiveEffectByName("Erase");
+    }
+}
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
+{
+  Q_D(qMRMLSegmentEditorWidget);
+
+  if (!d->TabletEnabledCheckBox->isChecked())
+    {
+    return;
+    }
+
+  if (pointerType == QTabletEvent::PointerType::Eraser)
+    {
+    if (this->activeEffect() && this->activeEffect()->name() == "Erase")
+      {
+      this->setActiveEffect(d->LastActiveEffect);
+      }
+    }
 }
 
 //-----------------------------------------------------------------------------
