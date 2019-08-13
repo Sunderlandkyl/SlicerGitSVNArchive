@@ -397,6 +397,9 @@ protected slots:
   /// Show segmentation geometry dialog to specify labelmap geometry
   void showSegmentationGeometryDialog();
 
+  void onTabletEnterProximity(int pointerType);
+  void onTabletLeaveProximity(int pointerType);
+
 protected:
   /// Callback function invoked when interaction happens
   static void processEvents(vtkObject* caller, unsigned long eid, void* clientData, void* callData);
@@ -418,6 +421,20 @@ protected:
 private:
   Q_DECLARE_PRIVATE(qMRMLSegmentEditorWidget);
   Q_DISABLE_COPY(qMRMLSegmentEditorWidget);
+};
+
+//---------------------------------------------------------------------------
+class qSegmentEditorApplicationEventFilter : public QObject
+{
+  Q_OBJECT
+
+public:
+
+  bool eventFilter(QObject* object, QEvent* event) override;
+
+signals:
+  void tabletEnterProximity(int pointerType);
+  void tabletLeaveProximity(int pointerType);
 };
 
 #endif

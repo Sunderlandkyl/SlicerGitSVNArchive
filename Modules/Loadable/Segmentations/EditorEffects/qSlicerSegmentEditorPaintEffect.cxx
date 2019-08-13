@@ -1062,6 +1062,11 @@ bool qSlicerSegmentEditorPaintEffect::processInteractionEvents(
 {
   Q_D(qSlicerSegmentEditorPaintEffect);
 
+  if (eid == 0)
+  {
+    return false;
+  }
+
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   qMRMLThreeDWidget* threeDWidget = qobject_cast<qMRMLThreeDWidget*>(viewWidget);
 
