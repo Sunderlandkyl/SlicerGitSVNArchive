@@ -309,6 +309,8 @@ public:
   ctkSliderWidget* SurfaceSmoothingSlider;
 
   QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
+
+  int CurrentPointer;
 };
 
 //-----------------------------------------------------------------------------
@@ -330,6 +332,7 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   , MaskModeComboBoxFixedItemsCount(0)
   , EffectButtonStyle(Qt::ToolButtonTextUnderIcon)
   , RotateWarningInNodeSelectorLayout(true)
+  , CurrentPointer(-1)
 {
   this->AlignedMasterVolume = vtkOrientedImageData::New();
   this->ModifierLabelmap = vtkOrientedImageData::New();
@@ -486,6 +489,7 @@ void qMRMLSegmentEditorWidgetPrivate::init()
                    q, &qMRMLSegmentEditorWidget::onTabletEnterProximity);
   QObject::connect(this->ApplicationEventFilter.get(), &qSegmentEditorApplicationEventFilter::tabletLeaveProximity,
                    q, &qMRMLSegmentEditorWidget::onTabletLeaveProximity);
+  QObject::connect(this->TabletEnabledCheckBox, &QCheckBox::stateChanged, q, &qMRMLSegmentEditorWidget::onTabletModeChanged);
 
   q->qvtkConnect(this->SegmentationHistory, vtkCommand::ModifiedEvent,
     q, SLOT(onSegmentationHistoryChanged()));
@@ -2790,9 +2794,17 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
   vtkMRMLAbstractViewNode* callerViewNode = vtkMRMLAbstractViewNode::SafeDownCast(caller);
   if (callerInteractor)
     {
+    if (self->mrmlSegmentEditorNode() && self->mrmlSegmentEditorNode()->GetTabletModeEnabled())
+      {
+      if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
+        {
+        activeEffect->setParameter("TabletPressure", callerInteractor->GetTabletPressure());
+        }
+      else
+        {
+        activeEffect->setParameter("TabletPressure", 0.5);
+        }
 
-    if (self->d_func()->TabletEnabledCheckBox->isChecked())
-    {
       switch (eid)
         {
         case vtkCommand::TabletPressEvent:
@@ -2818,7 +2830,7 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
         case vtkCommand::RightButtonReleaseEvent:
           eid = 0;
         }
-    }
+      }
 
     bool abortEvent = activeEffect->processInteractionEvents(callerInteractor, eid, viewWidget);
     if (abortEvent)
@@ -3174,6 +3186,7 @@ void qMRMLSegmentEditorWidget::onTabletEnterProximity(int pointerType)
     {
     this->setActiveEffectByName("Erase");
     }
+  d->CurrentPointer = pointerType;
 }
 
 //-----------------------------------------------------------------------------
@@ -3193,7 +3206,24 @@ void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
       this->setActiveEffect(d->LastActiveEffect);
       }
     }
+  d->CurrentPointer = -1;
 }
+
+//-----------------------------------------------------------------------------
+void qMRMLSegmentEditorWidget::onTabletModeChanged(int checkState)
+{
+  Q_D(qMRMLSegmentEditorWidget);
+
+  if (checkState == Qt::Checked)
+    {
+    d->ParameterSetNode->SetTabletModeEnabled(true);
+    }
+  else
+    {
+    d->ParameterSetNode->SetTabletModeEnabled(false);
+    }
+}
+
 
 //-----------------------------------------------------------------------------
 void qMRMLSegmentEditorWidget::onSelectEffectShortcut()

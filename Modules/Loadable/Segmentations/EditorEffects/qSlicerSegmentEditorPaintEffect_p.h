@@ -53,6 +53,7 @@
 
 class BrushPipeline;
 class ctkDoubleSlider;
+class ctkRangeWidget;
 class QPoint;
 class QIcon;
 class QFrame;
@@ -124,7 +125,7 @@ public slots:
   void onDiameterUnitsClicked();
   void onQuickDiameterButtonClicked();
   void onDiameterValueChanged(double);
-
+  void onPressureRangeChanged(double minimum, double maximum);
 public:
   QIcon PaintIcon;
 
@@ -163,6 +164,7 @@ public:
   QFrame* BrushDiameterFrame;
   qMRMLSpinBox* BrushDiameterSpinBox;
   ctkDoubleSlider* BrushDiameterSlider;
+  ctkRangeWidget* BrushPressureRangeSlider;
   QToolButton* BrushDiameterRelativeToggle;
   QCheckBox* BrushSphereCheckbox;
   QCheckBox* EditIn3DViewsCheckbox;

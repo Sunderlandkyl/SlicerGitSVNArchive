@@ -399,6 +399,7 @@ protected slots:
 
   void onTabletEnterProximity(int pointerType);
   void onTabletLeaveProximity(int pointerType);
+  void onTabletModeChanged(int checkState);
 
 protected:
   /// Callback function invoked when interaction happens
