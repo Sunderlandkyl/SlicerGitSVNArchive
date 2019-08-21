@@ -160,6 +160,13 @@ public:
   vtkSetMacro(OverwriteMode, int);
   vtkGetMacro(OverwriteMode, int);
 
+  /// Set tablet mode enabled. Tablet mode interactions can be handled differently by effects than mouse interactions
+  vtkSetMacro(TabletModeEnabled, bool);
+  /// Get tablet mode enabled. Tablet mode interactions can be handled differently by effects than mouse interactions
+  vtkGetMacro(TabletModeEnabled, bool);
+  // TODO
+  vtkBooleanMacro(TabletModeEnabled, bool);
+
 protected:
   vtkMRMLSegmentEditorNode();
   ~vtkMRMLSegmentEditorNode() override;
@@ -179,6 +186,8 @@ protected:
 
   bool MasterVolumeIntensityMask;
   double MasterVolumeIntensityMaskRange[2];
+
+  bool TabletModeEnabled;
 };
 
 #endif // __vtkMRMLSegmentEditorNode_h
