@@ -430,32 +430,11 @@ class qSegmentEditorApplicationEventFilter : public QObject
   Q_OBJECT
 
 public:
-  qSegmentEditorApplicationEventFilter() : QObject()
-  {
-    lastTabletMoveEventTime = -1;
-  };
-
   bool eventFilter(QObject* object, QEvent* event) override;
-  double lastTabletMoveEventTime;
 
 signals:
   void tabletEnterProximity(int pointerType);
   void tabletLeaveProximity(int pointerType);
-};
-
-//---------------------------------------------------------------------------
-class qSegmentEditorTabletModeEventFilter : public QObject
-{
-  Q_OBJECT
-
-public:
-  qSegmentEditorTabletModeEventFilter() : QObject()
-  {
-    lastTabletMoveEventTime = -1;
-  };
-
-  bool eventFilter(QObject* object, QEvent* event) override;
-  double lastTabletMoveEventTime;
 };
 
 #endif
