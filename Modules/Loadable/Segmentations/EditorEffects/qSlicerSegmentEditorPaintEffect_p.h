@@ -125,7 +125,7 @@ public slots:
   void onDiameterUnitsClicked();
   void onQuickDiameterButtonClicked();
   void onDiameterValueChanged(double);
-  void onPressureRangeChanged(double minimum, double maximum);
+  void onPressureRangeChanged(double);
 public:
   QIcon PaintIcon;
 
@@ -164,7 +164,7 @@ public:
   QFrame* BrushDiameterFrame;
   qMRMLSpinBox* BrushDiameterSpinBox;
   ctkDoubleSlider* BrushDiameterSlider;
-  ctkRangeWidget* BrushPressureRangeSlider;
+  ctkDoubleSlider* BrushPressureRangeSlider;
   QToolButton* BrushDiameterRelativeToggle;
   QCheckBox* BrushSphereCheckbox;
   QCheckBox* EditIn3DViewsCheckbox;

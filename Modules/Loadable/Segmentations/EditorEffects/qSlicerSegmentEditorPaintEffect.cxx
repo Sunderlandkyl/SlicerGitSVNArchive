@@ -331,7 +331,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintAddPoint(qMRMLWidget* viewWidg
   this->PaintCoordinates_World->InsertNextPoint(brushPosition_World);
   this->PaintCoordinates_World->Modified();
 
-  if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint)
+  if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint || (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled()))
     {
     this->paintApply(viewWidget);
     qSlicerSegmentEditorAbstractEffect::forceRender(viewWidget); // TODO: repaint all?
@@ -617,12 +617,10 @@ void qSlicerSegmentEditorPaintEffectPrivate::onDiameterValueChanged(double value
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorPaintEffectPrivate::onPressureRangeChanged(double minimum, double maximum)
+void qSlicerSegmentEditorPaintEffectPrivate::onPressureRangeChanged(double range)
 {
   Q_Q(qSlicerSegmentEditorPaintEffect);
-  double pressure = q->doubleParameter("TabletPressure");
-  double value = minimum + (maximum - minimum) * pressure;
-  this->onDiameterValueChanged(value);
+  q->setCommonParameter("BrushPressureRange", range);
 }
 
 //-----------------------------------------------------------------------------
@@ -721,6 +719,13 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrushModel(qMRMLWidget* viewW
   this->updateAbsoluteBrushDiameter();
 
   double diameterMm = q->doubleParameter("BrushAbsoluteDiameter");
+  if (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled())
+    {
+    double tabletPressure = q->doubleParameter("TabletPressure");
+    double pressureRange = q->doubleParameter("BrushPressureRange");
+    //diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 1 + 2 * pressureRange)));
+    diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 10)));
+    }
 
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   if (!sliceWidget || q->integerParameter("BrushSphere"))
@@ -1092,21 +1097,7 @@ bool qSlicerSegmentEditorPaintEffect::processInteractionEvents(
     return false;
     }
 
-  if (this->parameterSetNode() && this->parameterSetNode()->GetTabletModeEnabled())
-    {
-    double minimum, maximum;
-    d->BrushPressureRangeSlider->values(minimum, maximum);
-    double pressure = this->doubleParameter("TabletPressure");
-    double value = minimum + (maximum - minimum) * pressure;
-    d->onDiameterValueChanged(value);
-    }
-
   bool shiftKeyPressed = callerInteractor->GetShiftKey();
-  bool oldDelayedPaint = this->delayedPaint();
-  if (this->parameterSetNode() && this->parameterSetNode()->GetTabletModeEnabled())
-    {
-    this->setDelayedPaint(false);
-    }
 
   // Process events that do not provide event position (or we don't need event position)
   double scaleDiameterRequested = -1.0; // <0 means no scale change is requested
@@ -1299,8 +1290,6 @@ bool qSlicerSegmentEditorPaintEffect::processInteractionEvents(
   d->updateBrushes();
 
   qSlicerSegmentEditorAbstractEffect::forceRender(viewWidget);
-
-  this->setDelayedPaint(oldDelayedPaint);
   return abortEvent;
 }
 
@@ -1392,7 +1381,12 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   d->BrushDiameterSlider->setOrientation(Qt::Horizontal);
   this->addOptionsWidget(d->BrushDiameterSlider);
 
-  d->BrushPressureRangeSlider = new ctkRangeWidget();
+  d->BrushPressureRangeSlider = new ctkDoubleSlider();
+  d->BrushPressureRangeSlider->setOrientation(Qt::Horizontal);
+  d->BrushPressureRangeSlider->setMinimum(0.0);
+  d->BrushPressureRangeSlider->setMaximum(1.0);
+  d->BrushPressureRangeSlider->setSingleStep(0.01);
+  d->BrushPressureRangeSlider->setValue(0.5);
   this->addOptionsWidget(d->BrushPressureRangeSlider);
 
   // Create options frame for this effect
@@ -1437,7 +1431,7 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   QObject::connect(d->BrushPixelModeCheckbox, SIGNAL(clicked()), this, SLOT(updateMRMLFromGUI()));
   QObject::connect(d->BrushDiameterSlider, SIGNAL(valueChanged(double)), d, SLOT(onDiameterValueChanged(double)));
   QObject::connect(d->BrushDiameterSpinBox, SIGNAL(valueChanged(double)), d, SLOT(onDiameterValueChanged(double)));
-  QObject::connect(d->BrushPressureRangeSlider, &ctkRangeWidget::valuesChanged, d, &qSlicerSegmentEditorPaintEffectPrivate::onPressureRangeChanged);
+  QObject::connect(d->BrushPressureRangeSlider, SIGNAL(valueChanged(double)), d, SLOT(onPressureRangeChanged(double)));
 }
 
 //-----------------------------------------------------------------------------
@@ -1455,6 +1449,7 @@ void qSlicerSegmentEditorPaintEffect::setMRMLDefaults()
   this->setParameterDefault("ColorSmudge", 0);
   this->setParameterDefault("EraseAllSegments", 0);
   this->setCommonParameterDefault("BrushPixelMode", 0);
+  this->setCommonParameterDefault("BrushPressureRange", 0);
 }
 
 //-----------------------------------------------------------------------------
@@ -1507,7 +1502,6 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
   d->BrushDiameterRelativeToggle->blockSignals(false);
 
   d->BrushDiameterSlider->blockSignals(true);
-  d->BrushPressureRangeSlider->blockSignals(true);
 
   if (brushDiameterIsRelative)
     {
@@ -1515,10 +1509,6 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
     d->BrushDiameterSlider->setMaximum(25);
     d->BrushDiameterSlider->setValue(this->doubleParameter("BrushRelativeDiameter"));
     d->BrushDiameterSlider->setSingleStep(1);
-
-    d->BrushPressureRangeSlider->setMinimum(1);
-    d->BrushPressureRangeSlider->setMaximum(25);
-
     }
   else
     {
@@ -1526,11 +1516,11 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
     d->BrushDiameterSlider->setMaximum(this->doubleParameter("BrushMaximumAbsoluteDiameter"));
     d->BrushDiameterSlider->setValue(this->doubleParameter("BrushAbsoluteDiameter"));
     d->BrushDiameterSlider->setSingleStep(this->doubleParameter("BrushMinimumAbsoluteDiameter"));
-
-    d->BrushPressureRangeSlider->setMinimum(this->doubleParameter("BrushMinimumAbsoluteDiameter"));
-    d->BrushPressureRangeSlider->setMaximum(this->doubleParameter("BrushMaximumAbsoluteDiameter"));
     }
   d->BrushDiameterSlider->blockSignals(false);
+
+  d->BrushPressureRangeSlider->blockSignals(true);
+  d->BrushPressureRangeSlider->setValue(this->doubleParameter("BrushPressureRange"));
   d->BrushPressureRangeSlider->blockSignals(false);
 
   d->BrushDiameterSpinBox->blockSignals(true);
