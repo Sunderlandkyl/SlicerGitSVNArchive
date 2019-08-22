@@ -61,6 +61,7 @@
 #include <vtkRenderWindow.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkSmartPointer.h>
+#include <vtkTimerLog.h>
 #include <vtkWeakPointer.h>
 
 // Slicer includes
@@ -124,16 +125,56 @@ static const char NULL_EFFECT_NAME[] = "NULL";
 bool qSegmentEditorApplicationEventFilter::eventFilter(QObject* object, QEvent* event)
 {
   if (event->type() == QEvent::TabletEnterProximity)
-  {
+    {
     QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
     this->tabletEnterProximity(tabletEvent->pointerType());
-    return true;
-  }
+    }
   else if (event->type() == QEvent::TabletLeaveProximity)
-  {
+    {
     QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
     this->tabletLeaveProximity(tabletEvent->pointerType());
-  }
+    }
+  //if (event->type() == QEvent::TabletMove) // TODO: Dealing with TabletMove at this levels prevents them from being received by QWidget?
+  //  {
+  //  double timeSinceLastTabletEvent = vtkTimerLog::GetUniversalTime() - this->lastTabletMoveEventTime;
+  //  if (this->lastTabletMoveEventTime > 0 && timeSinceLastTabletEvent < 0.05)
+  //    {
+  //    return true;
+  //    }
+  //  else
+  //    {
+  //    this->lastTabletMoveEventTime = vtkTimerLog::GetUniversalTime();
+  //    }
+  //  }
+  return QObject::eventFilter(object, event);
+};
+
+//---------------------------------------------------------------------------
+bool qSegmentEditorTabletModeEventFilter::eventFilter(QObject* object, QEvent* event)
+{
+  //switch(event->type())
+  //  {
+  //  case QEvent::TouchBegin:
+  //  case QEvent::TouchCancel:
+  //  case QEvent::TouchEnd:
+  //  case QEvent::TouchUpdate:
+  //  case  QEvent::MouseMove:
+  //    qCritical() << "ATE: " << event->type();
+  //    return true;
+  //  }
+  //if (event->type() == QEvent::TabletMove)
+  //  {
+  //  double timeSinceLastTabletEvent = vtkTimerLog::GetUniversalTime() - this->lastTabletMoveEventTime;
+  //  if (this->lastTabletMoveEventTime > 0 && timeSinceLastTabletEvent < 2.0)
+  //    {
+  //    return true;
+  //    }
+  //  else
+  //    {
+  //    this->lastTabletMoveEventTime = vtkTimerLog::GetUniversalTime();
+  //    }
+  //  }
+
   return false;
 };
 
@@ -311,6 +352,7 @@ public:
   ctkSliderWidget* SurfaceSmoothingSlider;
 
   QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
+  QSharedPointer<qSegmentEditorTabletModeEventFilter> TabletModeEventFilter;
 
   int CurrentPointer;
 };
@@ -354,6 +396,8 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   this->UnorderedEffectsVisible = true;
 
   this->ApplicationEventFilter = QSharedPointer<qSegmentEditorApplicationEventFilter>(new qSegmentEditorApplicationEventFilter());
+  this->TabletModeEventFilter = QSharedPointer<qSegmentEditorTabletModeEventFilter>(new qSegmentEditorTabletModeEventFilter());
+
 }
 
 //-----------------------------------------------------------------------------
@@ -2778,15 +2822,8 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
     {
     if (self->mrmlSegmentEditorNode() && self->mrmlSegmentEditorNode()->GetTabletModeEnabled())
       {
-      if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
-        {
-        activeEffect->setParameter("TabletPressure", callerInteractor->GetTabletPressure());
-        }
-      else
-        {
-        activeEffect->setParameter("TabletPressure", 0.5);
-        }
-
+      static double lastTabletMoveEvent = -1;
+      double timeSinceLastEvent;
       switch (eid)
         {
         case vtkCommand::TabletPressEvent:
@@ -2798,9 +2835,34 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
             {
             eid = vtkCommand::RightButtonReleaseEvent;
             }
+          if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
+            {
+            activeEffect->setParameter("TabletPressure", callerInteractor->GetTabletPressure());
+            }
+          else
+            {
+            activeEffect->setParameter("TabletPressure", 0.5);
+            }
           break;
         case vtkCommand::TabletMoveEvent:
-          eid = vtkCommand::MouseMoveEvent;
+          timeSinceLastEvent = vtkTimerLog::GetUniversalTime() - lastTabletMoveEvent;
+          if (lastTabletMoveEvent < 0 || timeSinceLastEvent > 0.15)
+            {
+            eid = vtkCommand::MouseMoveEvent;
+            lastTabletMoveEvent = vtkTimerLog::GetUniversalTime();
+            if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
+              {
+              activeEffect->setParameter("TabletPressure", callerInteractor->GetTabletPressure());
+              }
+            else
+              {
+              activeEffect->setParameter("TabletPressure", 0.5);
+              }
+            }
+          else
+            {
+            eid = 0;
+            }
           break;
         case vtkCommand::TabletReleaseEvent:
           eid = vtkCommand::LeftButtonReleaseEvent;
@@ -2811,6 +2873,19 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
         case vtkCommand::RightButtonPressEvent:
         case vtkCommand::RightButtonReleaseEvent:
           eid = 0;
+        }
+      }
+    else
+      {
+      switch (eid)
+        {
+        case vtkCommand::TabletPressEvent:
+        case vtkCommand::TabletMoveEvent:
+        case vtkCommand::TabletReleaseEvent:
+          eid = 0;
+        default:
+          break;
+
         }
       }
 
@@ -3136,6 +3211,7 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   QObject::connect(toggleMasterVolumeIntensityMaskShortcut, SIGNAL(activated()), this, SLOT(toggleMasterVolumeIntensityMaskEnabled()));
 
   qSlicerApplication::application()->installEventFilter(d->ApplicationEventFilter.get());
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, true);
 }
 
 //-----------------------------------------------------------------------------
@@ -3151,7 +3227,7 @@ void qMRMLSegmentEditorWidget::uninstallKeyboardShortcuts()
   d->KeyboardShortcuts.clear();
 
   qSlicerApplication::application()->removeEventFilter(d->ApplicationEventFilter.get());
-  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, true);
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, false);
 }
 
 //-----------------------------------------------------------------------------
@@ -3169,6 +3245,18 @@ void qMRMLSegmentEditorWidget::onTabletEnterProximity(int pointerType)
     this->setActiveEffectByName("Erase");
     }
   d->CurrentPointer = pointerType;
+
+  //qMRMLLayoutManager* layoutManager = qSlicerApplication::application()->layoutManager();
+  //QStringList sliceWidgetNames = layoutManager->sliceViewNames();
+  //for (QString name : sliceWidgetNames)
+  //  {
+  //  qMRMLSliceWidget* widget = layoutManager->sliceWidget(name);
+  //  widget->installEventFilter(d->TabletModeEventFilter.data());
+    //widget->setMouseTracking(false);
+    //widget->setAttribute(Qt::WA_AcceptTouchEvents, false);
+    //widget->setDisabled(true);
+    //}
+  //qSlicerApplication::application()->installEventFilter(d->TabletModeEventFilter.get());
 }
 
 //-----------------------------------------------------------------------------
@@ -3189,6 +3277,18 @@ void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
       }
     }
   d->CurrentPointer = -1;
+
+  //qMRMLLayoutManager* layoutManager = qSlicerApplication::application()->layoutManager();
+  //QStringList sliceWidgetNames = layoutManager->sliceViewNames();
+  //for (QString name : sliceWidgetNames)
+  //  {
+  //  qMRMLSliceWidget* widget = layoutManager->sliceWidget(name);
+  //  widget->removeEventFilter(d->TabletModeEventFilter.data());
+  //  //widget->setMouseTracking(true);
+  //  //widget->setAttribute(Qt::WA_AcceptTouchEvents, true);
+  //  //widget->setDisabled(false);
+  //  }
+  //qSlicerApplication::application()->removeEventFilter(d->TabletModeEventFilter.get());
 }
 
 //-----------------------------------------------------------------------------
@@ -3196,14 +3296,22 @@ void qMRMLSegmentEditorWidget::onTabletModeChanged(int checkState)
 {
   Q_D(qMRMLSegmentEditorWidget);
 
-  if (checkState == Qt::Checked)
+  qMRMLLayoutManager* layoutManager = qSlicerApplication::application()->layoutManager();
+  if (layoutManager)
     {
-    d->ParameterSetNode->SetTabletModeEnabled(true);
+    QStringList sliceWidgetNames = layoutManager->sliceViewNames();
+    for (QString name : sliceWidgetNames)
+      {
+      qMRMLSliceWidget* widget = layoutManager->sliceWidget(name);
+      widget->setTabletTracking(checkState == Qt::Checked);
+      }
     }
-  else
+
+  if (d->ParameterSetNode)
     {
-    d->ParameterSetNode->SetTabletModeEnabled(false);
+    d->ParameterSetNode->SetTabletModeEnabled(checkState == Qt::Checked);
     }
+  d->TabletPressureRangeWidget->setVisible(checkState == Qt::Checked);
 }
 
 
