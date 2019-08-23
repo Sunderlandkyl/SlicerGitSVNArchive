@@ -66,6 +66,7 @@ class vtkGlyph3D;
 class vtkPoints;
 class vtkPolyDataNormals;
 class vtkPolyDataToImageStencil;
+class vtkDoubleArray;
 
 /// \ingroup SlicerRt_QtModules_Segmentations
 /// \brief Private implementation of the segment editor paint effect
@@ -145,6 +146,7 @@ public:
 
   vtkSmartPointer<vtkPoints> PaintCoordinates_World;
   vtkSmartPointer<vtkPolyData> FeedbackPointsPolyData;
+  vtkSmartPointer<vtkDoubleArray> PaintScales;
 
   // If a new point is added at less than this squared distance
   // then the point is not added. It can be used for limiting number of
