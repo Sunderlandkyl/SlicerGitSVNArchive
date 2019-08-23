@@ -44,7 +44,6 @@
 #include <vtkCellPicker.h>
 #include <vtkCollection.h>
 #include <vtkCommand.h>
-#include <vtkDoubleArray.h>
 #include <vtkGlyph2D.h>
 #include <vtkGlyph3D.h>
 #include <vtkIdList.h>
@@ -58,7 +57,6 @@
 #include <vtkObjectFactory.h>
 #include <vtkPlane.h>
 #include <vtkPoints.h>
-#include <vtkPointData.h>
 #include <vtkPolyData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataMapper2D.h>
@@ -108,17 +106,12 @@ public:
     {
     this->WorldToSliceTransform = vtkSmartPointer<vtkTransform>::New();
     this->SlicePlane = vtkSmartPointer<vtkPlane>::New();
-    this->BrushScaleTransform = vtkSmartPointer<vtkTransform>::New();
-    this->BrushScaleTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-    this->BrushScaleTransformer->SetTransform(this->BrushScaleTransform);
     };
   virtual ~BrushPipeline()
      = default;
   virtual void SetBrushVisibility(bool visibility) = 0;
   virtual void SetFeedbackVisibility(bool visibility) = 0;
 
-  vtkSmartPointer<vtkTransformPolyDataFilter> BrushScaleTransformer;
-  vtkSmartPointer<vtkTransform> BrushScaleTransform;
   vtkSmartPointer<vtkTransform> WorldToSliceTransform;
   vtkSmartPointer<vtkPlane> SlicePlane;
 };
@@ -131,7 +124,6 @@ public:
     this->BrushCutter = vtkSmartPointer<vtkCutter>::New();
     this->BrushCutter->SetCutFunction(this->SlicePlane);
     this->BrushCutter->SetGenerateCutScalars(0);
-    this->BrushCutter->SetInputConnection(this->BrushScaleTransformer->GetOutputPort());
 
     this->BrushWorldToSliceTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
     this->BrushWorldToSliceTransformer->SetTransform(this->WorldToSliceTransform);
@@ -191,8 +183,6 @@ public:
   BrushPipeline3D()
     {
     this->BrushMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-    this->BrushMapper->SetInputConnection(this->BrushScaleTransformer->GetOutputPort());
-
     this->BrushActor = vtkSmartPointer<vtkActor>::New();
     this->BrushActor->SetMapper(this->BrushMapper);
     this->BrushActor->VisibilityOff();
@@ -246,13 +236,9 @@ qSlicerSegmentEditorPaintEffectPrivate::qSlicerSegmentEditorPaintEffectPrivate(q
   , EraseAllSegmentsCheckbox(nullptr)
   , BrushPixelModeCheckbox(nullptr)
 {
-  this->PaintScales = vtkSmartPointer<vtkDoubleArray>::New();
-  this->PaintScales->SetName("scales");
-  this->PaintScales->SetNumberOfComponents(3);
   this->PaintCoordinates_World = vtkSmartPointer<vtkPoints>::New();
   this->FeedbackPointsPolyData = vtkSmartPointer<vtkPolyData>::New();
   this->FeedbackPointsPolyData->SetPoints(this->PaintCoordinates_World);
-  this->FeedbackPointsPolyData->GetPointData()->SetVectors(this->PaintScales);
 
   this->PaintIcon = QIcon(":Icons/Paint.png");
 
@@ -281,9 +267,6 @@ qSlicerSegmentEditorPaintEffectPrivate::qSlicerSegmentEditorPaintEffectPrivate(q
   this->FeedbackGlyphFilter = vtkSmartPointer<vtkGlyph3D>::New();
   this->FeedbackGlyphFilter->SetInputData(this->FeedbackPointsPolyData);
   this->FeedbackGlyphFilter->SetSourceConnection(this->BrushPolyDataNormals->GetOutputPort());
-  this->FeedbackGlyphFilter->SetScaleModeToScaleByVectorComponents();
-  this->FeedbackGlyphFilter->OrientOff();
-  //this->FeedbackGlyphFilter->SetScaleModeToScaleByVector();
 
   this->ActiveViewLastInteractionPosition[0] = 0;
   this->ActiveViewLastInteractionPosition[1] = 0;
@@ -313,7 +296,7 @@ BrushPipeline* qSlicerSegmentEditorPaintEffectPrivate::brushForWidget(qMRMLWidge
   if (sliceWidget)
     {
     BrushPipeline2D* pipeline = new BrushPipeline2D();
-    pipeline->BrushScaleTransformer->SetInputConnection(this->WorldOriginToWorldTransformer->GetOutputPort());
+    pipeline->BrushCutter->SetInputConnection(this->WorldOriginToWorldTransformer->GetOutputPort());
     pipeline->FeedbackCutter->SetInputConnection(this->FeedbackGlyphFilter->GetOutputPort());
     this->updateBrush(viewWidget, pipeline);
 
@@ -328,7 +311,7 @@ BrushPipeline* qSlicerSegmentEditorPaintEffectPrivate::brushForWidget(qMRMLWidge
   else if (threeDWidget)
     {
     BrushPipeline3D* pipeline = new BrushPipeline3D();
-    pipeline->BrushScaleTransformer->SetInputConnection(this->WorldOriginToWorldTransformer->GetOutputPort());
+    pipeline->BrushMapper->SetInputConnection(this->WorldOriginToWorldTransformer->GetOutputPort());
     pipeline->FeedbackMapper->SetInputConnection(this->FeedbackGlyphFilter->GetOutputPort());
     this->updateBrush(viewWidget, pipeline);
     q->addActor3D(viewWidget, pipeline->BrushActor);
@@ -345,37 +328,10 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintAddPoint(qMRMLWidget* viewWidg
 {
   Q_Q(qSlicerSegmentEditorPaintEffect);
 
-  double diameterMm = q->doubleParameter("BrushAbsoluteDiameter");
-  if (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled())
-    {
-    double tabletPressure = q->doubleParameter("TabletPressure");
-    double pressureRange = q->doubleParameter("BrushPressureRange");
-    //diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 1 + 2 * pressureRange)));
-    diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 10)));
-    }
-
-  double scaleVector[3] = { diameterMm, diameterMm, diameterMm };
-  qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
-  if (sliceWidget && !q->integerParameter("BrushSphere"))
-    {
-    vtkMatrix4x4* sliceXyToRas = sliceWidget->sliceLogic()->GetSliceNode()->GetXYToRAS();
-    double normal[3] = { 0.0 };
-    normal[0] = sliceXyToRas->GetElement(0, 2);
-    normal[1] = sliceXyToRas->GetElement(1, 2);
-    normal[2] = sliceXyToRas->GetElement(2, 2);
-    vtkMath::Normalize(normal);
-    double sliceSpacingMm = qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget);
-    vtkMath::MultiplyScalar(normal, sliceSpacingMm);
-    vtkMath::Add(scaleVector, normal, scaleVector);
-    vtkMath::MultiplyScalar(normal, diameterMm/sliceSpacingMm);
-    vtkMath::Subtract(scaleVector, normal, scaleVector);
-    }
-
   this->PaintCoordinates_World->InsertNextPoint(brushPosition_World);
-  this->PaintScales->InsertNextTuple3(scaleVector[0], scaleVector[1], scaleVector[2]);
   this->PaintCoordinates_World->Modified();
 
-  if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint/* || (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled())*/)
+  if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint || (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled()))
     {
     this->paintApply(viewWidget);
     qSlicerSegmentEditorAbstractEffect::forceRender(viewWidget); // TODO: repaint all?
@@ -491,7 +447,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
   // "No input data"
   this->clearBrushPipelines();
   this->PaintCoordinates_World->Reset();
-  this->PaintScales->Reset();
 
   // Notify editor about changes
   qSlicerSegmentEditorAbstractEffect::ModificationMode modificationMode;
@@ -775,14 +730,18 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrushModel(qMRMLWidget* viewW
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   if (!sliceWidget || q->integerParameter("BrushSphere"))
     {
+    this->BrushSphereSource->SetRadius(diameterMm/2.0);
     this->BrushSphereSource->SetPhiResolution(32);
     this->BrushSphereSource->SetThetaResolution(32);
     this->BrushToWorldOriginTransformer->SetInputConnection(this->BrushSphereSource->GetOutputPort());
     }
   else
     {
+    this->BrushCylinderSource->SetRadius(diameterMm/2.0);
     this->BrushCylinderSource->SetResolution(32);
-    this->BrushCylinderSource->SetCenter(0, 0, 0);
+    double sliceSpacingMm = qSlicerSegmentEditorAbstractEffect::sliceSpacing(sliceWidget);
+    this->BrushCylinderSource->SetHeight(sliceSpacingMm);
+    this->BrushCylinderSource->SetCenter(0, 0, sliceSpacingMm/2.0);
     this->BrushToWorldOriginTransformer->SetInputConnection(this->BrushCylinderSource->GetOutputPort());
     }
 
@@ -818,14 +777,9 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrush(qMRMLWidget* viewWidget
     }
   pipeline->SetBrushVisibility(this->ActiveViewWidget != nullptr);
 
-  double diameterMm = q->doubleParameter("BrushAbsoluteDiameter");
-  pipeline->BrushScaleTransform->Identity();
-
   qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
   if (sliceWidget)
     {
-    pipeline->BrushScaleTransform->Scale(diameterMm, 0.0, diameterMm);
-
     // Update slice cutting plane position and orientation
     vtkMatrix4x4* sliceXyToRas = sliceWidget->sliceLogic()->GetSliceNode()->GetXYToRAS();
     pipeline->SlicePlane->SetNormal(sliceXyToRas->GetElement(0,2),sliceXyToRas->GetElement(1,2),sliceXyToRas->GetElement(2,2));
@@ -834,11 +788,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrush(qMRMLWidget* viewWidget
     vtkNew<vtkMatrix4x4> rasToSliceXy;
     vtkMatrix4x4::Invert(sliceXyToRas, rasToSliceXy.GetPointer());
     pipeline->WorldToSliceTransform->SetMatrix(rasToSliceXy.GetPointer());
-    }
-  else
-    {
-
-    pipeline->BrushScaleTransform->Scale(diameterMm, diameterMm, diameterMm);
     }
 }
 
