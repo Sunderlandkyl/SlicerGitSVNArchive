@@ -304,6 +304,13 @@ public:
   /// Invalidate (remove) non-master representations in all the segments if this segmentation node
   void InvalidateNonMasterRepresentations();
 
+  /// TODO
+  void GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds, bool includeSegment);
+  void GetMergedLabelmapSegmentIds(std::string segmentId, std::vector<std::string> &sharedSegmentIds, bool includeSegmentId);
+  int GetUniqueValueForMergedLabelmap(std::string segmentId);
+  void MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds);
+  void SeparateSegmentLabelmap(std::string segmentId);
+
 // Conversion related methods
 
   /// Create a representation in all segments, using the conversion path with the

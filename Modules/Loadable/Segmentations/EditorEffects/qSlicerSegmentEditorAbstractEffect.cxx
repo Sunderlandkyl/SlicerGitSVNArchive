@@ -242,6 +242,9 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
 {
   Q_D(qSlicerSegmentEditorAbstractEffect);
 
+  // TODO: When segments are not allowed to overlap, merge with a segment
+  // When segments are allowed to overlap, put in own labelmap
+
   vtkMRMLSegmentEditorNode* parameterSetNode = this->parameterSetNode();
   if (!parameterSetNode)
     {
@@ -348,10 +351,13 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
 
   // TODO: composite modifierLabelmap with threshold mask
 
+  vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(selectedSegmentID);
+
   // Create inverted binary labelmap
   vtkSmartPointer<vtkImageThreshold> inverter = vtkSmartPointer<vtkImageThreshold>::New();
   inverter->SetInputData(modifierLabelmap);
-  inverter->SetInValue(m_FillValue);
+  //inverter->SetInValue(m_FillValue);
+  inverter->SetInValue(segment->GetLabelmapValue());
   inverter->SetOutValue(m_EraseValue);
   inverter->ReplaceInOn();
   inverter->ThresholdByLower(0);
@@ -389,7 +395,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       }
     }
 
-  vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(selectedSegmentID);
   if (segment)
     {
     if (vtkSlicerSegmentationsModuleLogic::GetSegmentStatus(segment) == vtkSlicerSegmentationsModuleLogic::NotStarted)
@@ -428,6 +433,20 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   case vtkMRMLSegmentEditorNode::OverwriteAllSegments:
     segmentIDsToOverwrite = allSegmentIDs;
     break;
+    }
+
+  std::vector<std::string> mergedSegmentIds;
+  segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIds(segment, mergedSegmentIds, false);
+
+  std::vector<std::string> mergedNonOverwriteSegments;
+  for (std::string mergedSegmentId : mergedSegmentIds)
+    {
+    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId);
+    if (foundOverwriteIDIt == segmentIDsToOverwrite.end())
+      {
+      mergedNonOverwriteSegments.push_back(mergedSegmentId);
+      }
+    segmentIDsToOverwrite.erase(foundOverwriteIDIt);
     }
 
   if (!segmentIDsToOverwrite.empty())

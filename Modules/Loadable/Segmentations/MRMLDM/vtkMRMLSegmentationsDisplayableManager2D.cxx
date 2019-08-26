@@ -230,8 +230,8 @@ public:
       this->LookupTableFill->SetTableValue(1, 0, 0, 0, 0);
 
       this->ImageThreshold->SetInputConnection(this->Reslice->GetOutputPort());
-      this->ImageThreshold->SetOutValue(1);
-      this->ImageThreshold->SetInValue(0);
+      this->ImageThreshold->SetOutValue(0); // TODO
+      this->ImageThreshold->SetInValue(1); // TODO
 
       // Image outline
       this->LabelOutline->SetInputConnection(this->Reslice->GetOutputPort());
@@ -739,6 +739,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
   for (PipelineMapType::iterator pipelineIt=pipelines.begin(); pipelineIt!=pipelines.end(); ++pipelineIt)
     {
     Pipeline* pipeline = pipelineIt->second;
+    std::string segmentId = pipelineIt->first;
 
     // Get visibility
     vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
@@ -881,6 +882,9 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         maximumValue = scalarRange->GetValue(1);
         }
 
+      vtkSegment* segment = segmentation->GetSegment(segmentId);
+      int value = segment->GetLabelmapValue();
+
       // Set segment color
       pipeline->LookupTableOutline->SetTableValue(1,
         color[0], color[1], color[2], properties.Opacity2DOutline * displayNode->GetOpacity2DOutline() * displayNode->GetOpacity());
@@ -888,12 +892,13 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->LookupTableFill->SetRampToLinear();
       pipeline->LookupTableFill->SetTableRange(0, 1);
 
-      if (!this->SmoothFractionalLabelMapBorder)
-        {
-        //TODO: this works for labelmaps that are int or char type, but would need to be changed for floating point representations since it only creates table values in integer increments
-        pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
-        pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
-        }
+      //if (!this->SmoothFractionalLabelMapBorder)
+      //  {
+      //  //TODO: this works for labelmaps that are int or char type, but would need
+      //  // to be changed for floating point representations since it only creates table values in integer increments
+      //  pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
+      //  pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
+      //  }
 
       double hsv[3] = {0,0,0};
       vtkMath::RGBToHSV(color, hsv);
@@ -955,19 +960,20 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->Reslice->SetOutputExtent(sliceOutputExtent);
 
       // If ThresholdValue is not specified, then do not perform thresholding
-      vtkDoubleArray* thresholdValue = vtkDoubleArray::SafeDownCast(
-        imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
-      if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-        {
-        pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
-        }
+      //vtkDoubleArray* thresholdValue = vtkDoubleArray::SafeDownCast(
+      //  imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
+      //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+      //  {
+        //pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
+      pipeline->ImageThreshold->ThresholdBetween(value, value);
+        //}
 
       // Smooth the border of fractional labelmaps
       pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->Reslice->GetOutputPort());
-      if (this->SmoothFractionalLabelMapBorder && thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-        {
-          pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
-        }
+      //if (this->SmoothFractionalLabelMapBorder && thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+      //  {
+      //    pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
+      //  }
 
       // Set outline properties and turn it off if not shown
       if (segmentOutlineVisible)
@@ -975,10 +981,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         pipeline->LabelOutline->SetInputConnection(pipeline->Reslice->GetOutputPort());
 
         // Set the outline threshold from the ThresholdValue field if it exists
-        if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-          {
+        //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+          //{
           pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
-          }
+          //}
 
         pipeline->LabelOutline->SetOutline(displayNode->GetSliceIntersectionThickness());
         }
