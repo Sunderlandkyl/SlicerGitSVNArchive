@@ -207,6 +207,7 @@ public:
   /// If representation does not exist yet then call CreateBinaryLabelmapRepresentation() before.
   /// If binary labelmap is the master representation then the returned object can be modified, and
   /// all other representations will be automatically updated.
+  VTK_NEWINSTANCE
   virtual vtkOrientedImageData* GetBinaryLabelmapRepresentation(const std::string segmentId);
 
   /// Generate closed surface representation for all segments.

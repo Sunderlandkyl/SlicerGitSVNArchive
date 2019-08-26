@@ -530,145 +530,7 @@ bool vtkMRMLSegmentationNode::GenerateMergedLabelmap(
   const std::vector<std::string>& segmentIDs/*=std::vector<std::string>()*/
   )
 {
-  if (!mergedImageData)
-    {
-    vtkErrorMacro("GenerateMergedLabelmap: Invalid image data");
-    return false;
-    }
-  // If segmentation is missing or empty then we cannot create a merged image data
-  if (!this->Segmentation)
-    {
-    vtkErrorMacro("GenerateMergedLabelmap: Invalid segmentation");
-    return false;
-    }
-  if (!this->Segmentation->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()))
-    {
-    vtkErrorMacro("GenerateMergedLabelmap: Segmentation does not contain binary labelmap representation");
-    return false;
-    }
-
-  // If segment IDs list is empty then include all segments
-  std::vector<std::string> mergedSegmentIDs;
-  if (segmentIDs.empty())
-    {
-    this->Segmentation->GetSegmentIDs(mergedSegmentIDs);
-    }
-  else
-    {
-    mergedSegmentIDs = segmentIDs;
-    }
-
-  // Determine common labelmap geometry that will be used for the merged labelmap
-  vtkSmartPointer<vtkMatrix4x4> mergedImageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-  vtkSmartPointer<vtkOrientedImageData> commonGeometryImage;
-  if (mergedLabelmapGeometry)
-    {
-    // Use merged labelmap geometry if provided
-    commonGeometryImage = mergedLabelmapGeometry;
-    mergedLabelmapGeometry->GetImageToWorldMatrix(mergedImageToWorldMatrix);
-    }
-  else
-    {
-    commonGeometryImage = vtkSmartPointer<vtkOrientedImageData>::New();
-    std::string commonGeometryString = this->Segmentation->DetermineCommonLabelmapGeometry(extentComputationMode, mergedSegmentIDs);
-    if (commonGeometryString.empty())
-      {
-      // This can occur if there are only empty segments in the segmentation
-      mergedImageToWorldMatrix->Identity();
-      return true;
-      }
-    vtkSegmentationConverter::DeserializeImageGeometry(commonGeometryString, commonGeometryImage, false);
-    }
-  commonGeometryImage->GetImageToWorldMatrix(mergedImageToWorldMatrix);
-  int referenceDimensions[3] = {0,0,0};
-  commonGeometryImage->GetDimensions(referenceDimensions);
-  int referenceExtent[6] = {0,-1,0,-1,0,-1};
-  commonGeometryImage->GetExtent(referenceExtent);
-
-  // Allocate image data if empty or if reference extent changed
-  int imageDataExtent[6] = {0,-1,0,-1,0,-1};
-  mergedImageData->GetExtent(imageDataExtent);
-  if ( mergedImageData->GetScalarType() != VTK_SHORT
-    || imageDataExtent[0] != referenceExtent[0] || imageDataExtent[1] != referenceExtent[1] || imageDataExtent[2] != referenceExtent[2]
-    || imageDataExtent[3] != referenceExtent[3] || imageDataExtent[4] != referenceExtent[4] || imageDataExtent[5] != referenceExtent[5] )
-    {
-    if (mergedImageData->GetPointData()->GetScalars() && mergedImageData->GetScalarType() != VTK_SHORT)
-      {
-      vtkWarningMacro("GenerateMergedLabelmap: Merged image data scalar type is not short. Allocating using short.");
-      }
-    mergedImageData->SetExtent(referenceExtent);
-    mergedImageData->AllocateScalars(VTK_SHORT, 1);
-    }
-  mergedImageData->SetImageToWorldMatrix(mergedImageToWorldMatrix);
-
-  // Paint the image data background first
-  short* mergedImagePtr = (short*)mergedImageData->GetScalarPointerForExtent(referenceExtent);
-  if (!mergedImagePtr)
-    {
-    // Setting the extent may invoke this function again via ImageDataModified, in which case the pointer is nullptr
-    return false;
-    }
-
-  const short backgroundColorIndex = 0;
-  vtkOrientedImageDataResample::FillImage(mergedImageData, backgroundColorIndex);
-
-  // Skip the rest if there are no segments
-  if (this->Segmentation->GetNumberOfSegments() == 0)
-    {
-    return true;
-    }
-
-  // Create merged labelmap
-  short colorIndex = backgroundColorIndex + 1;
-  for (std::vector<std::string>::iterator segmentIdIt = mergedSegmentIDs.begin(); segmentIdIt != mergedSegmentIDs.end(); ++segmentIdIt, ++colorIndex)
-    {
-    std::string currentSegmentId = *segmentIdIt;
-    vtkSegment* currentSegment = this->Segmentation->GetSegment(currentSegmentId);
-    if (!currentSegment)
-      {
-      vtkWarningMacro("GenerateMergedLabelmap: Segment not found: " << currentSegmentId);
-      continue;
-      }
-
-    // Get binary labelmap from segment
-    vtkOrientedImageData* representationBinaryLabelmap = vtkOrientedImageData::SafeDownCast(
-      currentSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) );
-    // If binary labelmap is empty then skip
-    if (representationBinaryLabelmap->IsEmpty())
-      {
-      continue;
-      }
-
-    // Set oriented image data used for merging to the representation (may change later if resampling is needed)
-    vtkOrientedImageData* binaryLabelmap = representationBinaryLabelmap;
-
-    // If labelmap geometries (origin, spacing, and directions) do not match reference then resample temporarily
-    vtkSmartPointer<vtkOrientedImageData> resampledBinaryLabelmap;
-    if (!vtkOrientedImageDataResample::DoGeometriesMatch(commonGeometryImage, representationBinaryLabelmap))
-      {
-      resampledBinaryLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
-
-      // Resample segment labelmap for merging
-      if (!vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(representationBinaryLabelmap, mergedImageToWorldMatrix, resampledBinaryLabelmap))
-        {
-        continue;
-        }
-
-      // Use resampled labelmap for merging
-      binaryLabelmap = resampledBinaryLabelmap;
-      }
-
-    // Copy image data voxels into merged labelmap with the proper color index
-    vtkOrientedImageDataResample::ModifyImage(
-          mergedImageData,
-          binaryLabelmap,
-          vtkOrientedImageDataResample::OPERATION_MASKING,
-          nullptr,
-          0,
-          colorIndex);
-    }
-
-  return true;
+  return this->Segmentation->GenerateMergedLabelmap(mergedImageData, extentComputationMode, mergedLabelmapGeometry, segmentIDs);
 }
 
 //---------------------------------------------------------------------------
@@ -1031,7 +893,21 @@ vtkOrientedImageData* vtkMRMLSegmentationNode::GetBinaryLabelmapRepresentation(c
     vtkErrorMacro("GetBinaryLabelmapRepresentation: Invalid segment");
     return nullptr;
     }
-  return vtkOrientedImageData::SafeDownCast(segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+
+  vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(
+    segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+
+  vtkNew<vtkImageThreshold> threshold;
+  threshold->SetInputData(imageData);
+  threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+  threshold->SetInValue(1);
+  threshold->SetOutValue(0);
+  threshold->Update();
+
+  vtkOrientedImageData* thresholdedBinaryLabelmap = vtkOrientedImageData::New();
+  thresholdedBinaryLabelmap->ShallowCopy(threshold->GetOutput());
+  thresholdedBinaryLabelmap->CopyDirections(imageData);
+  return thresholdedBinaryLabelmap;
 }
 
 //---------------------------------------------------------------------------

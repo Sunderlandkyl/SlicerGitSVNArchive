@@ -993,6 +993,8 @@ bool qMRMLSegmentEditorWidgetPrivate::setSurfaceSmoothingFactor(double smoothing
     return false;
     }
 
+  MRMLNodeModifyBlocker blocker(segmentationNode);
+
   segmentationNode->GetSegmentation()->SetConversionParameter(
     vtkBinaryLabelmapToClosedSurfaceConversionRule::GetSmoothingFactorParameterName(),
     QVariant(smoothingFactor).toString().toLatin1().constData());
@@ -1326,6 +1328,8 @@ bool qMRMLSegmentEditorWidget::setMasterRepresentationToBinaryLabelmap()
     // Current master representation is already binary labelmap
     return true;
     }
+
+  MRMLNodeModifyBlocker blocker(d->SegmentationNode);
 
   // Editing is only possible if binary labelmap is the master representation
   // If master is not binary labelmap, then ask the user if they wants to make it master
@@ -2205,6 +2209,9 @@ void qMRMLSegmentEditorWidget::onCreateSurfaceToggled(bool on)
     return;
     }
 
+  MRMLNodeModifyBlocker segmentationNodeBlocker(segmentationNode);
+  MRMLNodeModifyBlocker displayNodeBlocker(displayNode);
+
   // If just have been checked, then create closed surface representation and show it
   if (on)
     {
@@ -2954,14 +2961,24 @@ void qMRMLSegmentEditorWidget::undo()
     {
     return;
     }
-  d->SegmentationHistory->RestorePreviousState();
+  /// Local scope for MRMLNodeModifyBlocker
+    {
+    MRMLNodeModifyBlocker blocker(d->SegmentationNode);
+    d->SegmentationHistory->RestorePreviousState();
+    }
+  d->SegmentationNode->InvokeCustomModifiedEvent(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->SegmentationNode->GetDisplayNode());
 }
 
 //-----------------------------------------------------------------------------
 void qMRMLSegmentEditorWidget::redo()
 {
   Q_D(qMRMLSegmentEditorWidget);
-  d->SegmentationHistory->RestoreNextState();
+  /// Local scope for MRMLNodeModifyBlocker
+    {
+    MRMLNodeModifyBlocker blocker(d->SegmentationNode);
+    d->SegmentationHistory->RestoreNextState();
+    }
+  d->SegmentationNode->InvokeCustomModifiedEvent(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->SegmentationNode->GetDisplayNode());
 }
 
 //-----------------------------------------------------------------------------

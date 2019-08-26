@@ -119,6 +119,7 @@ bool vtkSegmentationHistory::SaveState()
   std::vector<std::string> segmentIDs;
   this->Segmentation->GetSegmentIDs(segmentIDs);
   newSegmentationState.SegmentIds = segmentIDs;
+  std::map<vtkDataObject*, vtkDataObject*> savedObjects;
   for (std::vector<std::string>::iterator segmentIDIt = segmentIDs.begin(); segmentIDIt != segmentIDs.end(); ++segmentIDIt)
     {
     vtkSegment* segment = this->Segmentation->GetSegment(*segmentIDIt);
@@ -138,8 +139,19 @@ bool vtkSegmentationHistory::SaveState()
         baselineSegment = baselineSegmentIt->second.GetPointer();
         }
       }
+
     vtkSmartPointer<vtkSegment> segmentClone = vtkSmartPointer<vtkSegment>::New();
-    CopySegment(segmentClone, segment, baselineSegment);
+    vtkDataObject* masterRepresentation = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
+    if (savedObjects.find(masterRepresentation) == savedObjects.end())
+      {
+      this->CopySegment(segmentClone, segment, baselineSegment);
+      savedObjects[masterRepresentation] = segmentClone->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
+      }
+    else
+      {
+      segmentClone->DeepCopyMetadata(segment);
+      segmentClone->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), savedObjects[masterRepresentation]);
+      }
     newSegmentationState.Segments[*segmentIDIt] = segmentClone;
     }
   this->SegmentationStates.push_back(newSegmentationState);
@@ -248,24 +260,35 @@ bool vtkSegmentationHistory::RestoreState(unsigned int stateIndex)
   SegmentationState restoredState = this->SegmentationStates[stateIndex];
 
   std::set<std::string> segmentIDsToKeep;
+  std::map<vtkDataObject*, vtkDataObject*> restoredDataObjects;
   for (SegmentsMap::iterator restoredSegmentsIt = restoredState.Segments.begin();
     restoredSegmentsIt != restoredState.Segments.end(); ++restoredSegmentsIt)
     {
     segmentIDsToKeep.insert(restoredSegmentsIt->first);
-    vtkSegment* segment = this->Segmentation->GetSegment(restoredSegmentsIt->first);
-    if (segment != nullptr)
+
+    vtkSmartPointer<vtkSegment> segment = this->Segmentation->GetSegment(restoredSegmentsIt->first);
+    if (segment == nullptr)
+      {
+      segment = vtkSmartPointer<vtkSegment>::New();
+      this->Segmentation->AddSegment(segment, restoredSegmentsIt->first);
+      }
+
+    vtkDataObject* restoredRepresentation = restoredSegmentsIt->second->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
+    if (restoredDataObjects.find(restoredRepresentation) == restoredDataObjects.end())
       {
       segment->DeepCopy(restoredSegmentsIt->second);
-      segment->Modified();
+      restoredDataObjects[restoredRepresentation] = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
       }
     else
       {
-      vtkSmartPointer<vtkSegment> newSegment = vtkSmartPointer<vtkSegment>::New();
-      newSegment->DeepCopy(restoredSegmentsIt->second);
-      // we must specify the segment ID to prevent re-generation of a new ID
-      this->Segmentation->AddSegment(newSegment, restoredSegmentsIt->first);
+      segment->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), restoredDataObjects[restoredRepresentation]);
       }
+    segment->DeepCopyMetadata(restoredSegmentsIt->second);
     }
+
+
+
+
 
   // Removed segments that were not in the restored state
   std::vector<std::string> segmentIDs;

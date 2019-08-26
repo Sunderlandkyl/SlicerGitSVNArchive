@@ -27,6 +27,11 @@
 
 #include "vtkSegmentationCoreConfigure.h"
 
+#include <vtkPolyData.h>
+#include <vtkMultiBlockDataSet.h>
+#include <vtkWeakPointer.h>
+#include <vtkUnstructuredGrid.h>
+
 /// \ingroup SegmentationCore
 /// \brief Convert binary labelmap representation (vtkOrientedImageData type) to
 ///   closed surface representation (vtkPolyData type). The conversion algorithm
@@ -58,8 +63,13 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
+  /// TODO
+  bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
+
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
+
+  bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
 
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;
@@ -77,6 +87,9 @@ protected:
   /// If input labelmap has non-background border voxels, then those regions remain open in the output closed surface.
   /// This function checks whether this is the case.
   bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap);
+
+  std::map<vtkDataObject*, bool> Converted;
+  std::map<vtkDataObject*, vtkSmartPointer<vtkPolyData> > InputOutput;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();
