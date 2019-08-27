@@ -1494,7 +1494,7 @@ std::string vtkSegmentation::AddEmptySegment(std::string segmentId/*=""*/, std::
     }
   }
   if (!mergedSegmentId.empty())
-  {
+    {
     vtkSegment* mergedSegment = this->GetSegment(mergedSegmentId);
     int mergedValue = 2;
     if (mergedSegment->GetIsMergedLabelmap())
@@ -1511,7 +1511,7 @@ std::string vtkSegmentation::AddEmptySegment(std::string segmentId/*=""*/, std::
     segment->SetIsMergedLabelmap(true);
     segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(),
       mergedSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()));
-  }
+    }
 
   // Add segment
   if (!this->AddSegment(segment, segmentId))

@@ -1858,12 +1858,40 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     {
     int operation = (mergeMode==MODE_MERGE_MAX ? vtkOrientedImageDataResample::OPERATION_MAXIMUM : vtkOrientedImageDataResample::OPERATION_MINIMUM);
 
+    vtkNew<vtkImageThreshold> threshold;
+    threshold->SetInputData(labelmap);
+    threshold->ThresholdByLower(0);
+    threshold->SetInValue(0);
+    int labelmapValue = selectedSegment->GetLabelmapValue();
+    threshold->SetOutValue(labelmapValue);
+    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
+    {
+      threshold->SetOutValue(labelmap->GetScalarTypeMax());
+    }
+    threshold->Update();
+    labelmap->DeepCopy(threshold->GetOutput());
+
+    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
+    {
+      vtkNew<vtkOrientedImageData> segmentMask;
+      vtkNew<vtkImageThreshold> thresholdSegment;
+      thresholdSegment->SetInputData(segmentLabelmap);
+      thresholdSegment->ThresholdBetween(labelmapValue, labelmapValue);
+      thresholdSegment->SetInValue(1);
+      thresholdSegment->SetOutValue(0);
+      thresholdSegment->Update();
+      segmentMask->DeepCopy(thresholdSegment->GetOutput());
+      segmentMask->CopyDirections(segmentLabelmap);
+      vtkOrientedImageDataResample::ApplyImageMask(labelmap, segmentMask, labelmap->GetScalarTypeMax());
+    }
+
     if (!vtkOrientedImageDataResample::DoGeometriesMatch(segmentLabelmap, labelmap))
       {
       // Make sure appended image has the same lattice as the input image
       vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
         segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/);
+
       if (!vtkOrientedImageDataResample::MergeImage(resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, 1, &segmentLabelmapModified))
         {
         vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
@@ -2482,7 +2510,12 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
     }
 
   vtkDataObject* dataObject = segment->GetRepresentation(segmentation->GetMasterRepresentationName());
-  if (dataObject)
+  if (segmentation->GetMasterRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()
+    && segment->GetIsMergedLabelmap())
+    {
+    // TODO helper function get from segment
+    }
+  else if (dataObject)
     {
     dataObject->Initialize();
     dataObject->Modified();

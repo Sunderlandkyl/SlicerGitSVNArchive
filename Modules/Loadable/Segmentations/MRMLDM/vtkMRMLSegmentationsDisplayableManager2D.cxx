@@ -234,7 +234,7 @@ public:
       this->ImageThreshold->SetInValue(1); // TODO
 
       // Image outline
-      this->LabelOutline->SetInputConnection(this->Reslice->GetOutputPort());
+      this->LabelOutline->SetInputConnection(this->ImageThreshold->GetOutputPort());
       vtkSmartPointer<vtkImageMapToRGBA> outlineColorMapper = vtkSmartPointer<vtkImageMapToRGBA>::New();
       outlineColorMapper->SetInputConnection(this->LabelOutline->GetOutputPort());
       outlineColorMapper->SetOutputFormatToRGBA();
@@ -248,7 +248,7 @@ public:
 
       // Image fill
       vtkSmartPointer<vtkImageMapToRGBA> fillColorMapper = vtkSmartPointer<vtkImageMapToRGBA>::New();
-      fillColorMapper->SetInputConnection(this->Reslice->GetOutputPort());
+      fillColorMapper->SetInputConnection(this->ImageThreshold->GetOutputPort());
       fillColorMapper->SetOutputFormatToRGBA();
       fillColorMapper->SetLookupTable(this->LookupTableFill);
       vtkSmartPointer<vtkImageMapper> imageFillMapper = vtkSmartPointer<vtkImageMapper>::New();
@@ -883,7 +883,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         }
 
       vtkSegment* segment = segmentation->GetSegment(segmentId);
-      int value = segment->GetLabelmapValue();
+      int labelmapValue = segment->GetLabelmapValue();
 
       // Set segment color
       pipeline->LookupTableOutline->SetTableValue(1,
@@ -891,21 +891,23 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->LookupTableFill->SetNumberOfTableValues(2);
       pipeline->LookupTableFill->SetRampToLinear();
       pipeline->LookupTableFill->SetTableRange(0, 1);
+      pipeline->LookupTableFill->SetAboveRangeColor(0, 0, 0, 0);
+      pipeline->LookupTableFill->SetBelowRangeColor(0, 0, 0, 0);
 
-      //if (!this->SmoothFractionalLabelMapBorder)
-      //  {
-      //  //TODO: this works for labelmaps that are int or char type, but would need
-      //  // to be changed for floating point representations since it only creates table values in integer increments
-      //  pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
-      //  pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
-      //  }
+      if (!this->SmoothFractionalLabelMapBorder)
+        {
+        //TODO: this works for labelmaps that are int or char type, but would need
+        // to be changed for floating point representations since it only creates table values in integer increments
+        pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
+        pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
+        }
 
       double hsv[3] = {0,0,0};
       vtkMath::RGBToHSV(color, hsv);
       pipeline->LookupTableFill->SetHueRange(hsv[0], hsv[0]);
       pipeline->LookupTableFill->SetSaturationRange(hsv[1], hsv[1]);
       pipeline->LookupTableFill->SetValueRange(hsv[2], hsv[2]);
-      pipeline->LookupTableFill->SetAlphaRange(0.0, properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity());
+      pipeline->LookupTableFill->SetAlphaRange(0, properties.Opacity2DFill* displayNode->GetOpacity2DFill()* displayNode->GetOpacity());
       pipeline->LookupTableFill->ForceBuild();
       pipeline->Reslice->SetBackgroundLevel(minimumValue);
 
@@ -959,17 +961,22 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       int sliceOutputExtent[6] = { 0, dimensions[0] - 1, 0, dimensions[1] - 1, 0, dimensions[2] - 1 };
       pipeline->Reslice->SetOutputExtent(sliceOutputExtent);
 
-      // If ThresholdValue is not specified, then do not perform thresholding
+      //// If ThresholdValue is not specified, then do not perform thresholding
       //vtkDoubleArray* thresholdValue = vtkDoubleArray::SafeDownCast(
       //  imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
       //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
       //  {
-        //pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
-      pipeline->ImageThreshold->ThresholdBetween(value, value);
-        //}
+      //  pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
+      //  }
+      if (!segment->GetIsMergedLabelmap())
+      {
+        labelmapValue = 1;// TODO: Maybe labemap value could be something other than one for non merged segment
+      }
 
-      // Smooth the border of fractional labelmaps
-      pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->Reslice->GetOutputPort());
+      pipeline->ImageThreshold->ThresholdBetween(labelmapValue, labelmapValue);
+
+      //// Smooth the border of fractional labelmaps
+      //pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
       //if (this->SmoothFractionalLabelMapBorder && thresholdValue && thresholdValue->GetNumberOfValues() == 1)
       //  {
       //    pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
@@ -978,11 +985,11 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       // Set outline properties and turn it off if not shown
       if (segmentOutlineVisible)
         {
-        pipeline->LabelOutline->SetInputConnection(pipeline->Reslice->GetOutputPort());
+        pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
 
         // Set the outline threshold from the ThresholdValue field if it exists
         //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-          //{
+        //  {
           pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
           //}
 
@@ -1558,7 +1565,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
         {
         minimumValue = scalarRange->GetValue(0);
         }
-      if (voxelValue > minimumValue)
+
+      vtkSegment* segment = segmentation->GetSegment(pipelineIt->first);
+      int labelmapValue = segment->GetLabelmapValue();
+      if (voxelValue == labelmapValue)
         {
         segmentIDsAtPosition.insert(pipelineIt->first);
 
