@@ -219,7 +219,7 @@ public:
       this->SliceToImageTransform->PostMultiply();
 
       this->LookupTableOutline->SetRampToLinear();
-      this->LookupTableOutline->SetNumberOfTableValues(2);
+      this->LookupTableOutline->SetNumberOfTableValues(1);
       this->LookupTableOutline->SetTableRange(0, 1);
       this->LookupTableOutline->SetTableValue(0, 0, 0, 0, 0);
       this->LookupTableOutline->SetTableValue(1, 0, 0, 0, 0);
@@ -234,7 +234,7 @@ public:
       this->ImageThreshold->SetInValue(1); // TODO
 
       // Image outline
-      this->LabelOutline->SetInputConnection(this->ImageThreshold->GetOutputPort());
+      this->LabelOutline->SetInputConnection(this->Reslice->GetOutputPort());
       vtkSmartPointer<vtkImageMapToRGBA> outlineColorMapper = vtkSmartPointer<vtkImageMapToRGBA>::New();
       outlineColorMapper->SetInputConnection(this->LabelOutline->GetOutputPort());
       outlineColorMapper->SetOutputFormatToRGBA();
@@ -248,7 +248,7 @@ public:
 
       // Image fill
       vtkSmartPointer<vtkImageMapToRGBA> fillColorMapper = vtkSmartPointer<vtkImageMapToRGBA>::New();
-      fillColorMapper->SetInputConnection(this->ImageThreshold->GetOutputPort());
+      fillColorMapper->SetInputConnection(this->Reslice->GetOutputPort());
       fillColorMapper->SetOutputFormatToRGBA();
       fillColorMapper->SetLookupTable(this->LookupTableFill);
       vtkSmartPointer<vtkImageMapper> imageFillMapper = vtkSmartPointer<vtkImageMapper>::New();
@@ -886,28 +886,37 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       int labelmapValue = segment->GetLabelmapValue();
 
       // Set segment color
-      pipeline->LookupTableOutline->SetTableValue(1,
+      pipeline->LookupTableOutline->SetTableValue(0,
         color[0], color[1], color[2], properties.Opacity2DOutline * displayNode->GetOpacity2DOutline() * displayNode->GetOpacity());
-      pipeline->LookupTableFill->SetNumberOfTableValues(2);
+      pipeline->LookupTableOutline->SetTableRange(labelmapValue, labelmapValue);
+      pipeline->LookupTableOutline->SetAboveRangeColor(0, 0, 0, 0);
+      pipeline->LookupTableOutline->SetBelowRangeColor(0, 0, 0, 0);
+      pipeline->LookupTableOutline->UseAboveRangeColorOn();
+      pipeline->LookupTableOutline->UseBelowRangeColorOn();
+
+      pipeline->LookupTableFill->SetNumberOfTableValues(1);
       pipeline->LookupTableFill->SetRampToLinear();
-      pipeline->LookupTableFill->SetTableRange(0, 1);
+      pipeline->LookupTableFill->SetTableRange(labelmapValue, labelmapValue);
       pipeline->LookupTableFill->SetAboveRangeColor(0, 0, 0, 0);
       pipeline->LookupTableFill->SetBelowRangeColor(0, 0, 0, 0);
+      pipeline->LookupTableFill->UseAboveRangeColorOn();
+      pipeline->LookupTableFill->UseBelowRangeColorOn();
 
-      if (!this->SmoothFractionalLabelMapBorder)
-        {
-        //TODO: this works for labelmaps that are int or char type, but would need
-        // to be changed for floating point representations since it only creates table values in integer increments
-        pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
-        pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
-        }
+      //if (!this->SmoothFractionalLabelMapBorder)
+      //  {
+      //  //TODO: this works for labelmaps that are int or char type, but would need
+      //  // to be changed for floating point representations since it only creates table values in integer increments
+      //  pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
+      //  pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
+      //  }
 
       double hsv[3] = {0,0,0};
       vtkMath::RGBToHSV(color, hsv);
       pipeline->LookupTableFill->SetHueRange(hsv[0], hsv[0]);
       pipeline->LookupTableFill->SetSaturationRange(hsv[1], hsv[1]);
       pipeline->LookupTableFill->SetValueRange(hsv[2], hsv[2]);
-      pipeline->LookupTableFill->SetAlphaRange(0, properties.Opacity2DFill* displayNode->GetOpacity2DFill()* displayNode->GetOpacity());
+      double opacity = properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity();
+      pipeline->LookupTableFill->SetAlphaRange(opacity, opacity);
       pipeline->LookupTableFill->ForceBuild();
       pipeline->Reslice->SetBackgroundLevel(minimumValue);
 
@@ -985,12 +994,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       // Set outline properties and turn it off if not shown
       if (segmentOutlineVisible)
         {
-        pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
-
         // Set the outline threshold from the ThresholdValue field if it exists
         //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
         //  {
-          pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
+          //pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
           //}
 
         pipeline->LabelOutline->SetOutline(displayNode->GetSliceIntersectionThickness());

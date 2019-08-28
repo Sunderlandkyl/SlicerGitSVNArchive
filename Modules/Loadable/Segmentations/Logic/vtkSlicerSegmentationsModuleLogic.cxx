@@ -1282,19 +1282,25 @@ bool vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(vtkMRML
   //   run the thresholding in single threaded mode to avoid data corruption observed on mac release builds
   //threshold->SetNumberOfThreads(1);
 
+  vtkSmartPointer<vtkOrientedImageData> labelOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
+  labelOrientedImageData->vtkImageData::DeepCopy(labelmapNode->GetImageData());
+  labelOrientedImageData->SetGeometryFromImageToWorldMatrix(labelmapIjkToRasMatrix);
+
+  // Apply parent transforms if any
+  if (labelmapNode->GetParentTransformNode() || segmentationNode->GetParentTransformNode())
+    {
+    vtkSmartPointer<vtkGeneralTransform> labelmapToSegmentationTransform = vtkSmartPointer<vtkGeneralTransform>::New();
+    vtkSlicerSegmentationsModuleLogic::GetTransformBetweenRepresentationAndSegmentation(labelmapNode, segmentationNode, labelmapToSegmentationTransform);
+    vtkOrientedImageDataResample::TransformOrientedImage(labelOrientedImageData, labelmapToSegmentationTransform);
+    }
+
   MRMLNodeModifyBlocker blocker(segmentationNode);
   for (int labelIndex = 0; labelIndex < labelValues->GetNumberOfValues(); ++labelIndex)
     {
     int label = labelValues->GetValue(labelIndex);
-    threshold->ThresholdBetween(label, label);
-    threshold->Update();
-
-    // Create oriented image data for label
-    vtkSmartPointer<vtkOrientedImageData> labelOrientedImageData = vtkSmartPointer<vtkOrientedImageData>::New();
-    labelOrientedImageData->vtkImageData::DeepCopy(threshold->GetOutput());
-    labelOrientedImageData->SetGeometryFromImageToWorldMatrix(labelmapIjkToRasMatrix);
-
     vtkSmartPointer<vtkSegment> segment = vtkSmartPointer<vtkSegment>::New();
+    segment->SetIsMergedLabelmap(true);
+    segment->SetLabelmapValue(label);
 
     // Set segment color
     double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0],
@@ -1323,22 +1329,14 @@ bool vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(vtkMRML
       }
     segment->SetName(labelName);
 
-    // Apply parent transforms if any
-    if (labelmapNode->GetParentTransformNode() || segmentationNode->GetParentTransformNode())
-      {
-      vtkSmartPointer<vtkGeneralTransform> labelmapToSegmentationTransform = vtkSmartPointer<vtkGeneralTransform>::New();
-      vtkSlicerSegmentationsModuleLogic::GetTransformBetweenRepresentationAndSegmentation(labelmapNode, segmentationNode, labelmapToSegmentationTransform);
-      vtkOrientedImageDataResample::TransformOrientedImage(labelOrientedImageData, labelmapToSegmentationTransform);
-      }
-
-    // Clip to effective extent
-    int labelOrientedImageDataEffectiveExtent[6] = { 0, -1, 0, -1, 0, -1 };
-    vtkOrientedImageDataResample::CalculateEffectiveExtent(labelOrientedImageData, labelOrientedImageDataEffectiveExtent);
-    vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
-    padder->SetInputData(labelOrientedImageData);
-    padder->SetOutputWholeExtent(labelOrientedImageDataEffectiveExtent);
-    padder->Update();
-    labelOrientedImageData->DeepCopy(padder->GetOutput());
+    //// Clip to effective extent
+    //int labelOrientedImageDataEffectiveExtent[6] = { 0, -1, 0, -1, 0, -1 };
+    //vtkOrientedImageDataResample::CalculateEffectiveExtent(labelOrientedImageData, labelOrientedImageDataEffectiveExtent);
+    //vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
+    //padder->SetInputData(labelOrientedImageData);
+    //padder->SetOutputWholeExtent(labelOrientedImageDataEffectiveExtent);
+    //padder->Update();
+    //labelOrientedImageData->DeepCopy(padder->GetOutput());
 
     // Add oriented image data as binary labelmap representation
     segment->AddRepresentation(
