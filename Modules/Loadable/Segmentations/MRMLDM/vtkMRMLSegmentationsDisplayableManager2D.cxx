@@ -65,7 +65,7 @@
 #include <vtkImageReslice.h>
 #include <vtkImageMapper.h>
 #include <vtkImageMapToRGBA.h>
-#include <vtkLookupTable.h>
+#include <vtkDiscretizableColorTransferFunction.h>
 #include <vtkStripper.h>
 #include <vtkTriangleFilter.h>
 #include <vtkCleanPolyData.h>
@@ -73,6 +73,8 @@
 #include <vtkDoubleArray.h>
 #include <vtkIntArray.h>
 #include <vtkImageThreshold.h>
+#include <vtkDiscretizableColorTransferFunction.h>
+#include <vtkPiecewiseFunction.h>
 
 // STD includes
 #include <algorithm>
@@ -203,8 +205,8 @@ public:
       this->Reslice = vtkSmartPointer<vtkImageReslice>::New();
       this->SliceToImageTransform = vtkSmartPointer<vtkGeneralTransform>::New();
       this->LabelOutline = vtkSmartPointer<vtkImageLabelOutline>::New();
-      this->LookupTableOutline = vtkSmartPointer<vtkLookupTable>::New();
-      this->LookupTableFill = vtkSmartPointer<vtkLookupTable>::New();
+      this->LookupTableOutline = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
+      this->LookupTableFill = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
       this->ImageThreshold = vtkSmartPointer<vtkImageThreshold>::New();
 
       // Set up image pipeline
@@ -218,16 +220,8 @@ public:
 
       this->SliceToImageTransform->PostMultiply();
 
-      this->LookupTableOutline->SetRampToLinear();
-      this->LookupTableOutline->SetNumberOfTableValues(1);
-      this->LookupTableOutline->SetTableRange(0, 1);
-      this->LookupTableOutline->SetTableValue(0, 0, 0, 0, 0);
-      this->LookupTableOutline->SetTableValue(1, 0, 0, 0, 0);
-      this->LookupTableFill->SetRampToLinear();
-      this->LookupTableFill->SetNumberOfTableValues(2);
-      this->LookupTableFill->SetTableRange(0, 1);
-      this->LookupTableFill->SetTableValue(0, 0, 0, 0, 0);
-      this->LookupTableFill->SetTableValue(1, 0, 0, 0, 0);
+      this->LookupTableOutline->EnableOpacityMappingOn();
+      this->LookupTableFill->EnableOpacityMappingOn();
 
       this->ImageThreshold->SetInputConnection(this->Reslice->GetOutputPort());
       this->ImageThreshold->SetOutValue(0); // TODO
@@ -281,8 +275,8 @@ public:
     vtkSmartPointer<vtkImageReslice> Reslice;
     vtkSmartPointer<vtkGeneralTransform> SliceToImageTransform;
     vtkSmartPointer<vtkImageLabelOutline> LabelOutline;
-    vtkSmartPointer<vtkLookupTable> LookupTableOutline;
-    vtkSmartPointer<vtkLookupTable> LookupTableFill;
+    vtkSmartPointer<vtkDiscretizableColorTransferFunction> LookupTableOutline;
+    vtkSmartPointer<vtkDiscretizableColorTransferFunction> LookupTableFill;
     vtkSmartPointer<vtkImageThreshold> ImageThreshold;
 
     vtkMTimeType SliceIntersectionUpdatedTime;
@@ -938,19 +932,20 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         minLabelmapValue = std::min(minLabelmapValue, labelmapValue);
         maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
       }
-      pipeline->LookupTableOutline->SetTableRange(minLabelmapValue, maxLabelmapValue)
-      pipeline->LookupTableOutline->SetNumberOfTableValues(maxLabelmapValue - minLabelmapValue + 1);
-      pipeline->LookupTableOutline->SetAboveRangeColor(0, 0, 0, 0);
-      pipeline->LookupTableOutline->SetBelowRangeColor(0, 0, 0, 0);
-      pipeline->LookupTableOutline->UseAboveRangeColorOn();
-      pipeline->LookupTableOutline->UseBelowRangeColorOn();
 
-      pipeline->LookupTableFill->SetTableRange(minLabelmapValue, maxLabelmapValue);
-      pipeline->LookupTableFill->SetNumberOfTableValues(maxLabelmapValue - minLabelmapValue + 1);
-      pipeline->LookupTableFill->SetAboveRangeColor(0, 0, 0, 0);
-      pipeline->LookupTableFill->SetBelowRangeColor(0, 0, 0, 0);
-      pipeline->LookupTableFill->UseAboveRangeColorOn();
-      pipeline->LookupTableFill->UseBelowRangeColorOn();
+      double colorInvisible[4] = { 0,0,0,0 };
+
+      unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(minLabelmapValue-1 , 0,0, 0);
+      pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, colorInvisible);
+
+      unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(minLabelmapValue - 1, 0, 0, 0);
+      pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, colorInvisible);
+
+      vtkNew<vtkPiecewiseFunction> outlineOpacityFunction;
+      outlineOpacityFunction->AddPoint(minLabelmapValue - 1, 0);
+
+      vtkNew<vtkPiecewiseFunction> fillOpacityFunction;
+      fillOpacityFunction->AddPoint(minLabelmapValue - 1, 0);
 
       for (std::string segmentId : mergedSegmentIds)
         {
@@ -969,17 +964,25 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
           && properties.Visible2DFill && displayNode->GetVisibility2DFill() && (fillOpacity > 0.0);
 
         // Get displayed color (if no override is defined then use the color from the segment)
-        double color[3] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2] };
+        double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
         displayNode->GetSegmentColor(segmentId, color);
 
-        pipeline->LookupTableOutline->SetTableValue(labelmapValue-1,
-          color[0], color[1], color[2], properties.Opacity2DOutline* displayNode->GetOpacity2DOutline()* displayNode->GetOpacity());
-        pipeline->LookupTableFill->SetTableValue(labelmapValue-1,
-          color[0], color[1], color[2], properties.Opacity2DFill* displayNode->GetOpacity2DFill()* displayNode->GetOpacity());
 
+        unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(labelmapValue,color[0], color[1], color[2]);
+        color[3] = properties.Opacity2DOutline* displayNode->GetOpacity2DOutline()* displayNode->GetOpacity();
+        pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, color);
+        outlineOpacityFunction->AddPoint(labelmapValue, color[3]);
+
+        unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(labelmapValue,color[0], color[1], color[2]);
+        color[3] = properties.Opacity2DFill* displayNode->GetOpacity2DFill()* displayNode->GetOpacity();
+        pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, color);
+        fillOpacityFunction->AddPoint(labelmapValue, color[3]);
         }
-      pipeline->LookupTableOutline->SetTableRange(minLabelmapValue, maxLabelmapValue);
-      pipeline->LookupTableFill->SetTableRange(minLabelmapValue, maxLabelmapValue);
+      pipeline->LookupTableFill->SetScalarOpacityFunction(fillOpacityFunction);
+      pipeline->LookupTableOutline->SetScalarOpacityFunction(outlineOpacityFunction);
+
+      //pipeline->LookupTableOutline->SetTableRange(minLabelmapValue, maxLabelmapValue);
+      //pipeline->LookupTableFill->SetTableRange(minLabelmapValue, maxLabelmapValue);
       //pipeline->LookupTableFill->SetRampToLinear();
 
       //if (!this->SmoothFractionalLabelMapBorder)
@@ -1552,165 +1555,164 @@ std::string vtkMRMLSegmentationsDisplayableManager2D::GetDataProbeInfoStringForP
 void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(double ras[3],
   vtkMRMLSegmentationDisplayNode* displayNode, vtkStringArray* segmentIDs, vtkDoubleArray* segmentValues/*=nullptr*/)
 {
-  //if (!segmentIDs)
-  //  {
-  //  return;
-  //  }
-  //segmentIDs->Reset();
-  //if (segmentValues)
-  //  {
-  //  segmentValues->Reset();
-  //  }
+  if (!segmentIDs)
+    {
+    return;
+    }
+  segmentIDs->Reset();
+  if (segmentValues)
+    {
+    segmentValues->Reset();
+    }
 
-  //vtkInternal::PipelinesCacheType::iterator pipelinesIter = this->Internal->DisplayPipelines.find(displayNode);
-  //if (pipelinesIter == this->Internal->DisplayPipelines.end())
-  //  {
-  //  return;
-  //  }
+  vtkInternal::PipelinesCacheType::iterator pipelinesIter = this->Internal->DisplayPipelines.find(displayNode);
+  if (pipelinesIter == this->Internal->DisplayPipelines.end())
+    {
+    return;
+    }
 
-  //bool displayNodeVisible = this->Internal->IsVisible(displayNode);
-  //if (!displayNodeVisible)
-  //  {
-  //  return;
-  //  }
+  bool displayNodeVisible = this->Internal->IsVisible(displayNode);
+  if (!displayNodeVisible)
+    {
+    return;
+    }
 
-  //// Get segmentation
-  //vtkMRMLSegmentationNode* segmentationNode = vtkMRMLSegmentationNode::SafeDownCast(
-  //  displayNode->GetDisplayableNode());
-  //if (!segmentationNode)
-  //  {
-  //  return;
-  //  }
-  //vtkSegmentation* segmentation = segmentationNode->GetSegmentation();
-  //if (!segmentation)
-  //  {
-  //  return;
-  //  }
+  // Get segmentation
+  vtkMRMLSegmentationNode* segmentationNode = vtkMRMLSegmentationNode::SafeDownCast(
+    displayNode->GetDisplayableNode());
+  if (!segmentationNode)
+    {
+    return;
+    }
+  vtkSegmentation* segmentation = segmentationNode->GetSegmentation();
+  if (!segmentation)
+    {
+    return;
+    }
 
-  //// Get name of displayed representation
-  //std::string shownRepresenatationName = displayNode->GetDisplayRepresentationName2D();
+  // Get name of displayed representation
+  std::string shownRepresenatationName = displayNode->GetDisplayRepresentationName2D();
 
-  //// For all pipelines (pipeline per segment)
-  //std::set<std::string> segmentIDsAtPosition;
-  //std::map<std::string, double> valueForSegment;
+  // For all pipelines (pipeline per segment)
+  std::set<std::string> segmentIDsAtPosition;
+  std::map<std::string, double> valueForSegment;
 
-  //for (vtkInternal::PipelineMapType::iterator pipelineIt = pipelinesIter->second.begin(); pipelineIt != pipelinesIter->second.end(); ++pipelineIt)
-  //  {
-  //  vtkInternal::Pipeline* pipeline = pipelineIt->second;
+  for (vtkInternal::PipelineMapType::iterator pipelineIt = pipelinesIter->second.begin(); pipelineIt != pipelinesIter->second.end(); ++pipelineIt)
+    {
+    vtkInternal::Pipeline* pipeline = pipelineIt->second;
 
-  //  // Get visibility
-  //  vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-  //  displayNode->GetSegmentDisplayProperties(pipelineIt->first, properties);
-  //  bool segmentVisible = displayNodeVisible && properties.Visible
-  //    && (properties.Visible2DOutline || properties.Visible2DFill);
-  //  if (!segmentVisible)
-  //    {
-  //    continue;
-  //    }
+    // Get visibility
+    //vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
+    //displayNode->GetSegmentDisplayProperties(pipelineIt->first, properties);
+    //bool segmentVisible = displayNodeVisible && properties.Visible
+    //  && (properties.Visible2DOutline || properties.Visible2DFill);
+    //if (!segmentVisible)
+    //  {
+    //  continue;
+    //  }
 
-  //  // Skip if segment is not visible in the current slice
-  //  if (!this->Internal->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, pipelineIt->first))
-  //    {
-  //    continue;
-  //    }
+    // Skip if segment is not visible in the current slice
+    //if (!this->Internal->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, pipelineIt->first))
+    //  {
+    //  continue;
+    //  }
 
-  //  // Get displayed representation
-  //  vtkPolyData* polyData = vtkPolyData::SafeDownCast(
-  //    segmentation->GetSegmentRepresentation(pipelineIt->first, shownRepresenatationName));
-  //  vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(
-  //    segmentation->GetSegmentRepresentation(pipelineIt->first, shownRepresenatationName));
-  //  if (imageData)
-  //    {
-  //    int* imageExtent = imageData->GetExtent();
-  //    if (imageExtent[0]>imageExtent[1] || imageExtent[2]>imageExtent[3] || imageExtent[4]>imageExtent[5])
-  //      {
-  //      continue;
-  //      }
+    // Get displayed representation
+    vtkPolyData* polyData = vtkPolyData::SafeDownCast(pipelineIt->first);
+    vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(pipelineIt->first);
+    if (imageData)
+      {
+      int* imageExtent = imageData->GetExtent();
+      if (imageExtent[0]>imageExtent[1] || imageExtent[2]>imageExtent[3] || imageExtent[4]>imageExtent[5])
+        {
+        continue;
+        }
 
-  //    // Decide if point is in segment (image data)
-  //    vtkNew<vtkMatrix4x4> segmentationToOrientedImageIjkMatrix;
-  //    imageData->GetWorldToImageMatrix(segmentationToOrientedImageIjkMatrix.GetPointer());
-  //    vtkNew<vtkGeneralTransform> worldToOrientedImageIjkToTransform;
-  //    worldToOrientedImageIjkToTransform->Concatenate(segmentationToOrientedImageIjkMatrix.GetPointer());
-  //    worldToOrientedImageIjkToTransform->Concatenate(pipeline->WorldToNodeTransform);
-  //    double* ijkDouble = worldToOrientedImageIjkToTransform->TransformPoint(ras);
-  //    int ijk[3] = { (int)(ijkDouble[0] + 0.5), (int)(ijkDouble[1] + 0.5), (int)(ijkDouble[2] + 0.5) };
-  //    if (ijk[0] < imageExtent[0] || ijk[0] > imageExtent[1] ||
-  //      ijk[1] < imageExtent[2] || ijk[1] > imageExtent[3] ||
-  //      ijk[2] < imageExtent[4] || ijk[2] > imageExtent[5])
-  //      {
-  //      continue;
-  //      }
-  //    double voxelValue = imageData->GetScalarComponentAsDouble(
-  //      ijk[0], ijk[1], ijk[2], 0);
+      // Decide if point is in segment (image data)
+      vtkNew<vtkMatrix4x4> segmentationToOrientedImageIjkMatrix;
+      imageData->GetWorldToImageMatrix(segmentationToOrientedImageIjkMatrix.GetPointer());
+      vtkNew<vtkGeneralTransform> worldToOrientedImageIjkToTransform;
+      worldToOrientedImageIjkToTransform->Concatenate(segmentationToOrientedImageIjkMatrix.GetPointer());
+      worldToOrientedImageIjkToTransform->Concatenate(pipeline->WorldToNodeTransform);
+      double* ijkDouble = worldToOrientedImageIjkToTransform->TransformPoint(ras);
+      int ijk[3] = { (int)(ijkDouble[0] + 0.5), (int)(ijkDouble[1] + 0.5), (int)(ijkDouble[2] + 0.5) };
+      if (ijk[0] < imageExtent[0] || ijk[0] > imageExtent[1] ||
+        ijk[1] < imageExtent[2] || ijk[1] > imageExtent[3] ||
+        ijk[2] < imageExtent[4] || ijk[2] > imageExtent[5])
+        {
+        continue;
+        }
+      double voxelValue = imageData->GetScalarComponentAsDouble(
+        ijk[0], ijk[1], ijk[2], 0);
 
-  //    vtkDoubleArray* scalarRange = vtkDoubleArray::SafeDownCast(
-  //      imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
+      vtkDoubleArray* scalarRange = vtkDoubleArray::SafeDownCast(
+        imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetScalarRangeFieldName()));
 
-  //    double minimumValue = 0.0;
-  //    if (scalarRange && scalarRange->GetNumberOfValues() == 2)
-  //      {
-  //      minimumValue = scalarRange->GetValue(0);
-  //      }
+      double minimumValue = 0.0;
+      if (scalarRange && scalarRange->GetNumberOfValues() == 2)
+        {
+        minimumValue = scalarRange->GetValue(0);
+        }
 
-  //    vtkSegment* segment = segmentation->GetSegment(pipelineIt->first);
-  //    int labelmapValue = segment->GetLabelmapValue();
-  //    if (voxelValue == labelmapValue)
-  //      {
-  //      segmentIDsAtPosition.insert(pipelineIt->first);
+      //vtkSegment* segment = segmentation->GetSegment(pipelineIt->first);
+      //int labelmapValue = segment->GetLabelmapValue();
+      //if (voxelValue == labelmapValue)
+      //  {
+      //  segmentIDsAtPosition.insert(pipelineIt->first);
 
-  //      if (shownRepresenatationName == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())
-  //        {
-  //        valueForSegment.insert(std::make_pair(pipelineIt->first, voxelValue));
-  //        }
+      //  if (shownRepresenatationName == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())
+      //    {
+      //    valueForSegment.insert(std::make_pair(pipelineIt->first, voxelValue));
+      //    }
 
-  //      }
-  //    }
-  //  else if (polyData)
-  //    {
-  //    if (polyData->GetNumberOfPoints() == 0)
-  //      {
-  //      continue;
-  //      }
+      //  }
+      segmentIDsAtPosition.insert(segmentation->GetNthSegmentID(((int)voxelValue)-1));
+      }
+    //else if (polyData)
+    //  {
+    //  if (polyData->GetNumberOfPoints() == 0)
+    //    {
+    //    continue;
+    //    }
 
-  //    // Use poly data that is displayed in the slice view
-  //    vtkPolyData* sliceFillPolyData = pipeline->TriangleFilter->GetPolyDataInput(0);
-  //    if (!sliceFillPolyData)
-  //      {
-  //      continue;
-  //      }
-  //    double tolerance = 0.0001;
-  //    int subId = -1;
-  //    double dist2 = 0.0;
-  //    double pcoords[3] = { 0.0, 0.0, 0.0 };
-  //    double* weights = new double[sliceFillPolyData->GetMaxCellSize()];
-  //    for (int index = 0; index<sliceFillPolyData->GetNumberOfCells(); ++index)
-  //      {
-  //      vtkCell* cell = sliceFillPolyData->GetCell(index);
-  //      // If out of bounds, then do not investigate this cell further
-  //      double* bounds = cell->GetBounds();
-  //      if (ras[0]<bounds[0] - tolerance || ras[0]>bounds[1] + tolerance ||
-  //        ras[1]<bounds[2] - tolerance || ras[1]>bounds[3] + tolerance ||
-  //        ras[2]<bounds[4] - tolerance || ras[2]>bounds[5] + tolerance)
-  //        {
-  //        continue;
-  //        }
-  //      // Inside bounds the position is evaluated in the cell
-  //      if (cell->EvaluatePosition(ras, nullptr, subId, pcoords, dist2, weights) == 1)
-  //        {
-  //        segmentIDsAtPosition.insert(pipelineIt->first);
-  //        break;
-  //        }
-  //      }
-  //    }
-  //  } // For each pipeline (=segment)
+    //  // Use poly data that is displayed in the slice view
+    //  vtkPolyData* sliceFillPolyData = pipeline->TriangleFilter->GetPolyDataInput(0);
+    //  if (!sliceFillPolyData)
+    //    {
+    //    continue;
+    //    }
+    //  double tolerance = 0.0001;
+    //  int subId = -1;
+    //  double dist2 = 0.0;
+    //  double pcoords[3] = { 0.0, 0.0, 0.0 };
+    //  double* weights = new double[sliceFillPolyData->GetMaxCellSize()];
+    //  for (int index = 0; index<sliceFillPolyData->GetNumberOfCells(); ++index)
+    //    {
+    //    vtkCell* cell = sliceFillPolyData->GetCell(index);
+    //    // If out of bounds, then do not investigate this cell further
+    //    double* bounds = cell->GetBounds();
+    //    if (ras[0]<bounds[0] - tolerance || ras[0]>bounds[1] + tolerance ||
+    //      ras[1]<bounds[2] - tolerance || ras[1]>bounds[3] + tolerance ||
+    //      ras[2]<bounds[4] - tolerance || ras[2]>bounds[5] + tolerance)
+    //      {
+    //      continue;
+    //      }
+    //    // Inside bounds the position is evaluated in the cell
+    //    if (cell->EvaluatePosition(ras, nullptr, subId, pcoords, dist2, weights) == 1)
+    //      {
+    //      segmentIDsAtPosition.insert(pipelineIt->first);
+    //      break;
+    //      }
+    //    }
+    //  }
+    } // For each pipeline (=segment)
 
-  //for (std::set<std::string>::iterator segmentIt = segmentIDsAtPosition.begin(); segmentIt != segmentIDsAtPosition.end(); ++segmentIt)
-  //  {
-  //  segmentIDs->InsertNextValue(*segmentIt);
-  //  if (segmentValues)
-  //    {
-  //    segmentValues->InsertNextValue(valueForSegment[*segmentIt]);
-  //    }
-  //  }
+  for (std::set<std::string>::iterator segmentIt = segmentIDsAtPosition.begin(); segmentIt != segmentIDsAtPosition.end(); ++segmentIt)
+    {
+    segmentIDs->InsertNextValue(*segmentIt);
+    if (segmentValues)
+      {
+      segmentValues->InsertNextValue(valueForSegment[*segmentIt]);
+      }
+    }
 }
