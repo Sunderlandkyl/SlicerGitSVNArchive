@@ -309,7 +309,14 @@ public:
   void GetMergedLabelmapSegmentIds(std::string segmentId, std::vector<std::string> &sharedSegmentIds, bool includeSegmentId);
   int GetUniqueValueForMergedLabelmap(std::string segmentId);
   void MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds);
+#ifndef __VTK_WRAP__
+  //BTX
+  bool GenerateMergedLabelmap(vtkOrientedImageData* mergedImageData, int extentComputationMode, vtkOrientedImageData* mergedLabelmapGeometry = nullptr,
+    const std::vector<std::string>& segmentIDs = std::vector<std::string>());
+  ///ETX
+#endif // __VTK_WRAP__
   void SeparateSegmentLabelmap(std::string segmentId);
+  void ClearSegment(std::string segmentId);
 
 // Conversion related methods
 

@@ -320,7 +320,8 @@ public:
     {
     MODE_REPLACE = 0,
     MODE_MERGE_MAX,
-    MODE_MERGE_MIN
+    MODE_MERGE_MIN,
+    MODE_MERGE_MASK
     };
   static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=nullptr);
 

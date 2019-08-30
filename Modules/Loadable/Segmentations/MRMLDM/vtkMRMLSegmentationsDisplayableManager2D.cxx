@@ -818,9 +818,21 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       continue;
       }*/
 
-    //bool visibleInCurrentSlice = this->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, mergedSegmentIds[0]); //TODO: Ac
-    bool visibleInCurrentSlice = true;
-    if (!visibleInCurrentSlice)
+
+    //bool pipelineVisiblity = this->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, mergedSegmentIds[0]); //TODO: Actually determine
+    bool pipelineVisiblity = false;
+    for (std::string segmentId : mergedSegmentIds)
+      {
+      vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
+      displayNode->GetSegmentDisplayProperties(segmentId, properties);
+      if (displayNode->GetSegmentVisibility(segmentId))
+        {
+        pipelineVisiblity = true;
+        break;
+        }
+      }
+
+    if (!pipelineVisiblity)
       {
       pipeline->PolyDataOutlineActor->SetVisibility(false);
       pipeline->PolyDataFillActor->SetVisibility(false);
@@ -959,31 +971,35 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         double outlineOpacity = properties.Opacity2DOutline * displayNode->GetOpacity2DOutline() * displayNode->GetOpacity();
         bool segmentOutlineVisible = displayNodeVisible && properties.Visible
           && properties.Visible2DOutline && displayNode->GetVisibility2DOutline() && (outlineOpacity > 0.0);
+        if (!segmentOutlineVisible)
+          {
+          outlineOpacity = 0.0;
+          }
+
         double fillOpacity = properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity();
         bool segmentFillVisible = displayNodeVisible && properties.Visible
           && properties.Visible2DFill && displayNode->GetVisibility2DFill() && (fillOpacity > 0.0);
+        if (!segmentFillVisible)
+          {
+          fillOpacity = 0.0;
+          }
 
         // Get displayed color (if no override is defined then use the color from the segment)
         double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
         displayNode->GetSegmentColor(segmentId, color);
 
-
         unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(labelmapValue,color[0], color[1], color[2]);
-        color[3] = properties.Opacity2DOutline* displayNode->GetOpacity2DOutline()* displayNode->GetOpacity();
+        color[3] = outlineOpacity;
         pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, color);
         outlineOpacityFunction->AddPoint(labelmapValue, color[3]);
 
         unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(labelmapValue,color[0], color[1], color[2]);
-        color[3] = properties.Opacity2DFill* displayNode->GetOpacity2DFill()* displayNode->GetOpacity();
+        color[3] = fillOpacity;
         pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, color);
         fillOpacityFunction->AddPoint(labelmapValue, color[3]);
         }
       pipeline->LookupTableFill->SetScalarOpacityFunction(fillOpacityFunction);
       pipeline->LookupTableOutline->SetScalarOpacityFunction(outlineOpacityFunction);
-
-      //pipeline->LookupTableOutline->SetTableRange(minLabelmapValue, maxLabelmapValue);
-      //pipeline->LookupTableFill->SetTableRange(minLabelmapValue, maxLabelmapValue);
-      //pipeline->LookupTableFill->SetRampToLinear();
 
       //if (!this->SmoothFractionalLabelMapBorder)
       //  {
