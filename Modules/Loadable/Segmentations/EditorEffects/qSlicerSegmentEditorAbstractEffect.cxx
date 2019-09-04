@@ -351,13 +351,50 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
 
   // TODO: composite modifierLabelmap with threshold mask
 
+  std::vector<std::string> allSegmentIDs;
+  segmentationNode->GetSegmentation()->GetSegmentIDs(allSegmentIDs);
+  // remove selected segment, that is already handled
+  allSegmentIDs.erase(std::remove(allSegmentIDs.begin(), allSegmentIDs.end(), selectedSegmentID), allSegmentIDs.end());
+
+  std::vector<std::string> visibleSegmentIDs;
+  vtkMRMLSegmentationDisplayNode* displayNode = vtkMRMLSegmentationDisplayNode::SafeDownCast(segmentationNode->GetDisplayNode());
+  if (displayNode)
+    {
+    for (std::vector<std::string>::iterator segmentIDIt = allSegmentIDs.begin(); segmentIDIt != allSegmentIDs.end(); ++segmentIDIt)
+      {
+      if (displayNode->GetSegmentVisibility(*segmentIDIt))
+        {
+        visibleSegmentIDs.push_back(*segmentIDIt);
+        }
+      }
+    }
+
   vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(selectedSegmentID);
+
+  std::vector<std::string> segmentIDsToOverwrite;
+  switch (this->parameterSetNode()->GetOverwriteMode())
+    {
+    case vtkMRMLSegmentEditorNode::OverwriteNone:
+      // nothing to overwrite
+      break;
+    case vtkMRMLSegmentEditorNode::OverwriteVisibleSegments:
+      segmentIDsToOverwrite = visibleSegmentIDs;
+      break;
+    case vtkMRMLSegmentEditorNode::OverwriteAllSegments:
+      segmentIDsToOverwrite = allSegmentIDs;
+      break;
+    }
+
+  if (segmentIDsToOverwrite.empty() && segment->GetIsMergedLabelmap())
+    {
+    segmentationNode->GetSegmentation()->SeparateSegmentLabelmap(segmentationNode->GetSegmentation()->GetSegmentIdBySegment(segment));
+    }
 
   // Create inverted binary labelmap
   vtkSmartPointer<vtkImageThreshold> inverter = vtkSmartPointer<vtkImageThreshold>::New();
   inverter->SetInputData(modifierLabelmap);
   //inverter->SetInValue(m_FillValue);
-  inverter->SetInValue(segment->GetLabelmapValue());
+  inverter->SetInValue(VTK_DOUBLE_MAX);
   inverter->SetOutValue(m_EraseValue);
   inverter->ReplaceInOn();
   inverter->ThresholdByLower(0);
@@ -401,38 +438,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       {
       vtkSlicerSegmentationsModuleLogic::SetSegmentStatus(segment, vtkSlicerSegmentationsModuleLogic::InProgress);
       }
-    }
-
-  std::vector<std::string> allSegmentIDs;
-  segmentationNode->GetSegmentation()->GetSegmentIDs(allSegmentIDs);
-  // remove selected segment, that is already handled
-  allSegmentIDs.erase(std::remove(allSegmentIDs.begin(), allSegmentIDs.end(), selectedSegmentID), allSegmentIDs.end());
-
-  std::vector<std::string> visibleSegmentIDs;
-  vtkMRMLSegmentationDisplayNode* displayNode = vtkMRMLSegmentationDisplayNode::SafeDownCast(segmentationNode->GetDisplayNode());
-  if (displayNode)
-    {
-    for (std::vector<std::string>::iterator segmentIDIt = allSegmentIDs.begin(); segmentIDIt != allSegmentIDs.end(); ++segmentIDIt)
-      {
-      if (displayNode->GetSegmentVisibility(*segmentIDIt))
-        {
-        visibleSegmentIDs.push_back(*segmentIDIt);
-        }
-      }
-    }
-
-  std::vector<std::string> segmentIDsToOverwrite;
-  switch (this->parameterSetNode()->GetOverwriteMode())
-    {
-  case vtkMRMLSegmentEditorNode::OverwriteNone:
-    // nothing to overwrite
-    break;
-  case vtkMRMLSegmentEditorNode::OverwriteVisibleSegments:
-    segmentIDsToOverwrite = visibleSegmentIDs;
-    break;
-  case vtkMRMLSegmentEditorNode::OverwriteAllSegments:
-    segmentIDsToOverwrite = allSegmentIDs;
-    break;
     }
 
   std::vector<std::string> mergedSegmentIds;

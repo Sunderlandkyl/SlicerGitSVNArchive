@@ -577,7 +577,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::AddDisplayNode(vtkMR
       }
 
     vtkDataObject* representation = segment->GetRepresentation(displayNode->GetDisplayRepresentationName2D());
-    pipelineVector[representation] = this->CreateSegmentPipeline(); // DON'T CREATE IF EXISTS
+    if (pipelineVector.find(representation) == pipelineVector.end())
+      {
+      pipelineVector[representation] = this->CreateSegmentPipeline();
+      }
     }
 
   this->DisplayPipelines.insert( std::make_pair(displayNode, pipelineVector) );
@@ -655,8 +658,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateSegmentPipelin
     vtkDataObject* representationObject = segment->GetRepresentation(displayNode->GetDisplayRepresentationName2D());
 
     // If segment does not have a pipeline, create one
-    PipelineMapType::iterator pipelineIt = pipelines.find(representationObject);
-    if (pipelineIt == pipelines.end())
+    if (pipelines.find(representationObject) == pipelines.end())
       {
       pipelines[representationObject] = this->CreateSegmentPipeline();
       requestTransformUpdate = true;
@@ -701,9 +703,9 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateSegmentPipelin
 
   // Update cached matrices. Calls UpdateDisplayNodePipeline
   if (requestTransformUpdate)
-  {
+    {
     this->UpdateDisplayableTransforms(segmentationNode);
-  }
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -1617,16 +1619,6 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
     {
     vtkInternal::Pipeline* pipeline = pipelineIt->second;
 
-    // Get visibility
-    //vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-    //displayNode->GetSegmentDisplayProperties(pipelineIt->first, properties);
-    //bool segmentVisible = displayNodeVisible && properties.Visible
-    //  && (properties.Visible2DOutline || properties.Visible2DFill);
-    //if (!segmentVisible)
-    //  {
-    //  continue;
-    //  }
-
     // Skip if segment is not visible in the current slice
     //if (!this->Internal->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, pipelineIt->first))
     //  {
@@ -1670,57 +1662,72 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
         minimumValue = scalarRange->GetValue(0);
         }
 
-      //vtkSegment* segment = segmentation->GetSegment(pipelineIt->first);
-      //int labelmapValue = segment->GetLabelmapValue();
-      //if (voxelValue == labelmapValue)
-      //  {
-      //  segmentIDsAtPosition.insert(pipelineIt->first);
+      for (int i = 0; i < segmentation->GetNumberOfSegments(); ++i)
+        {
+        vtkSegment* segment = segmentation->GetNthSegment(i);
+        std::string segmentID = segmentation->GetSegmentIdBySegment(segment);
 
-      //  if (shownRepresenatationName == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())
-      //    {
-      //    valueForSegment.insert(std::make_pair(pipelineIt->first, voxelValue));
-      //    }
+        // Get visibility
+        vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
+        displayNode->GetSegmentDisplayProperties(segmentID, properties);
+        bool segmentVisible = displayNodeVisible && properties.Visible
+          && (properties.Visible2DOutline || properties.Visible2DFill);
+        if (!segmentVisible)
+          {
+          continue;
+          }
 
-      //  }
-      segmentIDsAtPosition.insert(segmentation->GetNthSegmentID(((int)voxelValue)-1));
+        int labelmapValue = segment->GetLabelmapValue();
+        if ((shownRepresenatationName == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName() && voxelValue != labelmapValue) ||
+          segment->GetRepresentation(shownRepresenatationName) != imageData)
+          {
+          continue;
+          }
+        segmentIDsAtPosition.insert(segmentID);
+
+        if (shownRepresenatationName == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
+          {
+          valueForSegment.insert(std::make_pair(segmentID, voxelValue));
+          }
+        }
       }
-    //else if (polyData)
-    //  {
-    //  if (polyData->GetNumberOfPoints() == 0)
-    //    {
-    //    continue;
-    //    }
+    else if (polyData)
+      {
+      if (polyData->GetNumberOfPoints() == 0)
+        {
+        continue;
+        }
 
-    //  // Use poly data that is displayed in the slice view
-    //  vtkPolyData* sliceFillPolyData = pipeline->TriangleFilter->GetPolyDataInput(0);
-    //  if (!sliceFillPolyData)
-    //    {
-    //    continue;
-    //    }
-    //  double tolerance = 0.0001;
-    //  int subId = -1;
-    //  double dist2 = 0.0;
-    //  double pcoords[3] = { 0.0, 0.0, 0.0 };
-    //  double* weights = new double[sliceFillPolyData->GetMaxCellSize()];
-    //  for (int index = 0; index<sliceFillPolyData->GetNumberOfCells(); ++index)
-    //    {
-    //    vtkCell* cell = sliceFillPolyData->GetCell(index);
-    //    // If out of bounds, then do not investigate this cell further
-    //    double* bounds = cell->GetBounds();
-    //    if (ras[0]<bounds[0] - tolerance || ras[0]>bounds[1] + tolerance ||
-    //      ras[1]<bounds[2] - tolerance || ras[1]>bounds[3] + tolerance ||
-    //      ras[2]<bounds[4] - tolerance || ras[2]>bounds[5] + tolerance)
-    //      {
-    //      continue;
-    //      }
-    //    // Inside bounds the position is evaluated in the cell
-    //    if (cell->EvaluatePosition(ras, nullptr, subId, pcoords, dist2, weights) == 1)
-    //      {
-    //      segmentIDsAtPosition.insert(pipelineIt->first);
-    //      break;
-    //      }
-    //    }
-    //  }
+      // Use poly data that is displayed in the slice view
+      vtkPolyData* sliceFillPolyData = pipeline->TriangleFilter->GetPolyDataInput(0);
+      if (!sliceFillPolyData)
+        {
+        continue;
+        }
+      double tolerance = 0.0001;
+      int subId = -1;
+      double dist2 = 0.0;
+      double pcoords[3] = { 0.0, 0.0, 0.0 };
+      double* weights = new double[sliceFillPolyData->GetMaxCellSize()];
+      for (int index = 0; index<sliceFillPolyData->GetNumberOfCells(); ++index)
+        {
+        vtkCell* cell = sliceFillPolyData->GetCell(index);
+        // If out of bounds, then do not investigate this cell further
+        double* bounds = cell->GetBounds();
+        if (ras[0]<bounds[0] - tolerance || ras[0]>bounds[1] + tolerance ||
+          ras[1]<bounds[2] - tolerance || ras[1]>bounds[3] + tolerance ||
+          ras[2]<bounds[4] - tolerance || ras[2]>bounds[5] + tolerance)
+          {
+          continue;
+          }
+        // Inside bounds the position is evaluated in the cell
+        if (cell->EvaluatePosition(ras, nullptr, subId, pcoords, dist2, weights) == 1)
+          {
+          //segmentIDsAtPosition.insert(pipelineIt->first); TODO: Get segment ID from data object
+          break;
+          }
+        }
+      }
     } // For each pipeline (=segment)
 
   for (std::set<std::string>::iterator segmentIt = segmentIDsAtPosition.begin(); segmentIt != segmentIDsAtPosition.end(); ++segmentIt)

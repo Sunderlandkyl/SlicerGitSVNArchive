@@ -770,7 +770,7 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentToRepresentationNode(vtkSeg
       return false;
       }
 
-    // Export binary labelmap representation into labelmap volume node
+    // Export closed surface representation into model node
     vtkPolyData* polyData = vtkPolyData::SafeDownCast(
       segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName()) );
     vtkSmartPointer<vtkPolyData> polyDataCopy = vtkSmartPointer<vtkPolyData>::New();
@@ -1861,27 +1861,16 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     threshold->ThresholdByLower(0);
     threshold->SetInValue(0);
     int labelmapValue = selectedSegment->GetLabelmapValue();
-    threshold->SetOutValue(labelmapValue);
     if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
       {
       threshold->SetOutValue(labelmap->GetScalarTypeMax());
       }
+    else
+      {
+      threshold->SetOutValue(labelmapValue);
+      }
     threshold->Update();
     labelmap->DeepCopy(threshold->GetOutput());
-
-    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
-      {
-      vtkNew<vtkOrientedImageData> segmentMask;
-      vtkNew<vtkImageThreshold> thresholdSegment;
-      thresholdSegment->SetInputData(segmentLabelmap);
-      thresholdSegment->ThresholdBetween(labelmapValue, labelmapValue);
-      thresholdSegment->SetInValue(1);
-      thresholdSegment->SetOutValue(0);
-      thresholdSegment->Update();
-      segmentMask->DeepCopy(thresholdSegment->GetOutput());
-      segmentMask->CopyDirections(segmentLabelmap);
-      vtkOrientedImageDataResample::ApplyImageMask(labelmap, segmentMask, labelmap->GetScalarTypeMax());
-      }
 
     if (!vtkOrientedImageDataResample::DoGeometriesMatch(segmentLabelmap, labelmap))
       {
@@ -1890,8 +1879,22 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
         segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/);
 
+      if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
+        {
+        vtkNew<vtkOrientedImageData> segmentMask;
+        vtkNew<vtkImageThreshold> thresholdSegment;
+        thresholdSegment->SetInputData(resampledSegmentLabelmap);
+        thresholdSegment->ThresholdBetween(labelmapValue, labelmapValue);
+        thresholdSegment->SetInValue(0);
+        thresholdSegment->SetOutValue(1);
+        thresholdSegment->Update();
+        segmentMask->DeepCopy(thresholdSegment->GetOutput());
+        segmentMask->CopyDirections(segmentLabelmap);
+        vtkOrientedImageDataResample::ApplyImageMask(labelmap, segmentMask, labelmap->GetScalarTypeMax());
+        }
+
       if (!vtkOrientedImageDataResample::MergeImage(
-        resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, labelmapValue, &segmentLabelmapModified))
+        resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, labelmapValue-1, labelmapValue, &segmentLabelmapModified))
         {
         vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
         return false;
@@ -1899,12 +1902,12 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       }
     else
       {
-        if (!vtkOrientedImageDataResample::MergeImage(
-          segmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, 0, labelmapValue, &segmentLabelmapModified))
-          {
-          vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
-          return false;
-          }
+      if (!vtkOrientedImageDataResample::MergeImage(
+        segmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, labelmapValue-1, labelmapValue, &segmentLabelmapModified))
+        {
+        vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
+        return false;
+        }
       }
     }
 

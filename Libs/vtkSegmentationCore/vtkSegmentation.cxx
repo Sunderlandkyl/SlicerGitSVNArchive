@@ -1001,13 +1001,16 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
       {
       originalRepresentation = vtkSmartPointer<vtkOrientedImageData>::New();
       originalRepresentation->DeepCopy(vtkOrientedImageData::SafeDownCast(sourceRepresentation));
-      vtkNew<vtkImageThreshold> threshold;
-      threshold->SetInputData(sourceRepresentation);
-      threshold->SetInValue(1);
-      threshold->SetOutValue(0);
-      threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
-      threshold->Update();
-      originalRepresentation->DeepCopy(threshold->GetOutput());
+      if (segment->GetIsMergedLabelmap())
+        {
+        vtkNew<vtkImageThreshold> threshold;
+        threshold->SetInputData(sourceRepresentation);
+        threshold->SetInValue(1);
+        threshold->SetOutValue(0);
+        threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+        threshold->Update();
+        originalRepresentation->DeepCopy(threshold->GetOutput());
+        }
       }
 
     // Get target representation
@@ -1243,10 +1246,10 @@ void vtkSegmentation::GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vect
       continue;
       }
 
-    vtkDataObject* binaryLabelmap;
+    vtkDataObject* binaryLabelmap = nullptr;
     if (segment)
       {
-      binaryLabelmap = segment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
+      binaryLabelmap = currentSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
       }
 
     if (originalBinaryLabelmap == binaryLabelmap)
@@ -1437,7 +1440,6 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     return;
     }
 
-  int separatedLabelmapValue = 1;
   vtkOrientedImageData* labelmap = vtkOrientedImageData::SafeDownCast(
     segment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()));
   if (labelmap)
@@ -1445,11 +1447,11 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(labelmap);
     threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
-    threshold->SetOutValue(0.0);
-    threshold->SetInValue(1.0);
+    threshold->SetOutValue(0);
+    threshold->SetInValue(1);
     threshold->Update();
 
-    vtkNew<vtkOrientedImageData> tempImage;
+    vtkSmartPointer<vtkOrientedImageData> tempImage = vtkSmartPointer<vtkOrientedImageData>::New();
     tempImage->DeepCopy(threshold->GetOutput());
     tempImage->CopyDirections(labelmap);
 
@@ -1458,6 +1460,10 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     }
   segment->SetIsMergedLabelmap(false);
   segment->SetLabelmapValue(1);
+
+  this->Modified();
+  this->InvokeEvent(vtkSegmentation::MasterRepresentationModified, this);
+  this->InvokeEvent(vtkSegmentation::SegmentAdded, this);
 }
 
 //---------------------------------------------------------------------------

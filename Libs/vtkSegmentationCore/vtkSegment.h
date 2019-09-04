@@ -129,8 +129,8 @@ public:
   vtkGetMacro(IsMergedLabelmap, bool);
   vtkSetMacro(IsMergedLabelmap, bool);
 
-  vtkGetMacro(LabelmapValue, int);
-  vtkSetMacro(LabelmapValue, int);
+  vtkGetMacro(LabelmapValue, double);
+  vtkSetMacro(LabelmapValue, double);
 
 protected:
   vtkSegment();
@@ -160,7 +160,7 @@ protected:
   // TODO
   bool IsMergedLabelmap;
   /// TODO
-  int LabelmapValue;
+  double LabelmapValue;
 };
 
 #endif // __vtkSegment_h
