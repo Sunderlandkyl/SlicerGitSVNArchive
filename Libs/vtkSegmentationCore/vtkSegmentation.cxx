@@ -995,24 +995,6 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
       return false;
       }
 
-    vtkSmartPointer<vtkOrientedImageData> originalRepresentation = vtkOrientedImageData::SafeDownCast(sourceRepresentation);
-    if (currentConversionRule->GetSourceRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()
-      && segment->GetIsMergedLabelmap())
-      {
-      originalRepresentation = vtkSmartPointer<vtkOrientedImageData>::New();
-      originalRepresentation->DeepCopy(vtkOrientedImageData::SafeDownCast(sourceRepresentation));
-      if (segment->GetIsMergedLabelmap())
-        {
-        vtkNew<vtkImageThreshold> threshold;
-        threshold->SetInputData(sourceRepresentation);
-        threshold->SetInValue(1);
-        threshold->SetOutValue(0);
-        threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
-        threshold->Update();
-        originalRepresentation->DeepCopy(threshold->GetOutput());
-        }
-      }
-
     // Get target representation
     vtkSmartPointer<vtkDataObject> targetRepresentation = segment->GetRepresentation(
       currentConversionRule->GetTargetRepresentationName() );
@@ -1030,7 +1012,9 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
       }
 
     // Perform conversion step
-    currentConversionRule->Convert(originalRepresentation, targetRepresentation);
+    currentConversionRule->PreConvert(this, segment);
+    currentConversionRule->Convert(sourceRepresentation, targetRepresentation);
+    currentConversionRule->PostConvert(this, segment);
 
     // Add representation to segment
     segment->AddRepresentation(currentConversionRule->GetTargetRepresentationName(), targetRepresentation);

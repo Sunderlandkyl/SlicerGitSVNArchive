@@ -31,6 +31,8 @@
 #include <string>
 
 class vtkDataObject;
+class vtkSegmentation;
+class vtkSegment;
 
 /// Helper macro for supporting cloning of rules
 #ifndef vtkSegmentationConverterRuleNewMacro
@@ -80,8 +82,12 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   virtual vtkDataObject* ConstructRepresentationObjectByClass(std::string className) = 0;
 
+  virtual bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment) { return true; };
+
   /// Update the target representation based on the source representation
   virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) = 0;
+
+  virtual bool PostConvert(vtkSegmentation* segmentation, vtkSegment* segment) { return true; };
 
   /// Get the cost of the conversion.
   /// \return Expected duration of the conversion in milliseconds. If the arguments are omitted, then a rough average can be
