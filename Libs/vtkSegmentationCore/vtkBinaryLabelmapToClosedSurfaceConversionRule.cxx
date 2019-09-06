@@ -63,7 +63,7 @@ vtkBinaryLabelmapToClosedSurfaceConversionRule::vtkBinaryLabelmapToClosedSurface
   this->ConversionParameters[GetComputeSurfaceNormalsParameterName()] = std::make_pair("1",
     "Compute surface normals. 1 (default) = surface normals are computed. "
     "0 = surface normals are not computed (slightly faster but produces less smooth surface display).");
-  this->CurrentLabelValue = 1.0;
+  this->CurrentLabelValue = 1;
 }
 
 //----------------------------------------------------------------------------
@@ -127,27 +127,43 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
   vtkSmartPointer<vtkImageData> binaryLabelmap = vtkImageData::SafeDownCast(
     segment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()));
     if (!binaryLabelmap.GetPointer())
-    {
+      {
     vtkErrorMacro("Convert: Source representation is not data");
     return false;
-    }
+      }
 
-  this->CurrentLabelValue = segment->GetLabelmapValue();
+    this->CurrentSegment = segmentation->GetSegmentIdBySegment(segment);
+    this->CurrentLabelValue = segment->GetLabelmapValue();
 
-  if (orientedBinaryLabelmap != this->InputLabelmap)
-    {
-    this->InputMTime = 0;
-    this->InputLabelmap = orientedBinaryLabelmap;
-    }
+    vtkMTimeType inputMTime = 0;
 
-  if (orientedBinaryLabelmap->GetMTime() <= this->InputMTime)
+    std::vector<std::string> mergedSegmentIDs;
+    segmentation->GetMergedLabelmapSegmentIds(segment, mergedSegmentIDs, true);
+    for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
+      {
+      std::string currentSegmentID = *segmentIDIt;
+      if (this->InputLabelmaps.find(currentSegmentID) == this->InputLabelmaps.end())
+        {
+        this->InputMTime[currentSegmentID] = 0;
+        }
+      else
+        {
+        if (this->InputLabelmaps[currentSegmentID] == orientedBinaryLabelmap)
+          {
+          inputMTime = this->InputMTime[currentSegmentID];
+          }
+        }
+      this->InputLabelmaps[currentSegmentID] = orientedBinaryLabelmap;
+      this->InputMTime[currentSegmentID] = orientedBinaryLabelmap->GetMTime();
+      }
+
+  if (orientedBinaryLabelmap->GetMTime() <= inputMTime)
     {
     return true;
     }
-  this->InputMTime = orientedBinaryLabelmap->GetMTime();
 
   // Pad labelmap if it has non-background border voxels
-  int* binaryLabelmapExtent = binaryLabelmap->GetExtent();
+    int* binaryLabelmapExtent = binaryLabelmap->GetExtent();
   if (binaryLabelmapExtent[0] > binaryLabelmapExtent[1]
     || binaryLabelmapExtent[2] > binaryLabelmapExtent[3]
     || binaryLabelmapExtent[4] > binaryLabelmapExtent[5])
@@ -200,13 +216,8 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
   marchingCubes->SetComputeNormals(marchingCubesComputesSurfaceNormals);
   marchingCubes->ComputeScalarsOn();
 
-  this->ConvertedSegments = vtkSmartPointer<vtkPolyData>::New();
-
-  std::vector<std::string> segmentIDs;
-  segmentation->GetMergedLabelmapSegmentIds(segment, segmentIDs, true);
-
   int valueIndex = 0;
-  for (std::vector<std::string>::iterator segmentIDIt = segmentIDs.begin(); segmentIDIt != segmentIDs.end(); ++segmentIDIt)
+  for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
     {
     vtkSegment* currentSegment = segmentation->GetSegment(*segmentIDIt);
     double labelmapFillValue = currentSegment->GetLabelmapValue();
@@ -214,13 +225,24 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     ++valueIndex;
     }
 
+  vtkSmartPointer<vtkPolyData> convertedSegment = vtkSmartPointer<vtkPolyData>::New();
+
   // Run marching cubes
   marchingCubes->Update();
   vtkSmartPointer<vtkPolyData> processingResult = marchingCubes->GetOutput();
   if (processingResult->GetNumberOfPolys() == 0)
     {
     vtkDebugMacro("Convert: No polygons can be created, probably all voxels are empty");
-    this->ConvertedSegments = nullptr;
+    convertedSegment = nullptr;
+    }
+
+  for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
+    {
+    this->ConvertedSegments[*segmentIDIt] = convertedSegment;
+    }
+
+  if (!convertedSegment)
+    {
     return true;
     }
 
@@ -296,7 +318,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     // (and sharp edges would look like artifacts in the smooth surface).
     polyDataNormals->SplittingOff();
     polyDataNormals->Update();
-    this->ConvertedSegments->ShallowCopy(polyDataNormals->GetOutput());
+    convertedSegment->ShallowCopy(polyDataNormals->GetOutput());
     }
   else if (computeSurfaceNormals > 0 && flippedNormals)
     {
@@ -305,12 +327,12 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     flipNormals->ReverseCellsOff();
     flipNormals->ReverseNormalsOn();
     flipNormals->Update();
-    this->ConvertedSegments->ShallowCopy(flipNormals->GetOutput());
+    convertedSegment->ShallowCopy(flipNormals->GetOutput());
     }
   else
     {
     transformPolyDataFilter->Update();
-    this->ConvertedSegments->ShallowCopy(transformPolyDataFilter->GetOutput());
+    convertedSegment->ShallowCopy(transformPolyDataFilter->GetOutput());
     }
 
   return true;
@@ -328,7 +350,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
 
   // TODO: How to know what value to threshold from the polydata
   vtkNew<vtkThreshold> threshold;
-  threshold->SetInputData(this->ConvertedSegments);
+  threshold->SetInputData(this->ConvertedSegments[this->CurrentSegment]);
   threshold->ThresholdBetween(this->CurrentLabelValue, this->CurrentLabelValue);
 
   vtkNew<vtkGeometryFilter> geometryFilter;

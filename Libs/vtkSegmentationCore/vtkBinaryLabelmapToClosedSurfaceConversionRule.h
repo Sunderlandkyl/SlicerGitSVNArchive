@@ -28,6 +28,7 @@
 #include "vtkSegmentationCoreConfigure.h"
 
 #include <vtkPolyData.h>
+#include <vtkWeakPointer.h>
 
 /// \ingroup SegmentationCore
 /// \brief Convert binary labelmap representation (vtkOrientedImageData type) to
@@ -83,10 +84,11 @@ protected:
   /// This function checks whether this is the case.
   bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap);
 
-  vtkSmartPointer<vtkOrientedImageData> InputLabelmap;
-  vtkMTimeType InputMTime;
-  vtkSmartPointer<vtkPolyData> ConvertedSegments;
-  double CurrentLabelValue;
+  std::map<std::string, vtkMTimeType> InputMTime;
+  std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
+  std::map<std::string, vtkSmartPointer<vtkPolyData> > ConvertedSegments;
+  std::string CurrentSegment;
+  int CurrentLabelValue;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();
