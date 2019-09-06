@@ -1872,43 +1872,40 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     threshold->Update();
     labelmap->DeepCopy(threshold->GetOutput());
 
+    vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap;
     if (!vtkOrientedImageDataResample::DoGeometriesMatch(segmentLabelmap, labelmap))
       {
       // Make sure appended image has the same lattice as the input image
-      vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
       vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
         segmentLabelmap, labelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/);
-
-      if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
-        {
-        vtkNew<vtkOrientedImageData> segmentMask;
-        vtkNew<vtkImageThreshold> thresholdSegment;
-        thresholdSegment->SetInputData(resampledSegmentLabelmap);
-        thresholdSegment->ThresholdBetween(labelmapValue, labelmapValue);
-        thresholdSegment->SetInValue(0);
-        thresholdSegment->SetOutValue(1);
-        thresholdSegment->Update();
-        segmentMask->DeepCopy(thresholdSegment->GetOutput());
-        segmentMask->CopyDirections(segmentLabelmap);
-        vtkOrientedImageDataResample::ApplyImageMask(labelmap, segmentMask, labelmap->GetScalarTypeMax());
-        }
-
-      if (!vtkOrientedImageDataResample::MergeImage(
-        resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, labelmapValue-1, labelmapValue, &segmentLabelmapModified))
-        {
-        vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
-        return false;
-        }
       }
     else
       {
-      if (!vtkOrientedImageDataResample::MergeImage(
-        segmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, labelmapValue-1, labelmapValue, &segmentLabelmapModified))
-        {
-        vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
-        return false;
-        }
+      resampledSegmentLabelmap = segmentLabelmap;
       }
+
+    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
+      {
+      vtkNew<vtkOrientedImageData> segmentMask;
+      vtkNew<vtkImageThreshold> thresholdSegment;
+      thresholdSegment->SetInputData(resampledSegmentLabelmap);
+      thresholdSegment->ThresholdBetween(labelmapValue, labelmapValue);
+      thresholdSegment->SetInValue(1);
+      thresholdSegment->SetOutValue(0);
+      thresholdSegment->Update();
+      segmentMask->DeepCopy(thresholdSegment->GetOutput());
+      segmentMask->CopyDirections(segmentLabelmap);
+      vtkOrientedImageDataResample::ApplyImageMask(labelmap, segmentMask, labelmap->GetScalarTypeMax());
+      }
+
+    if (!vtkOrientedImageDataResample::MergeImage(
+      resampledSegmentLabelmap, labelmap, newSegmentLabelmap, operation, extent, labelmapValue-1, labelmapValue, &segmentLabelmapModified))
+      {
+      vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
+      return false;
+      }
+
     }
 
   if (!segmentLabelmapModified)

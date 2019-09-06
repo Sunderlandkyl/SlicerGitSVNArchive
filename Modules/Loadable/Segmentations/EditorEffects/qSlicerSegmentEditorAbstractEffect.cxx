@@ -457,40 +457,38 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       }
     }
 
-  if (!segmentIDsToOverwrite.empty())
+  if (!segmentIDsToOverwrite.empty() &&
+     ( modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeSet
+    || modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeAdd
+    || modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeRemoveAll))
     {
-    if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeSet
-      || modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeAdd
-      || modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeRemoveAll)
+    inverter->Update();
+    vtkNew<vtkOrientedImageData> invertedModifierLabelmap;
+    invertedModifierLabelmap->ShallowCopy(inverter->GetOutput());
+    vtkNew<vtkMatrix4x4> imageToWorldMatrix;
+    modifierLabelmap->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
+    invertedModifierLabelmap->SetGeometryFromImageToWorldMatrix(imageToWorldMatrix.GetPointer());
+    for (std::vector<std::string>::iterator segmentIDIt = segmentIDsToOverwrite.begin(); segmentIDIt != segmentIDsToOverwrite.end(); ++segmentIDIt)
       {
-      inverter->Update();
-      vtkNew<vtkOrientedImageData> invertedModifierLabelmap;
-      invertedModifierLabelmap->ShallowCopy(inverter->GetOutput());
-      vtkNew<vtkMatrix4x4> imageToWorldMatrix;
-      modifierLabelmap->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
-      invertedModifierLabelmap->SetGeometryFromImageToWorldMatrix(imageToWorldMatrix.GetPointer());
-      for (std::vector<std::string>::iterator segmentIDIt = segmentIDsToOverwrite.begin(); segmentIDIt != segmentIDsToOverwrite.end(); ++segmentIDIt)
+      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+        invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
         {
-        if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-          invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
-          {
-          qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
-          }
+        qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
         }
       }
-    else if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeRemove)
+    }
+  else if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeRemove)
+    {
+    // In general, we don't try to "add back" areas to other segments when an area is removed from the selected segment.
+    // The only exception is when we draw inside one specific segment. In that case erasing adds to the mask segment. It is useful
+    // for splitting a segment into two by painting.
+    if (this->parameterSetNode()->GetMaskMode() == vtkMRMLSegmentEditorNode::PaintAllowedInsideSingleSegment
+      && this->parameterSetNode()->GetMaskSegmentID())
       {
-      // In general, we don't try to "add back" areas to other segments when an area is removed from the selected segment.
-      // The only exception is when we draw inside one specific segment. In that case erasing adds to the mask segment. It is useful
-      // for splitting a segment into two by painting.
-      if (this->parameterSetNode()->GetMaskMode() == vtkMRMLSegmentEditorNode::PaintAllowedInsideSingleSegment
-        && this->parameterSetNode()->GetMaskSegmentID())
+      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+        modifierLabelmap, segmentationNode, this->parameterSetNode()->GetMaskSegmentID(), vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
         {
-        if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-          modifierLabelmap, segmentationNode, this->parameterSetNode()->GetMaskSegmentID(), vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MAX, extent))
-          {
-          qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from segment " << this->parameterSetNode()->GetMaskSegmentID();
-          }
+        qCritical() << Q_FUNC_INFO << ": Failed to remove modifier labelmap from segment " << this->parameterSetNode()->GetMaskSegmentID();
         }
       }
     }

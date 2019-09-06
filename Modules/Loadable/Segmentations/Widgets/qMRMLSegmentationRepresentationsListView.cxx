@@ -316,6 +316,8 @@ void qMRMLSegmentationRepresentationsListView::createRepresentationDefault()
     return;
     }
 
+  MRMLNodeModifyBlocker blocker(d->SegmentationNode);
+
   // Get representation name
   QString representationName = this->sender()->property(REPRESENTATION_NAME_PROPERTY).toString();
 

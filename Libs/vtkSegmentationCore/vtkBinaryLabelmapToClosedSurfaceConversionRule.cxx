@@ -63,6 +63,7 @@ vtkBinaryLabelmapToClosedSurfaceConversionRule::vtkBinaryLabelmapToClosedSurface
   this->ConversionParameters[GetComputeSurfaceNormalsParameterName()] = std::make_pair("1",
     "Compute surface normals. 1 (default) = surface normals are computed. "
     "0 = surface normals are not computed (slightly faster but produces less smooth surface display).");
+  this->CurrentLabelValue = 1.0;
 }
 
 //----------------------------------------------------------------------------
@@ -130,6 +131,8 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     vtkErrorMacro("Convert: Source representation is not data");
     return false;
     }
+
+  this->CurrentLabelValue = segment->GetLabelmapValue();
 
   if (orientedBinaryLabelmap != this->InputLabelmap)
     {
@@ -203,13 +206,11 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
   segmentation->GetMergedLabelmapSegmentIds(segment, segmentIDs, true);
 
   int valueIndex = 0;
-  this->LabelValues.clear();
   for (std::vector<std::string>::iterator segmentIDIt = segmentIDs.begin(); segmentIDIt != segmentIDs.end(); ++segmentIDIt)
     {
     vtkSegment* currentSegment = segmentation->GetSegment(*segmentIDIt);
     double labelmapFillValue = currentSegment->GetLabelmapValue();
     marchingCubes->SetValue(valueIndex, labelmapFillValue);
-    this->LabelValues[currentSegment->GetRepresentation(vtkSegmentationConverter::GetClosedSurfaceRepresentationName())] = labelmapFillValue;
     ++valueIndex;
     }
 
@@ -325,16 +326,10 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
     return false;
     }
 
-  double labelValue = 1;
-  if (this->LabelValues.find(targetRepresentation) != this->LabelValues.end())
-    {
-    labelValue = this->LabelValues[targetRepresentation];
-    }
-
   // TODO: How to know what value to threshold from the polydata
   vtkNew<vtkThreshold> threshold;
   threshold->SetInputData(this->ConvertedSegments);
-  threshold->ThresholdBetween(labelValue, labelValue);
+  threshold->ThresholdBetween(this->CurrentLabelValue, this->CurrentLabelValue);
 
   vtkNew<vtkGeometryFilter> geometryFilter;
   geometryFilter->SetInputConnection(threshold->GetOutputPort());

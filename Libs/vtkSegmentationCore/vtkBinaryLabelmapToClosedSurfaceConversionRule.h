@@ -86,7 +86,7 @@ protected:
   vtkSmartPointer<vtkOrientedImageData> InputLabelmap;
   vtkMTimeType InputMTime;
   vtkSmartPointer<vtkPolyData> ConvertedSegments;
-  std::map<vtkDataObject*, double> LabelValues;
+  double CurrentLabelValue;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();

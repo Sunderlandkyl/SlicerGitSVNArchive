@@ -177,6 +177,7 @@ public:
       polyDataOutlineTransformer->SetTransform(this->WorldToSliceTransform);
       vtkSmartPointer<vtkPolyDataMapper2D> polyDataOutlineMapper = vtkSmartPointer<vtkPolyDataMapper2D>::New();
       polyDataOutlineMapper->SetInputConnection(polyDataOutlineTransformer->GetOutputPort());
+      polyDataOutlineMapper->ScalarVisibilityOff();
       this->PolyDataOutlineActor->SetMapper(polyDataOutlineMapper);
       this->PolyDataOutlineActor->SetVisibility(0);
 
@@ -196,6 +197,7 @@ public:
       polyDataFillTransformer->SetTransform(this->WorldToSliceTransform);
       vtkSmartPointer<vtkPolyDataMapper2D> polyDataFillMapper = vtkSmartPointer<vtkPolyDataMapper2D>::New();
       polyDataFillMapper->SetInputConnection(polyDataFillTransformer->GetOutputPort());
+      polyDataFillMapper->ScalarVisibilityOff();
       this->PolyDataFillActor->SetMapper(polyDataFillMapper);
       this->PolyDataFillActor->SetVisibility(0);
 
@@ -782,21 +784,6 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
     std::vector<std::string> mergedSegmentIds;
     segmentation->GetMergedLabelmapSegmentIds(firstSegment, mergedSegmentIds, true);
 
-    // Get visibility
-    //vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-    //displayNode->GetSegmentDisplayProperties(pipelineIt->first, properties);
-
-    //double outlineOpacity = properties.Opacity2DOutline * displayNode->GetOpacity2DOutline() * displayNode->GetOpacity();
-    //bool segmentOutlineVisible = displayNodeVisible && properties.Visible
-    //  && properties.Visible2DOutline && displayNode->GetVisibility2DOutline() && (outlineOpacity > 0.0);
-    //double fillOpacity = properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity();
-    //bool segmentFillVisible = displayNodeVisible && properties.Visible
-    //  && properties.Visible2DFill && displayNode->GetVisibility2DFill() && (fillOpacity > 0.0);
-    //double fillOpacity = 0.5;
-    //double outlineOpacity = 1.0;
-    //bool segmentOutlineVisible = true;
-    //bool segmentFillVisible = true;
-
     // Get representation to display
     vtkPolyData* polyData = vtkPolyData::SafeDownCast(dataObject);
     vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(dataObject);
@@ -844,80 +831,96 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       }
 
     // If shown representation is poly data
-    //if (polyData)
-    //  {
-    //  // Turn off image visibility when showing poly data
-    //  pipeline->ImageOutlineActor->SetVisibility(false);
-    //  pipeline->ImageFillActor->SetVisibility(false);
+    if (polyData)
+      {
+      // Get visibility
+      std::string segmentID = segmentation->GetSegmentIdBySegment(firstSegment);
 
-    //  // Only update slice intersection if it has changed
-    //  if ( pipeline->SliceIntersectionUpdatedTime < polyData->GetMTime()
-    //    || pipeline->SliceIntersectionUpdatedTime < this->SliceXYToRAS->GetMTime() )
-    //    {
-    //    pipeline->ModelWarper->SetInputData(polyData);
-    //    pipeline->ModelWarper->SetTransform(pipeline->NodeToWorldTransform);
+      vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
+      displayNode->GetSegmentDisplayProperties(segmentID, properties);
 
-    //    // Set Plane transform
-    //    this->SetSlicePlaneFromMatrix(this->SliceXYToRAS, pipeline->Plane);
-    //    pipeline->Plane->Modified();
+      double outlineOpacity = properties.Opacity2DOutline * displayNode->GetOpacity2DOutline() * displayNode->GetOpacity();
+      bool segmentOutlineVisible = displayNodeVisible && properties.Visible
+        && properties.Visible2DOutline && displayNode->GetVisibility2DOutline() && (outlineOpacity > 0.0);
+      double fillOpacity = properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity();
+      bool segmentFillVisible = displayNodeVisible && properties.Visible
+        && properties.Visible2DFill && displayNode->GetVisibility2DFill() && (fillOpacity > 0.0);
 
-    //    // Set PolyData transform
-    //    vtkNew<vtkMatrix4x4> rasToSliceXY;
-    //    vtkMatrix4x4::Invert(this->SliceXYToRAS, rasToSliceXY.GetPointer());
-    //    pipeline->WorldToSliceTransform->SetMatrix(rasToSliceXY.GetPointer());
+      // Turn off image visibility when showing poly data
+      pipeline->ImageOutlineActor->SetVisibility(false);
+      pipeline->ImageFillActor->SetVisibility(false);
 
-    //    if (segmentFillVisible)
-    //      {
-    //      // Apply trick to create cell from line for poly data fill
-    //      // Omit cells that are not closed (first point is not same as last)
-    //      pipeline->Stripper->SetMaximumLength(10000);
-    //      pipeline->Stripper->Update();
-    //      vtkCellArray* strippedLines = pipeline->Stripper->GetOutput()->GetLines();
-    //      vtkSmartPointer<vtkCellArray> closedCells = vtkSmartPointer<vtkCellArray>::New();
-    //      bool cellsValid = false;
-    //      strippedLines->InitTraversal();
-    //      vtkSmartPointer<vtkIdList> pointList = vtkSmartPointer<vtkIdList>::New();
-    //      while (strippedLines->GetNextCell(pointList))
-    //        {
-    //        if ( pointList->GetNumberOfIds() > 2
-    //          && pointList->GetId(0) == pointList->GetId(pointList->GetNumberOfIds()-1) )
-    //          {
-    //          closedCells->InsertNextCell(pointList);
-    //          cellsValid = true;
-    //          }
-    //        }
-    //      vtkSmartPointer<vtkPolyData> fillPolyData = vtkSmartPointer<vtkPolyData>::New();
-    //      fillPolyData->SetPoints(pipeline->Stripper->GetOutput()->GetPoints());
-    //      fillPolyData->SetPolys(closedCells);
-    //      if (cellsValid)
-    //        {
-    //        pipeline->Cleaner->SetInputData(fillPolyData);
-    //        }
-    //      else
-    //        {
-    //        segmentFillVisible = false;
-    //        }
+      // Only update slice intersection if it has changed
+      if ( pipeline->SliceIntersectionUpdatedTime < polyData->GetMTime()
+        || pipeline->SliceIntersectionUpdatedTime < this->SliceXYToRAS->GetMTime() )
+        {
+        pipeline->ModelWarper->SetInputData(polyData);
+        pipeline->ModelWarper->SetTransform(pipeline->NodeToWorldTransform);
 
-    //      // Save time of slice intersection update
-    //      pipeline->SliceIntersectionUpdatedTime = (polyData->GetMTime() > this->SliceXYToRAS->GetMTime() ?
-    //        polyData->GetMTime() : this->SliceXYToRAS->GetMTime());
-    //      }
-    //    }
+        // Set Plane transform
+        this->SetSlicePlaneFromMatrix(this->SliceXYToRAS, pipeline->Plane);
+        pipeline->Plane->Modified();
 
-    //  //// Update pipeline actors
-    //  //pipeline->PolyDataOutlineActor->SetVisibility(segmentOutlineVisible);
-    //  //pipeline->PolyDataOutlineActor->GetProperty()->SetColor(color);
-    //  //pipeline->PolyDataOutlineActor->GetProperty()->SetOpacity(outlineOpacity);
-    //  //pipeline->PolyDataOutlineActor->GetProperty()->SetLineWidth(displayNode->GetSliceIntersectionThickness());
-    //  //pipeline->PolyDataOutlineActor->SetPosition(0,0);
-    //  //pipeline->PolyDataFillActor->SetVisibility(segmentFillVisible);
-    //  //pipeline->PolyDataFillActor->GetProperty()->SetColor(color[0], color[1], color[2]);
-    //  //pipeline->PolyDataFillActor->GetProperty()->SetOpacity(fillOpacity);
-    //  //pipeline->PolyDataFillActor->SetPosition(0,0);
-    //  }
-    //// If shown representation is image data
-    //else if (imageData)
-    if (imageData)
+        // Set PolyData transform
+        vtkNew<vtkMatrix4x4> rasToSliceXY;
+        vtkMatrix4x4::Invert(this->SliceXYToRAS, rasToSliceXY.GetPointer());
+        pipeline->WorldToSliceTransform->SetMatrix(rasToSliceXY.GetPointer());
+
+        if (segmentFillVisible)
+          {
+          // Apply trick to create cell from line for poly data fill
+          // Omit cells that are not closed (first point is not same as last)
+          pipeline->Stripper->SetMaximumLength(10000);
+          pipeline->Stripper->Update();
+          vtkCellArray* strippedLines = pipeline->Stripper->GetOutput()->GetLines();
+          vtkSmartPointer<vtkCellArray> closedCells = vtkSmartPointer<vtkCellArray>::New();
+          bool cellsValid = false;
+          strippedLines->InitTraversal();
+          vtkSmartPointer<vtkIdList> pointList = vtkSmartPointer<vtkIdList>::New();
+          while (strippedLines->GetNextCell(pointList))
+            {
+            if ( pointList->GetNumberOfIds() > 2
+              && pointList->GetId(0) == pointList->GetId(pointList->GetNumberOfIds()-1) )
+              {
+              closedCells->InsertNextCell(pointList);
+              cellsValid = true;
+              }
+            }
+          vtkSmartPointer<vtkPolyData> fillPolyData = vtkSmartPointer<vtkPolyData>::New();
+          fillPolyData->SetPoints(pipeline->Stripper->GetOutput()->GetPoints());
+          fillPolyData->SetPolys(closedCells);
+          if (cellsValid)
+            {
+            pipeline->Cleaner->SetInputData(fillPolyData);
+            }
+          else
+            {
+            segmentFillVisible = false;
+            }
+
+          // Save time of slice intersection update
+          pipeline->SliceIntersectionUpdatedTime = (polyData->GetMTime() > this->SliceXYToRAS->GetMTime() ?
+            polyData->GetMTime() : this->SliceXYToRAS->GetMTime());
+          }
+        }
+
+      double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
+      displayNode->GetSegmentColor(segmentID, color);
+
+      // Update pipeline actors
+      pipeline->PolyDataOutlineActor->SetVisibility(segmentOutlineVisible);
+      pipeline->PolyDataOutlineActor->GetProperty()->SetColor(color);
+      pipeline->PolyDataOutlineActor->GetProperty()->SetOpacity(outlineOpacity);
+      pipeline->PolyDataOutlineActor->GetProperty()->SetLineWidth(displayNode->GetSliceIntersectionThickness());
+      pipeline->PolyDataOutlineActor->SetPosition(0,0);
+      pipeline->PolyDataFillActor->SetVisibility(segmentFillVisible);
+      pipeline->PolyDataFillActor->GetProperty()->SetColor(color);
+      pipeline->PolyDataFillActor->GetProperty()->SetOpacity(fillOpacity);
+      pipeline->PolyDataFillActor->SetPosition(0,0);
+      }
+    // If shown representation is image data
+    else if (imageData)
+
       {
       // Turn off poly data visibility when showing image
       pipeline->PolyDataOutlineActor->SetVisibility(false);

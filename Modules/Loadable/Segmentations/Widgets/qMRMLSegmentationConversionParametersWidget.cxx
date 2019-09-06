@@ -389,7 +389,7 @@ void qMRMLSegmentationConversionParametersWidget::applyConversion()
     return;
     }
 
-  MRMLNodeModifyBlocker(d->SegmentationNode);
+  MRMLNodeModifyBlocker blocker(d->SegmentationNode);
 
   // Perform conversion using selected path and chosen conversion parameters
   QApplication::setOverrideCursor(QCursor(Qt::BusyCursor));
