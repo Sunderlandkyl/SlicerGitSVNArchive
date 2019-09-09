@@ -269,18 +269,14 @@ bool vtkSegmentationHistory::RestoreState(unsigned int stateIndex)
     vtkSegment* segment = this->Segmentation->GetSegment(restoredSegmentsIt->first);
     if (segment != nullptr)
       {
-      vtkDataObject* masterRepresetnation = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
-      if (restoredDataObjects.find(masterRepresetnation) == restoredDataObjects.end())
+      vtkDataObject* masterRepresentation = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
+      if (restoredDataObjects.find(masterRepresentation) == restoredDataObjects.end())
         {
-        segment->DeepCopy(restoredSegmentsIt->second);
-        segment->Modified();
-        restoredDataObjects[masterRepresetnation] = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
+        restoredDataObjects[masterRepresentation] = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
         }
-      else
-        {
-        segment->DeepCopyMetadata(restoredSegmentsIt->second);
-        segment->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), restoredDataObjects[masterRepresetnation]);
-        }
+      segment->DeepCopyMetadata(restoredSegmentsIt->second);
+      segment->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), restoredDataObjects[masterRepresentation]);
+      segment->Modified();
       }
     else
       {

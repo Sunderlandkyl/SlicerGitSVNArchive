@@ -1866,8 +1866,9 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       }
     else
       {
-      threshold->SetOutValue(labelmapValue);
+      threshold->SetOutValue(1);
       }
+    threshold->SetOutputScalarTypeToUnsignedChar();
     threshold->Update();
 
     vtkNew<vtkOrientedImageData> thresholdedLabelmap;
@@ -1896,13 +1897,14 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       thresholdSegment->SetInValue(1);
       thresholdSegment->SetOutValue(0);
       thresholdSegment->Update();
+      thresholdSegment->SetOutputScalarTypeToUnsignedChar();
       segmentMask->DeepCopy(thresholdSegment->GetOutput());
       segmentMask->CopyDirections(resampledSegmentLabelmap);
       vtkOrientedImageDataResample::ApplyImageMask(thresholdedLabelmap, segmentMask, thresholdedLabelmap->GetScalarTypeMax());
       }
 
     if (!vtkOrientedImageDataResample::MergeImage(
-      resampledSegmentLabelmap, thresholdedLabelmap, newSegmentLabelmap, operation, extent, labelmapValue-1, labelmapValue, &segmentLabelmapModified))
+      resampledSegmentLabelmap, thresholdedLabelmap, newSegmentLabelmap, operation, extent, 0, labelmapValue, &segmentLabelmapModified))
       {
       vtkErrorWithObjectMacro(segmentationNode, "vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
       return false;
