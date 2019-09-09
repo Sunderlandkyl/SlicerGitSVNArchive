@@ -1796,6 +1796,9 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     return false;
     }
 
+  std::vector<std::string> mergedSegmentsUnderModifier;
+      mergedSegmentsUnderModifier.push_back(segmentID);
+
   // Get binary labelmap representation of selected segment
   vtkSegment* selectedSegment = segmentationNode->GetSegmentation()->GetSegment(segmentID);
   if (!selectedSegment)
@@ -1867,6 +1870,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     else
       {
       threshold->SetOutValue(1);
+      vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, segmentID, labelmap, 0.0, mergedSegmentsUnderModifier);
       }
     threshold->SetOutputScalarTypeToUnsignedChar();
     threshold->Update();
@@ -1950,9 +1954,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     std::string targetRepresentationName = (*reprIt);
     if (targetRepresentationName.compare(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()))
       {
-      std::vector<std::string> mergedSegmentIDs;
-      segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, true);
-      for (auto mergedSegmentID : mergedSegmentIDs)
+      for (auto mergedSegmentID : mergedSegmentsUnderModifier)
         {
         conversionHappened |= segmentationNode->GetSegmentation()->ConvertSingleSegment(
           mergedSegmentID, targetRepresentationName);
@@ -2542,5 +2544,116 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
 
   vtkSlicerSegmentationsModuleLogic::SetSegmentStatus(segment, vtkSlicerSegmentationsModuleLogic::NotStarted);
   segment->Modified();
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
+  vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* mask, double maskThreshold, std::vector<std::string>& segmentIDs)
+{
+  if (!segmentationNode)
+    {
+    vtkErrorWithObjectMacro(nullptr, "TODO");
+    }
+
+  return vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode->GetSegmentation(), segmentID, mask, maskThreshold, segmentIDs);
+}
+
+//----------------------------------------------------------------------------
+template <class ImageScalarType, class MaskScalarType>
+void GetValuesInMask2(
+  vtkOrientedImageData* binaryLabelmap,
+  vtkOrientedImageData* resampledMask,
+  double maskThreshold,
+  std::map<double, bool> &segmentFound)
+{
+  int extent[6] = { 0, -1, 0, -1, 0, -1};
+  binaryLabelmap->GetExtent(extent);
+
+  ImageScalarType* binaryLabelmapPointer = (ImageScalarType*)binaryLabelmap->GetScalarPointer();
+  MaskScalarType* maskPointer = (MaskScalarType*)resampledMask->GetScalarPointer();
+  for (int k = extent[4]; k <= extent[5]; ++k)
+   {
+    for (int j = extent[2]; j <= extent[3]; ++j)
+      {
+      for (int i = extent[0]; i <= extent[1]; ++i)
+        {
+        if (*maskPointer > maskThreshold)
+          {
+          segmentFound[*binaryLabelmapPointer] = true;
+          }
+        ++binaryLabelmapPointer;
+        ++maskPointer;
+        }
+      }
+    }
+}
+
+//----------------------------------------------------------------------------
+template <class ImageScalarType>
+void GetValuesInMask(
+  vtkOrientedImageData* binaryLabelmap,
+  vtkOrientedImageData* resampledMask,
+  double maskThreshold,
+  std::map<double, bool> &segmentFound)
+{
+  switch (resampledMask->GetScalarType())
+  {
+    vtkTemplateMacro((GetValuesInMask2<ImageScalarType, VTK_TT>(
+      binaryLabelmap,
+      resampledMask,
+      maskThreshold,
+      segmentFound)));
+  default:
+    vtkGenericWarningMacro("TODO");
+  }
+
+}
+
+//-----------------------------------------------------------------------------
+bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
+  vtkSegmentation* segmentation, std::string segmentID, vtkOrientedImageData* mask, double maskThreshold, std::vector<std::string>& segmentIDs)
+{
+  segmentIDs.clear();
+
+  if (!segmentation)
+    {
+    vtkErrorWithObjectMacro(nullptr, "TODO");
+    }
+
+  vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
+    segmentation->GetSegment(segmentID)->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+  vtkNew<vtkOrientedImageData> resampledMask;
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(mask, binaryLabelmap, resampledMask);
+
+  std::vector<std::string> mergedSegmentIDs;
+  segmentation->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, false);
+  std::map<double, bool> values;
+  for (auto segmentID : mergedSegmentIDs)
+    {
+    vtkSegment* segment = segmentation->GetSegment(segmentID);
+    values[segment->GetLabelmapValue()] = false;
+    }
+
+  switch (binaryLabelmap->GetScalarType())
+    {
+    vtkTemplateMacro((GetValuesInMask<VTK_TT>(
+      binaryLabelmap,
+      resampledMask,
+      maskThreshold,
+      values)));
+    default:
+      vtkGenericWarningMacro("TODO");
+    }
+
+  for (auto segmentID : mergedSegmentIDs)
+    {
+    vtkSegment* segment = segmentation->GetSegment(segmentID);
+    if (values[segment->GetLabelmapValue()])
+      {
+      segmentIDs.push_back(segmentID);
+      }
+    }
+
   return true;
 }

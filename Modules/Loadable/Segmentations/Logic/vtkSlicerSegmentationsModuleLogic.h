@@ -363,6 +363,11 @@ public:
   static bool ClearSegment(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID);
   static bool ClearSegment(vtkSegmentation* segmentation, std::string segmentID);
 
+  static bool GetSegmentIDsInMask(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* mask,
+    double maskThreshold, std::vector<std::string> &segmentIDs);
+  static bool GetSegmentIDsInMask(vtkSegmentation* segmentationNode, std::string segmentID, vtkOrientedImageData* mask,
+    double maskThreshold, std::vector<std::string>& segmentIDs);
+
 public:
   /// Set Terminologies module logic
   void SetTerminologiesLogic(vtkSlicerTerminologiesModuleLogic* terminologiesLogic);
