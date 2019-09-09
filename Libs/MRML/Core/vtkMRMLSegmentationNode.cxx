@@ -893,7 +893,21 @@ vtkOrientedImageData* vtkMRMLSegmentationNode::GetBinaryLabelmapRepresentation(c
     vtkErrorMacro("GetBinaryLabelmapRepresentation: Invalid segment");
     return nullptr;
     }
-  return vtkOrientedImageData::SafeDownCast(segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+
+  vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(
+    segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+
+  vtkNew<vtkImageThreshold> threshold;
+  threshold->SetInputData(imageData);
+  threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+  threshold->SetInValue(1);
+  threshold->SetOutValue(0);
+  threshold->Update();
+
+  vtkOrientedImageData* thresholdedBinaryLabelmap = vtkOrientedImageData::New();
+  thresholdedBinaryLabelmap->ShallowCopy(threshold->GetOutput());
+  thresholdedBinaryLabelmap->CopyDirections(imageData);
+  return thresholdedBinaryLabelmap;
 }
 
 //---------------------------------------------------------------------------
