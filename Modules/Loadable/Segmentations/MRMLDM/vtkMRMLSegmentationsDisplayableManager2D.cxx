@@ -284,7 +284,7 @@ public:
     vtkMTimeType SliceIntersectionUpdatedTime;
     };
 
-  typedef std::map<vtkDataObject*, Pipeline*> PipelineMapType; // first: segment ID; second: display pipeline
+  typedef std::map<vtkWeakPointer<vtkDataObject>, Pipeline*> PipelineMapType; // first: segment ID; second: display pipeline
   typedef std::map < vtkMRMLSegmentationDisplayNode*, PipelineMapType > PipelinesCacheType;
   PipelinesCacheType DisplayPipelines;
 
@@ -679,7 +679,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateSegmentPipelin
       vtkSegment* segment = segmentation->GetNthSegment(i);
       std::string displayRepresentation = displayNode->GetDisplayRepresentationName2D();
       vtkDataObject* displayObject = segment->GetRepresentation(displayRepresentation);
-      if (displayObject == dataObject)
+      if (dataObject && displayObject == dataObject)
         {
         displayObjectInSegment = true;
         break;
