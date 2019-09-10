@@ -397,15 +397,20 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
       {
       mergedSegmentIDToSeparate.push_back(mergedSegmentId);
       }
-    else
-      {
-      segmentIDsToOverwrite.erase(foundOverwriteIDIt);
-      }
     }
 
   if (!mergedSegmentIDToSeparate.empty())
     {
     segmentationNode->GetSegmentation()->SeparateSegmentLabelmap(segmentationNode->GetSegmentation()->GetSegmentIdBySegment(segment));
+    }
+
+  for (std::string mergedSegmentId : mergedSegmentIds)
+    {
+    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId);
+    if (foundOverwriteIDIt != segmentIDsToOverwrite.end())
+      {
+      segmentIDsToOverwrite.erase(foundOverwriteIDIt);
+      }
     }
 
   // Create inverted binary labelmap

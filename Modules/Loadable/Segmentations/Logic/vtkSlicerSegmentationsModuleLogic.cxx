@@ -1877,7 +1877,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     threshold->Update();
 
     vtkNew<vtkOrientedImageData> thresholdedLabelmap;
-    thresholdedLabelmap->vtkImageData::ShallowCopy(threshold->GetOutput());
+    thresholdedLabelmap->ShallowCopy(threshold->GetOutput());
     thresholdedLabelmap->CopyDirections(labelmap);
 
     vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap;
@@ -1901,9 +1901,9 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       thresholdSegment->ThresholdBetween(labelmapValue, labelmapValue);
       thresholdSegment->SetInValue(1);
       thresholdSegment->SetOutValue(0);
-      thresholdSegment->Update();
       thresholdSegment->SetOutputScalarTypeToUnsignedChar();
-      segmentMask->DeepCopy(thresholdSegment->GetOutput());
+      thresholdSegment->Update();
+      segmentMask->ShallowCopy(thresholdSegment->GetOutput());
       segmentMask->CopyDirections(resampledSegmentLabelmap);
       vtkOrientedImageDataResample::ApplyImageMask(thresholdedLabelmap, segmentMask, thresholdedLabelmap->GetScalarTypeMax());
       }
@@ -2643,13 +2643,33 @@ bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
 
   vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
     segmentation->GetSegment(segmentID)->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
-  vtkNew<vtkOrientedImageData> resampledMask;
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, binaryLabelmap, resampledMask);
+
+  int binaryLabelmapDimensions[3] = { 0 };
+  binaryLabelmap->GetDimensions(binaryLabelmapDimensions);
+  size_t binaryLabelmapVoxelCount = binaryLabelmapDimensions[0] * binaryLabelmapDimensions[1] * binaryLabelmapDimensions[2];
+
+  int maskLabelmapDimensions[3] = { 0 };
+  maskLabelmap->GetDimensions(maskLabelmapDimensions);
+  size_t maskLabelmapVoxelCount = maskLabelmapDimensions[0] * maskLabelmapDimensions[1] * maskLabelmapDimensions[2];
+
+
+  vtkSmartPointer<vtkOrientedImageData> resampledMask = vtkSmartPointer<vtkOrientedImageData>::New();
+  vtkSmartPointer<vtkOrientedImageData> resampledBinaryLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+  if (maskLabelmapVoxelCount > binaryLabelmapVoxelCount)
+    {
+    vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, binaryLabelmap, resampledMask);
+    resampledBinaryLabelmap = binaryLabelmap;
+    }
+  else
+    {
+    vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(binaryLabelmap, maskLabelmap, resampledBinaryLabelmap);
+    resampledMask = maskLabelmap;
+    }
 
   switch (binaryLabelmap->GetScalarType())
     {
     vtkTemplateMacro((GetValuesInMask<VTK_TT>(
-      binaryLabelmap,
+      resampledBinaryLabelmap,
       resampledMask,
       maskThreshold,
       values)));
