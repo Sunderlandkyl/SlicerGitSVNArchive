@@ -266,26 +266,29 @@ bool vtkSegmentationHistory::RestoreState(unsigned int stateIndex)
     {
     segmentIDsToKeep.insert(restoredSegmentsIt->first);
 
-    vtkSegment* segment = this->Segmentation->GetSegment(restoredSegmentsIt->first);
-    if (segment != nullptr)
+    vtkSmartPointer<vtkSegment> segment = this->Segmentation->GetSegment(restoredSegmentsIt->first);
+    if (segment == nullptr)
       {
-      vtkDataObject* masterRepresentation = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
-      if (restoredDataObjects.find(masterRepresentation) == restoredDataObjects.end())
-        {
-        restoredDataObjects[masterRepresentation] = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
-        }
-      segment->DeepCopyMetadata(restoredSegmentsIt->second);
-      segment->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), restoredDataObjects[masterRepresentation]);
-      segment->Modified();
+      segment = vtkSmartPointer<vtkSegment>::New();
+      this->Segmentation->AddSegment(segment, restoredSegmentsIt->first);
+      }
+
+    vtkDataObject* restoredRepresentation = restoredSegmentsIt->second->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
+    if (restoredDataObjects.find(restoredRepresentation) == restoredDataObjects.end())
+      {
+      segment->DeepCopy(restoredSegmentsIt->second);
+      restoredDataObjects[restoredRepresentation] = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
       }
     else
       {
-      vtkSmartPointer<vtkSegment> newSegment = vtkSmartPointer<vtkSegment>::New();
-      newSegment->DeepCopy(restoredSegmentsIt->second);
-      // we must specify the segment ID to prevent re-generation of a new ID
-      this->Segmentation->AddSegment(newSegment, restoredSegmentsIt->first);
+      segment->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), restoredDataObjects[restoredRepresentation]);
       }
+    segment->DeepCopyMetadata(restoredSegmentsIt->second);
     }
+
+
+
+
 
   // Removed segments that were not in the restored state
   std::vector<std::string> segmentIDs;

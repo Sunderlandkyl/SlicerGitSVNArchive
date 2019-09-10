@@ -219,6 +219,7 @@ void vtkSegment::DeepCopyMetadata(vtkSegment* source)
   // Copy properties
   this->SetName(source->Name);
   this->SetColor(source->Color);
+  this->SetLabelmapValue(source->LabelmapValue);
   this->Tags = source->Tags;
 }
 

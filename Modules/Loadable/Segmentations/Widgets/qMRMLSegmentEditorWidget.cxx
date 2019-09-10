@@ -2961,14 +2961,24 @@ void qMRMLSegmentEditorWidget::undo()
     {
     return;
     }
-  d->SegmentationHistory->RestorePreviousState();
+  /// Local scope for MRMLNodeModifyBlocker
+    {
+    MRMLNodeModifyBlocker blocker(d->SegmentationNode);
+    d->SegmentationHistory->RestorePreviousState();
+    }
+  d->SegmentationNode->InvokeCustomModifiedEvent(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->SegmentationNode->GetDisplayNode());
 }
 
 //-----------------------------------------------------------------------------
 void qMRMLSegmentEditorWidget::redo()
 {
   Q_D(qMRMLSegmentEditorWidget);
-  d->SegmentationHistory->RestoreNextState();
+  /// Local scope for MRMLNodeModifyBlocker
+    {
+    MRMLNodeModifyBlocker blocker(d->SegmentationNode);
+    d->SegmentationHistory->RestoreNextState();
+    }
+  d->SegmentationNode->InvokeCustomModifiedEvent(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->SegmentationNode->GetDisplayNode());
 }
 
 //-----------------------------------------------------------------------------

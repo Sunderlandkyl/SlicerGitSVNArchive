@@ -1797,7 +1797,6 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     }
 
   std::vector<std::string> mergedSegmentsUnderModifier;
-      mergedSegmentsUnderModifier.push_back(segmentID);
 
   // Get binary labelmap representation of selected segment
   vtkSegment* selectedSegment = segmentationNode->GetSegmentation()->GetSegment(segmentID);
@@ -1870,8 +1869,10 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     else
       {
       threshold->SetOutValue(1);
-      vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, segmentID, labelmap, 0.0, mergedSegmentsUnderModifier);
+      vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, segmentID, labelmap, mergedSegmentsUnderModifier);
       }
+    mergedSegmentsUnderModifier.push_back(segmentID);
+
     threshold->SetOutputScalarTypeToUnsignedChar();
     threshold->Update();
 
@@ -2549,14 +2550,16 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
 
 //-----------------------------------------------------------------------------
 bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
-  vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* mask, double maskThreshold, std::vector<std::string>& segmentIDs)
+  vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* mask, std::vector<std::string>& segmentIDs,
+  double maskThreshold/*=0.0*/, bool includeInputSegmentID/*=false*/)
 {
   if (!segmentationNode)
     {
     vtkErrorWithObjectMacro(nullptr, "TODO");
     }
 
-  return vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode->GetSegmentation(), segmentID, mask, maskThreshold, segmentIDs);
+  return vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
+    segmentationNode->GetSegmentation(), segmentID, mask, segmentIDs, maskThreshold, includeInputSegmentID);
 }
 
 //----------------------------------------------------------------------------
@@ -2612,28 +2615,36 @@ void GetValuesInMask(
 
 //-----------------------------------------------------------------------------
 bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
-  vtkSegmentation* segmentation, std::string segmentID, vtkOrientedImageData* mask, double maskThreshold, std::vector<std::string>& segmentIDs)
+  vtkSegmentation* segmentation, std::string segmentID, vtkOrientedImageData* maskLabelmap, std::vector<std::string>& segmentIDs,
+  double maskThreshold/*=0.0*/, bool includeInputSegmentID/*=false*/)
 {
   segmentIDs.clear();
 
   if (!segmentation)
     {
     vtkErrorWithObjectMacro(nullptr, "TODO");
+    return false;
     }
 
-  vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
-    segmentation->GetSegment(segmentID)->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
-  vtkNew<vtkOrientedImageData> resampledMask;
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(mask, binaryLabelmap, resampledMask);
-
   std::vector<std::string> mergedSegmentIDs;
-  segmentation->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, false);
+  segmentation->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, includeInputSegmentID);
+  if (mergedSegmentIDs.empty())
+    {
+    // No merged segments to compare against, so there are no relevant IDs in the mask
+    return true;
+    }
+
   std::map<double, bool> values;
   for (auto segmentID : mergedSegmentIDs)
     {
     vtkSegment* segment = segmentation->GetSegment(segmentID);
     values[segment->GetLabelmapValue()] = false;
     }
+
+  vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
+    segmentation->GetSegment(segmentID)->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+  vtkNew<vtkOrientedImageData> resampledMask;
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, binaryLabelmap, resampledMask);
 
   switch (binaryLabelmap->GetScalarType())
     {

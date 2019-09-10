@@ -294,11 +294,11 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
     threshold->ThresholdBetween(parameterSetNode->GetMasterVolumeIntensityMaskRange()[0], parameterSetNode->GetMasterVolumeIntensityMaskRange()[1]);
     threshold->SetInValue(1);
     threshold->SetOutValue(0);
-    threshold->SetOutputScalarType(VTK_UNSIGNED_CHAR);
+    threshold->SetOutputScalarTypeToUnsignedChar();
     threshold->Update();
 
     vtkSmartPointer<vtkOrientedImageData> thresholdMask = vtkSmartPointer<vtkOrientedImageData>::New();
-    thresholdMask->DeepCopy(threshold->GetOutput());
+    thresholdMask->ShallowCopy(threshold->GetOutput());
     vtkSmartPointer<vtkMatrix4x4> modifierLabelmapToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
     modifierLabelmap->GetImageToWorldMatrix(modifierLabelmapToWorldMatrix);
     thresholdMask->SetGeometryFromImageToWorldMatrix(modifierLabelmapToWorldMatrix);
@@ -386,7 +386,24 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(selectedSegmentID);
   std::vector<std::string> mergedSegmentIds;
   segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIds(segment, mergedSegmentIds, false);
-  if (segmentIDsToOverwrite.empty() && !mergedSegmentIds.empty())
+
+  std::vector<std::string> mergedSegmentsUnderModifier;
+  vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, selectedSegmentID, modifierLabelmapInput, mergedSegmentsUnderModifier, 0.0, false);
+  std::vector<std::string> mergedSegmentIDToSeparate;
+  for (std::string mergedSegmentId : mergedSegmentsUnderModifier)
+    {
+    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId);
+    if (foundOverwriteIDIt == segmentIDsToOverwrite.end())
+      {
+      mergedSegmentIDToSeparate.push_back(mergedSegmentId);
+      }
+    else
+      {
+      segmentIDsToOverwrite.erase(foundOverwriteIDIt);
+      }
+    }
+
+  if (!mergedSegmentIDToSeparate.empty())
     {
     segmentationNode->GetSegmentation()->SeparateSegmentLabelmap(segmentationNode->GetSegmentation()->GetSegmentIdBySegment(segment));
     }
@@ -455,20 +472,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
     if (vtkSlicerSegmentationsModuleLogic::GetSegmentStatus(segment) == vtkSlicerSegmentationsModuleLogic::NotStarted)
       {
       vtkSlicerSegmentationsModuleLogic::SetSegmentStatus(segment, vtkSlicerSegmentationsModuleLogic::InProgress);
-      }
-    }
-
-  std::vector<std::string> mergedSegmentIDToSeparate;
-  for (std::string mergedSegmentId : mergedSegmentIds)
-    {
-    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId);
-    if (foundOverwriteIDIt == segmentIDsToOverwrite.end())
-      {
-      mergedSegmentIDToSeparate.push_back(mergedSegmentId);
-      }
-    else
-      {
-      segmentIDsToOverwrite.erase(foundOverwriteIDIt);
       }
     }
 
