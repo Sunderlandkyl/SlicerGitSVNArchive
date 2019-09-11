@@ -26,23 +26,31 @@
 
 // VTK includes
 #include <vtkVersion.h> // must precede reference to VTK_MAJOR_VERSION
+#include <vtkCompositeDataGeometryFilter.h>
+#include <vtkCompositeDataIterator.h>
 #include <vtkDecimatePro.h>
 #if VTK_MAJOR_VERSION >= 9 || (VTK_MAJOR_VERSION >= 8 && VTK_MINOR_VERSION >= 2)
   #include <vtkDiscreteFlyingEdges3D.h>
 #else
   #include <vtkDiscreteMarchingCubes.h>
 #endif
+#include <vtkExtractSelectedThresholds.h>
 #include <vtkGeometryFilter.h>
 #include <vtkImageChangeInformation.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageThreshold.h>
+#include <vtkMultiBlockDataSet.h>
+#include <vtkMultiThreshold.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
-#include <vtkThreshold.h>
+#include <vtkSelection.h>
+#include <vtkSelectionNode.h>
 #include <vtkTransform.h>
 #include <vtkTransformPolyDataFilter.h>
+#include <vtkUnstructuredGrid.h>
 #include <vtkWindowedSincPolyDataFilter.h>
 #include <vtkMatrix3x3.h>
 #include <vtkReverseSense.h>
@@ -128,11 +136,11 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     segment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()));
     if (!binaryLabelmap.GetPointer())
       {
-    vtkErrorMacro("Convert: Source representation is not data");
-    return false;
+      vtkErrorMacro("Convert: Source representation is not data");
+      return false;
       }
 
-    this->CurrentSegment = segmentation->GetSegmentIdBySegment(segment);
+    this->CurrentSegmentID = segmentation->GetSegmentIdBySegment(segment);
     this->CurrentLabelValue = segment->GetLabelmapValue();
 
     vtkMTimeType inputMTime = 0;
@@ -236,11 +244,6 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     convertedSegment = nullptr;
     }
 
-  for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
-    {
-    this->ConvertedSegments[*segmentIDIt] = convertedSegment;
-    }
-
   if (!convertedSegment)
     {
     return true;
@@ -335,6 +338,20 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     convertedSegment->ShallowCopy(transformPolyDataFilter->GetOutput());
     }
 
+  this->SegmentBlocks.clear();
+  // TODO: How to know what value to threshold from the polydata
+  vtkNew<vtkMultiThreshold> threshold;
+  threshold->SetInputData(convertedSegment);
+  for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
+    {
+    vtkSegment* segment = segmentation->GetSegment(*segmentIDIt);
+    int isosurfaceBlock = threshold->AddBandpassIntervalSet(
+      segment->GetLabelmapValue(), segment->GetLabelmapValue(), vtkDataObject::FIELD_ASSOCIATION_POINTS, "ImageScalars", 0, 1);
+    this->SegmentBlocks[*segmentIDIt] = threshold->OutputSet(isosurfaceBlock);
+    }
+  threshold->Update();
+  this->ConvertedSegments = threshold->GetOutput();
+
   return true;
 }
 
@@ -348,13 +365,17 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
     return false;
     }
 
-  // TODO: How to know what value to threshold from the polydata
-  vtkNew<vtkThreshold> threshold;
-  threshold->SetInputData(this->ConvertedSegments[this->CurrentSegment]);
-  threshold->ThresholdBetween(this->CurrentLabelValue, this->CurrentLabelValue);
+  vtkDataObject* dataObject = this->ConvertedSegments->GetBlock(this->SegmentBlocks[this->CurrentSegmentID]);
+  vtkMultiBlockDataSet* segmentBlock = vtkMultiBlockDataSet::SafeDownCast(dataObject);
+  vtkUnstructuredGrid* grid = vtkUnstructuredGrid::SafeDownCast(dataObject);
+  if (segmentBlock)
+  {
+    vtkErrorMacro("NumberOfBlocks: " << segmentBlock->GetNumberOfBlocks());
+    grid = vtkUnstructuredGrid::SafeDownCast(segmentBlock->GetBlock(0));
+  }
 
-  vtkNew<vtkGeometryFilter> geometryFilter;
-  geometryFilter->SetInputConnection(threshold->GetOutputPort());
+  vtkNew<vtkCompositeDataGeometryFilter> geometryFilter;
+  geometryFilter->SetInputData(segmentBlock);
   geometryFilter->Update();
   closedSurfacePolyData->ShallowCopy(geometryFilter->GetOutput());
 

@@ -28,6 +28,7 @@
 #include "vtkSegmentationCoreConfigure.h"
 
 #include <vtkPolyData.h>
+#include <vtkMultiBlockDataSet.h>
 #include <vtkWeakPointer.h>
 
 /// \ingroup SegmentationCore
@@ -86,8 +87,9 @@ protected:
 
   std::map<std::string, vtkMTimeType> InputMTime;
   std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
-  std::map<std::string, vtkSmartPointer<vtkPolyData> > ConvertedSegments;
-  std::string CurrentSegment;
+  vtkSmartPointer<vtkMultiBlockDataSet> ConvertedSegments;
+  std::map<std::string, int> SegmentBlocks;
+  std::string CurrentSegmentID;
   int CurrentLabelValue;
 
 protected:
