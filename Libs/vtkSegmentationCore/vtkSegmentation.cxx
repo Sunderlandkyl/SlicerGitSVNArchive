@@ -32,6 +32,7 @@
 #include <vtkAbstractTransform.h>
 #include <vtkBoundingBox.h>
 #include <vtkCallbackCommand.h>
+#include <vtkImageCast.h>
 #include <vtkImageThreshold.h>
 #include <vtkMath.h>
 #include <vtkMatrix4x4.h>
@@ -1689,10 +1690,85 @@ std::string vtkSegmentation::AddEmptySegment(std::string segmentId/*=""*/, std::
   if (!mergedSegmentId.empty())
     {
     vtkSegment* mergedSegment = this->GetSegment(mergedSegmentId);
-    int mergedValue = this->GetUniqueValueForMergedLabelmap(mergedSegmentId);
+    vtkDataObject* dataObject = mergedSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
+    double mergedValue = this->GetUniqueValueForMergedLabelmap(mergedSegmentId);
     segment->SetLabelmapValue(mergedValue);
-    segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(),
-      mergedSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()));
+    segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), dataObject);
+
+    vtkOrientedImageData* mergedLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);
+    if (mergedLabelmap && mergedValue > mergedLabelmap->GetScalarTypeMax())
+      {
+      vtkNew<vtkImageCast> imageCast;
+      imageCast->SetInputData(mergedLabelmap);
+      int scalarType = mergedLabelmap->GetScalarType();
+      bool typeIsSigned = false;
+      switch (scalarType)
+        {
+        case VTK_CHAR:
+          typeIsSigned = (bool)VTK_TYPE_CHAR_IS_SIGNED;
+          break;
+        case VTK_SIGNED_CHAR:
+        case VTK_SHORT:
+        case VTK_INT:
+        case VTK_LONG:
+        case VTK_FLOAT:
+        case VTK_DOUBLE:
+          typeIsSigned = true;
+          break;
+        case VTK_UNSIGNED_CHAR:
+        case VTK_UNSIGNED_INT:
+        case VTK_UNSIGNED_SHORT:
+        case VTK_UNSIGNED_LONG:
+          typeIsSigned = false;
+          break;
+        }
+
+      if (typeIsSigned)
+        {
+        if (mergedValue > VTK_FLOAT_MAX || mergedValue < VTK_FLOAT_MIN)
+          {
+          scalarType = VTK_DOUBLE;
+          }
+        else if (mergedValue > VTK_LONG_MAX || mergedValue < VTK_LONG_MIN)
+          {
+          scalarType = VTK_FLOAT;
+          }
+        else if (mergedValue > VTK_INT_MAX || mergedValue < VTK_INT_MIN)
+          {
+          scalarType = VTK_LONG;
+          }
+        else if (mergedValue > VTK_SHORT_MAX || mergedValue < VTK_SHORT_MIN)
+          {
+          scalarType = VTK_SHORT;
+          }
+        }
+      else
+        {
+        if (mergedValue > VTK_FLOAT_MAX)
+        {
+          scalarType = VTK_DOUBLE;
+        }
+        else if (mergedValue > VTK_UNSIGNED_LONG_MAX)
+        {
+          scalarType = VTK_FLOAT;
+        }
+        else if (mergedValue > VTK_UNSIGNED_INT_MAX)
+          {
+          scalarType = VTK_UNSIGNED_LONG;
+          }
+        else if (mergedValue > VTK_UNSIGNED_SHORT_MAX)
+          {
+          scalarType = VTK_UNSIGNED_INT;
+          }
+        else if (mergedValue > VTK_UNSIGNED_CHAR_MAX)
+          {
+          scalarType = VTK_UNSIGNED_SHORT;
+          }
+        }
+      imageCast->SetOutputScalarType(scalarType);
+      imageCast->Update();
+      mergedLabelmap->vtkImageData::ShallowCopy(imageCast->GetOutput());
+      }
     }
 
   // Add segment
