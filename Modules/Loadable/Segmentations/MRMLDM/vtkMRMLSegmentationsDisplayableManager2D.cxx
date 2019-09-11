@@ -926,6 +926,38 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->PolyDataOutlineActor->SetVisibility(false);
       pipeline->PolyDataFillActor->SetVisibility(false);
 
+      bool outlineVisible = false;
+      bool fillVisible = false;
+      for (std::string segmentId : mergedSegmentIds)
+        {
+        vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
+        displayNode->GetSegmentDisplayProperties(segmentId, properties);
+
+        double outlineOpacity = properties.Opacity2DOutline * displayNode->GetOpacity2DOutline() * displayNode->GetOpacity();
+        outlineVisible |= displayNodeVisible && properties.Visible
+          && properties.Visible2DOutline && displayNode->GetVisibility2DOutline() && (outlineOpacity > 0.0);
+
+        double fillOpacity = properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity();
+        fillVisible |= displayNodeVisible && properties.Visible
+          && properties.Visible2DFill && displayNode->GetVisibility2DFill() && (fillOpacity > 0.0);
+
+        if (outlineVisible && fillVisible)
+          {
+          break;
+          }
+        }
+
+      // Update pipeline actors
+      pipeline->ImageOutlineActor->SetVisibility(outlineVisible);
+      pipeline->ImageOutlineActor->SetPosition(0, 0);
+      pipeline->ImageFillActor->SetVisibility(fillVisible);
+      pipeline->ImageFillActor->SetPosition(0, 0);
+
+      if (!outlineVisible && !fillVisible)
+        {
+        return;
+        }
+
       // Set the range of the scalars in the image data from the ScalarRange field if it exists
       // Default to the scalar range of 0.0 to 1.0 otherwise
       double minimumValue = 0.0;
@@ -1110,12 +1142,6 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         {
         pipeline->LabelOutline->SetInputConnection(nullptr);
         }
-
-      // Update pipeline actors
-      pipeline->ImageOutlineActor->SetVisibility(/*segmentOutlineVisible*/true);
-      pipeline->ImageOutlineActor->SetPosition(0,0);
-      pipeline->ImageFillActor->SetVisibility(/*segmentFillVisible*/true);
-      pipeline->ImageFillActor->SetPosition(0,0);
       }
     }
 }
