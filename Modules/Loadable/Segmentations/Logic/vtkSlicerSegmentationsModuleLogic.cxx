@@ -1965,12 +1965,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
         return false;
         }
 
-      // Perform conversion (overwrite if exists)
-      for (auto mergedSegmentID : mergedSegmentsUnderModifier)
-        {
-        vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(mergedSegmentID);
-        conversionHappened |= segmentationNode->GetSegmentation()->ConvertSegmentUsingPath(segment, cheapestPath, true, mergedSegmentsUnderModifier);
-        }
+      conversionHappened |= segmentationNode->GetSegmentation()->ConvertSegmentsUsingPath(mergedSegmentsUnderModifier, cheapestPath, true);
       }
     }
 

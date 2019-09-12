@@ -394,14 +394,16 @@ public:
   virtual void SetMasterRepresentationName(const std::string& representationName);
 
 protected:
+  bool ConvertSegmentsUsingPath(std::vector<std::string> segmentIDs, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting = false);
+  bool ConvertSegments(std::vector<std::string> segmentIDs, bool overwriteExisting = false);
+
   /// Convert given segment along a specified path
   /// \param segment Segment to convert
   /// \param path Path to do the conversion along
   /// \param overwriteExisting If true then do each conversion step regardless the target representation
   ///   exists. If false then skip those conversion steps that would overwrite existing representation
   /// \return Success flag
-  bool ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting = false,
-    std::vector<std::string> segmentIDs = {});
+  bool ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting = false);
 
   /// Converts a single segment to a representation.
   bool ConvertSingleSegment(std::string segmentId, std::string targetRepresentationName);

@@ -83,12 +83,12 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   virtual vtkDataObject* ConstructRepresentationObjectByClass(std::string className) = 0;
 
-  virtual bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment, std::vector<std::string> segmentIDs) { return true; };
+  virtual bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) { return true; };
 
   /// Update the target representation based on the source representation
-  virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) = 0;
+  virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation)= 0;
 
-  virtual bool PostConvert(vtkSegmentation* segmentation, vtkSegment* segment) { return true; };
+  virtual bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) { return true; };
 
   /// Get the cost of the conversion.
   /// \return Expected duration of the conversion in milliseconds. If the arguments are omitted, then a rough average can be
@@ -126,6 +126,10 @@ public:
   /// Determine if the rule has a parameter with a certain name
   bool HasConversionParameter(const std::string& name);
 
+  // TODO
+  vtkSetMacro(CurrentSegmentID, std::string);
+  vtkGetMacro(CurrentSegmentID, std::string);
+
 protected:
   vtkSegmentationConverterRule();
   ~vtkSegmentationConverterRule() override;
@@ -138,6 +142,8 @@ protected:
   /// When the user changes the parameter value, then the default is being overwritten to contain the
   /// custom value, but for new segmentations, it is initially the default.
   ConversionParameterListType ConversionParameters;
+
+  std::string CurrentSegmentID;
 
   friend class vtkSegmentationConverter;
 };

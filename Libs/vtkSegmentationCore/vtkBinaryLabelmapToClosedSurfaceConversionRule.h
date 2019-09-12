@@ -63,7 +63,7 @@ public:
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
   /// TODO
-  bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment, std::vector<std::string> segmentIDs) override;
+  bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
 
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
@@ -87,10 +87,8 @@ protected:
 
   std::map<std::string, vtkMTimeType> InputMTime;
   std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
-  vtkSmartPointer<vtkMultiBlockDataSet> ConvertedSegments;
+  std::map<std::string, vtkSmartPointer<vtkMultiBlockDataSet> > ConvertedSegments;
   std::map<std::string, int> SegmentBlocks;
-  std::string CurrentSegmentID;
-  int CurrentLabelValue;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();
