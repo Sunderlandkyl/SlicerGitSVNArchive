@@ -72,10 +72,12 @@
 #include <vtkSmartPointer.h>
 #include <vtkStringArray.h>
 #include <vtkWorldPointPicker.h>
+
 // CTK includes
 #include "ctkDoubleSlider.h"
 #include "ctkDoubleRangeSlider.h"
 #include "ctkRangeWidget.h"
+#include "ctkSliderWidget.h"
 
 // MRML includes
 #include <vtkEventBroker.h>
@@ -1381,8 +1383,12 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   d->BrushDiameterSlider->setOrientation(Qt::Horizontal);
   this->addOptionsWidget(d->BrushDiameterSlider);
 
-  d->BrushPressureRangeSlider = new ctkDoubleSlider();
-  d->BrushPressureRangeSlider->setOrientation(Qt::Horizontal);
+
+  QLabel* pressureLabel = new QLabel("Pressure range:", d->BrushDiameterFrame);
+  this->addOptionsWidget(pressureLabel);
+
+
+  d->BrushPressureRangeSlider = new ctkSliderWidget();
   d->BrushPressureRangeSlider->setMinimum(0.0);
   d->BrushPressureRangeSlider->setMaximum(1.0);
   d->BrushPressureRangeSlider->setSingleStep(0.01);
@@ -1449,7 +1455,8 @@ void qSlicerSegmentEditorPaintEffect::setMRMLDefaults()
   this->setParameterDefault("ColorSmudge", 0);
   this->setParameterDefault("EraseAllSegments", 0);
   this->setCommonParameterDefault("BrushPixelMode", 0);
-  this->setCommonParameterDefault("BrushPressureRange", 0);
+  this->setCommonParameterDefault("BrushPressureRange", 0.0);
+  this->setCommonParameterDefault("TabletPressure", 0.0);
 }
 
 //-----------------------------------------------------------------------------
@@ -1522,6 +1529,10 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
   d->BrushPressureRangeSlider->blockSignals(true);
   d->BrushPressureRangeSlider->setValue(this->doubleParameter("BrushPressureRange"));
   d->BrushPressureRangeSlider->blockSignals(false);
+  if (this->parameterSetNode())
+    {
+    d->BrushPressureRangeSlider->setHidden(!this->parameterSetNode()->GetTabletModeEnabled());
+    }
 
   d->BrushDiameterSpinBox->blockSignals(true);
   d->BrushDiameterSpinBox->setMRMLScene(this->scene());

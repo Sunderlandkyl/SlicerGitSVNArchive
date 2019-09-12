@@ -53,6 +53,7 @@ vtkMRMLSegmentEditorNode::vtkMRMLSegmentEditorNode()
   , MaskSegmentID(nullptr)
   , OverwriteMode(OverwriteAllSegments)
   , MasterVolumeIntensityMask(false)
+  , TabletModeEnabled(false)
 {
   this->SetHideFromEditors(true);
   this->MasterVolumeIntensityMaskRange[0] = 0.0;

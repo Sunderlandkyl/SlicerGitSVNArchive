@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>406</width>
-    <height>426</height>
+    <height>478</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -477,29 +477,6 @@
       <string>Tablet</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
-      <item row="1" column="1">
-       <widget class="QCheckBox" name="TabletEnabledCheckBox">
-        <property name="text">
-         <string/>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="ctkRangeWidget" name="TabletPressureRangeWidget">
-        <property name="singleStep">
-         <double>0.010000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>1.000000000000000</double>
-        </property>
-        <property name="maximumValue">
-         <double>1.000000000000000</double>
-        </property>
-        <property name="tickInterval">
-         <double>0.100000000000000</double>
-        </property>
-       </widget>
-      </item>
       <item row="1" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
@@ -507,10 +484,10 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_2">
+      <item row="1" column="1">
+       <widget class="QCheckBox" name="TabletEnabledCheckBox">
         <property name="text">
-         <string>Pressure range:</string>
+         <string/>
         </property>
        </widget>
       </item>
