@@ -28,6 +28,7 @@
 // STD includes
 #include <map>
 #include <deque>
+#include <vector>
 
 // SegmentationCore includes
 #include "vtkSegment.h"
@@ -399,7 +400,8 @@ protected:
   /// \param overwriteExisting If true then do each conversion step regardless the target representation
   ///   exists. If false then skip those conversion steps that would overwrite existing representation
   /// \return Success flag
-  bool ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting=false);
+  bool ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting = false,
+    std::vector<std::string> segmentIDs = {});
 
   /// Converts a single segment to a representation.
   bool ConvertSingleSegment(std::string segmentId, std::string targetRepresentationName);

@@ -122,7 +122,7 @@ vtkDataObject* vtkBinaryLabelmapToClosedSurfaceConversionRule::ConstructRepresen
 }
 
 //----------------------------------------------------------------------------
-bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation* segmentation, vtkSegment* segment)
+bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation* segmentation, vtkSegment* segment, std::vector<std::string> segmentIDs)
 {
   // Check validity of source and target representation objects
   vtkOrientedImageData* orientedBinaryLabelmap = vtkOrientedImageData::SafeDownCast(
@@ -225,7 +225,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
   marchingCubes->ComputeScalarsOn();
 
   int valueIndex = 0;
-  for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
+  for (std::vector<std::string>::iterator segmentIDIt = segmentIDs.begin(); segmentIDIt != segmentIDs.end(); ++segmentIDIt)
     {
     vtkSegment* currentSegment = segmentation->GetSegment(*segmentIDIt);
     double labelmapFillValue = currentSegment->GetLabelmapValue();
@@ -370,7 +370,6 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
   vtkUnstructuredGrid* grid = vtkUnstructuredGrid::SafeDownCast(dataObject);
   if (segmentBlock)
   {
-    vtkErrorMacro("NumberOfBlocks: " << segmentBlock->GetNumberOfBlocks());
     grid = vtkUnstructuredGrid::SafeDownCast(segmentBlock->GetBlock(0));
   }
 

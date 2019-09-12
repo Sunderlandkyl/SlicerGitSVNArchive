@@ -1955,10 +1955,21 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     std::string targetRepresentationName = (*reprIt);
     if (targetRepresentationName.compare(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()))
       {
+      vtkSegmentationConverter::ConversionPathAndCostListType pathCosts;
+      segmentationNode->GetSegmentation()->GetPossibleConversions(targetRepresentationName, pathCosts);
+
+      // Get cheapest path from found conversion paths
+      vtkSegmentationConverter::ConversionPathType cheapestPath = vtkSegmentationConverter::GetCheapestPath(pathCosts);
+      if (cheapestPath.empty())
+        {
+        return false;
+        }
+
+      // Perform conversion (overwrite if exists)
       for (auto mergedSegmentID : mergedSegmentsUnderModifier)
         {
-        conversionHappened |= segmentationNode->GetSegmentation()->ConvertSingleSegment(
-          mergedSegmentID, targetRepresentationName);
+        vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(mergedSegmentID);
+        conversionHappened |= segmentationNode->GetSegmentation()->ConvertSegmentUsingPath(segment, cheapestPath, true, mergedSegmentsUnderModifier);
         }
       }
     }

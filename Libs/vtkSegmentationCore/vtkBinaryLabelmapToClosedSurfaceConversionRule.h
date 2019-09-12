@@ -63,7 +63,7 @@ public:
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
   /// TODO
-  bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment) override;
+  bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment, std::vector<std::string> segmentIDs) override;
 
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;

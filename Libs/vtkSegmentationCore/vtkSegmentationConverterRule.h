@@ -29,6 +29,7 @@
 // STD includes
 #include <map>
 #include <string>
+#include <vector>
 
 class vtkDataObject;
 class vtkSegmentation;
@@ -82,7 +83,7 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   virtual vtkDataObject* ConstructRepresentationObjectByClass(std::string className) = 0;
 
-  virtual bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment) { return true; };
+  virtual bool PreConvert(vtkSegmentation* segmentation, vtkSegment* segment, std::vector<std::string> segmentIDs) { return true; };
 
   /// Update the target representation based on the source representation
   virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) = 0;

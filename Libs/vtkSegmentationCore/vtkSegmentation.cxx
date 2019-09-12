@@ -974,8 +974,14 @@ void vtkSegmentation::ApplyNonLinearTransform(vtkAbstractTransform* transform)
 }
 
 //-----------------------------------------------------------------------------
-bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting/*=false*/)
+bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting/*=false*/,
+  std::vector<std::string> segmentIDs)
 {
+  if (segmentIDs.empty())
+    {
+    this->SegmentIds;
+    }
+
   // Execute each conversion step in the selected path
   vtkSegmentationConverter::ConversionPathType::iterator pathIt;
   for (pathIt = path.begin(); pathIt != path.end(); ++pathIt)
@@ -1013,7 +1019,7 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
       }
 
     // Perform conversion step
-    currentConversionRule->PreConvert(this, segment);
+    currentConversionRule->PreConvert(this, segment, segmentIDs);
     currentConversionRule->Convert(sourceRepresentation, targetRepresentation);
     currentConversionRule->PostConvert(this, segment);
 
@@ -1093,8 +1099,10 @@ bool vtkSegmentation::CreateRepresentation(const std::string& targetRepresentati
 
   for (SegmentMap::iterator segmentIt = this->Segments.begin(); segmentIt != this->Segments.end(); ++segmentIt)
     {
+    std::vector<std::string> mergedSegmentIDs;
+    this->GetMergedLabelmapSegmentIds(segmentIt->first, mergedSegmentIDs, true);
     vtkDataObject* representationBefore = segmentIt->second->GetRepresentation(targetRepresentationName);
-    if (!this->ConvertSegmentUsingPath(segmentIt->second, cheapestPath, alwaysConvert))
+    if (!this->ConvertSegmentUsingPath(segmentIt->second, cheapestPath, alwaysConvert, mergedSegmentIDs))
       {
       vtkErrorMacro("CreateRepresentation: Conversion failed");
       return false;
@@ -1147,6 +1155,8 @@ bool vtkSegmentation::CreateRepresentation(vtkSegmentationConverter::ConversionP
   // Perform conversion on all segments (do overwrites)
   for (SegmentMap::iterator segmentIt = this->Segments.begin(); segmentIt != this->Segments.end(); ++segmentIt)
     {
+    std::vector<std::string> mergedSegmentIDs;
+    this->GetMergedLabelmapSegmentIds(segmentIt->first, mergedSegmentIDs, true);
     if (!this->ConvertSegmentUsingPath(segmentIt->second, path, true))
       {
       vtkErrorMacro("CreateRepresentation: Conversion failed");
@@ -2088,7 +2098,8 @@ bool vtkSegmentation::ConvertSingleSegment(std::string segmentId, std::string ta
     }
 
   // Perform conversion (overwrite if exists)
-  if (!this->ConvertSegmentUsingPath(segment, cheapestPath, true))
+  std::vector<std::string> segmentIDs = { segmentId };
+  if (!this->ConvertSegmentUsingPath(segment, cheapestPath, true, segmentIDs))
     {
     vtkErrorMacro("ConvertSingleSegment: Conversion failed!");
     return false;
