@@ -66,6 +66,7 @@ class vtkGlyph3D;
 class vtkPoints;
 class vtkPolyDataNormals;
 class vtkPolyDataToImageStencil;
+class ctkSliderWidget;
 
 /// \ingroup SlicerRt_QtModules_Segmentations
 /// \brief Private implementation of the segment editor paint effect
@@ -164,7 +165,7 @@ public:
   QFrame* BrushDiameterFrame;
   qMRMLSpinBox* BrushDiameterSpinBox;
   ctkDoubleSlider* BrushDiameterSlider;
-  ctkDoubleSlider* BrushPressureRangeSlider;
+  ctkSliderWidget* BrushPressureRangeSlider;
   QToolButton* BrushDiameterRelativeToggle;
   QCheckBox* BrushSphereCheckbox;
   QCheckBox* EditIn3DViewsCheckbox;

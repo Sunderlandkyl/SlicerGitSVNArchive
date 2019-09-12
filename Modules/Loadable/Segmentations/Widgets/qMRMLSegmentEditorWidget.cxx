@@ -2842,8 +2842,9 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
         case vtkCommand::TabletReleaseEvent:
           eid = vtkCommand::LeftButtonReleaseEvent;
           break;
-        case vtkCommand::MouseMoveEvent:
         case vtkCommand::LeftButtonPressEvent:
+          qCritical() << "Left button event during tablet mode!";
+        case vtkCommand::MouseMoveEvent:
         case vtkCommand::LeftButtonReleaseEvent:
         case vtkCommand::RightButtonPressEvent:
         case vtkCommand::RightButtonReleaseEvent:
@@ -3187,6 +3188,7 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
 
   qSlicerApplication::application()->installEventFilter(d->ApplicationEventFilter.get());
   qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_CompressTabletEvents, true);
+  qSlicerApplication::application()->setAttribute((qSlicerApplication::ApplicationAttribute)Qt::AA_SynthesizeMouseForUnhandledTabletEvents, false);
 }
 
 //-----------------------------------------------------------------------------
@@ -3261,10 +3263,12 @@ void qMRMLSegmentEditorWidget::onTabletModeChanged(int checkState)
   if (d->ParameterSetNode)
     {
     d->ParameterSetNode->SetTabletModeEnabled(checkState == Qt::Checked);
+    if (d->ActiveEffect)
+      {
+      d->ActiveEffect->updateGUIFromMRML();
+      }
     }
-  d->TabletPressureRangeWidget->setVisible(checkState == Qt::Checked);
 }
-
 
 //-----------------------------------------------------------------------------
 void qMRMLSegmentEditorWidget::onSelectEffectShortcut()
