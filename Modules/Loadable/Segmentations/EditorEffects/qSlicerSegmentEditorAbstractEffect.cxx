@@ -218,15 +218,17 @@ void qSlicerSegmentEditorAbstractEffect::applyImageMask(vtkOrientedImageData* in
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmap, ModificationMode modificationMode)
+void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmap,
+  ModificationMode modificationMode, bool bypassMasking/*=false*/)
 {
   int modificationExtent[6] = { 0, -1, 0, -1, 0, -1 };
-  this->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, modificationExtent);
+  this->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
 }
 
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmap, ModificationMode modificationMode, QList<int> extent)
+void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmap,
+  ModificationMode modificationMode, QList<int> extent, bool bypassMasking/*=false*/)
 {
   if (extent.size() != 6)
     {
@@ -234,11 +236,12 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
     return;
     }
   int modificationExtent[6] = { extent[0], extent[1], extent[2], extent[3], extent[4], extent[5] };
-  this->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, modificationExtent);
+  this->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmapInput, ModificationMode modificationMode, const int modificationExtent[6])
+void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmapInput,
+  ModificationMode modificationMode, const int modificationExtent[6], bool bypassMasking/*=false*/)
 {
   Q_D(qSlicerSegmentEditorAbstractEffect);
 
@@ -256,7 +259,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   vtkSmartPointer<vtkOrientedImageData> modifierLabelmap = modifierLabelmapInput;
 
   // Apply mask to modifier labelmap if paint over is turned off
-  if (parameterSetNode->GetMaskMode() != vtkMRMLSegmentEditorNode::PaintAllowedEverywhere)
+  if (!bypassMasking && parameterSetNode->GetMaskMode() != vtkMRMLSegmentEditorNode::PaintAllowedEverywhere)
     {
     vtkOrientedImageData* maskImage = this->maskLabelmap();
 
@@ -381,6 +384,11 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
     case vtkMRMLSegmentEditorNode::OverwriteAllSegments:
       segmentIDsToOverwrite = allSegmentIDs;
       break;
+    }
+
+  if (bypassMasking)
+    {
+    segmentIDsToOverwrite.clear();
     }
 
   vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(selectedSegmentID);
