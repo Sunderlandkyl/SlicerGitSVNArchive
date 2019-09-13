@@ -30,6 +30,7 @@
 #include <vtkPolyData.h>
 #include <vtkMultiBlockDataSet.h>
 #include <vtkWeakPointer.h>
+#include <vtkUnstructuredGrid.h>
 
 /// \ingroup SegmentationCore
 /// \brief Convert binary labelmap representation (vtkOrientedImageData type) to
@@ -89,6 +90,7 @@ protected:
   std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
   std::map<std::string, vtkSmartPointer<vtkMultiBlockDataSet> > ConvertedSegments;
   std::map<std::string, int> SegmentBlocks;
+  std::map<std::string, vtkSmartPointer<vtkUnstructuredGrid> > Surfaces;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();

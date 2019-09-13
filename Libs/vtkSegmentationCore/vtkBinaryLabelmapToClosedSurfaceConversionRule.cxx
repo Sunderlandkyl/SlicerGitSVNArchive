@@ -57,6 +57,12 @@
 #include <vtkStringToNumeric.h>
 #include <vtkStringArray.h>
 
+#include <vtkSelection.h>
+#include <vtkSelectionNode.h>
+#include <vtkFloatArray.h>
+#include <vtkExtractSelectedIds.h>
+#include <vtkInformation.h>
+
 //----------------------------------------------------------------------------
 vtkSegmentationConverterRuleNewMacro(vtkBinaryLabelmapToClosedSurfaceConversionRule);
 
@@ -342,24 +348,30 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
       convertedSegment->ShallowCopy(transformPolyDataFilter->GetOutput());
       }
 
-    this->SegmentBlocks.clear();
-    // TODO: How to know what value to threshold from the polydata
-    vtkNew<vtkMultiThreshold> threshold;
-    threshold->SetInputData(convertedSegment);
-    for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
-      {
-      vtkSegment* segment = segmentation->GetSegment(*segmentIDIt);
-      int isosurfaceBlock = threshold->AddBandpassIntervalSet(
-        segment->GetLabelmapValue(), segment->GetLabelmapValue(), vtkDataObject::FIELD_ASSOCIATION_POINTS, "ImageScalars", 0, 1);
-      this->SegmentBlocks[*segmentIDIt] = threshold->OutputSet(isosurfaceBlock);
-      }
-
-    threshold->Update();
-
     for (auto segmentID : mergedSegmentIDs)
       {
-      this->ConvertedSegments[segmentID] = threshold->GetOutput();
+      vtkSegment* segment = segmentation->GetSegment(segmentID);
+
+      vtkNew<vtkSelection> selection;
+      vtkNew<vtkSelectionNode> thresholdNode;
+      selection->AddNode(thresholdNode);
+      thresholdNode->SetContentType(vtkSelectionNode::THRESHOLDS);
+      thresholdNode->SetFieldType(vtkSelectionNode::POINT);
+      thresholdNode->GetProperties()->Set(vtkSelectionNode::CONTAINING_CELLS(), 1);
+      vtkSmartPointer<vtkFloatArray> thresh =
+        vtkSmartPointer<vtkFloatArray>::New();
+      thresh->SetNumberOfComponents(1);
+      thresh->InsertNextValue(segment->GetLabelmapValue());
+      thresh->InsertNextValue(segment->GetLabelmapValue());
+      thresholdNode->SetSelectionList(thresh);
+
+      vtkNew<vtkExtractSelectedThresholds> threshold;
+      threshold->SetInputData(0, convertedSegment);
+      threshold->SetInputData(1, selection);
+      threshold->Update();
+      this->Surfaces[segmentID] = vtkUnstructuredGrid::SafeDownCast(threshold->GetOutput());
       }
+
     }
 
   return true;
@@ -375,22 +387,8 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
     return false;
     }
 
-  vtkMultiBlockDataSet* parentBlock = this->ConvertedSegments[this->CurrentSegmentID];
-  if (!parentBlock)
-    {
-    // TODO
-    return false;
-    }
-
-  vtkMultiBlockDataSet* segmentBlock = vtkMultiBlockDataSet::SafeDownCast(parentBlock->GetBlock(this->SegmentBlocks[this->CurrentSegmentID]));
-  if (!segmentBlock)
-    {
-    // TODO
-    return false;
-    }
-
-  vtkNew<vtkCompositeDataGeometryFilter> geometryFilter;
-  geometryFilter->SetInputData(segmentBlock);
+  vtkNew<vtkGeometryFilter> geometryFilter;
+  geometryFilter->SetInputData(this->Surfaces[this->CurrentSegmentID]);
   geometryFilter->Update();
   closedSurfacePolyData->ShallowCopy(geometryFilter->GetOutput());
 
