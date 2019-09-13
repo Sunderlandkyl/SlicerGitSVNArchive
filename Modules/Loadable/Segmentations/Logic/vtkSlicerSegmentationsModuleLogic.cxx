@@ -1864,7 +1864,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     int labelmapValue = selectedSegment->GetLabelmapValue();
     if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
       {
-      threshold->SetOutValue(labelmap->GetScalarTypeMax());
+      threshold->SetOutValue(segmentLabelmap->GetScalarTypeMax());
       }
     else
       {
@@ -1873,7 +1873,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       }
     mergedSegmentsUnderModifier.push_back(segmentID);
 
-    threshold->SetOutputScalarTypeToUnsignedChar();
+    threshold->SetOutputScalarType(segmentLabelmap->GetScalarType());
     threshold->Update();
 
     vtkNew<vtkOrientedImageData> thresholdedLabelmap;
