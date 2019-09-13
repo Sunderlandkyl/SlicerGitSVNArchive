@@ -1473,6 +1473,17 @@ bool vtkSegmentation::GenerateMergedLabelmap(
       binaryLabelmap = resampledBinaryLabelmap;
       }
 
+    vtkNew<vtkOrientedImageData> thresholdedLabelmap;
+    vtkNew<vtkImageThreshold> threshold;
+    threshold->SetInputData(binaryLabelmap);
+    threshold->ThresholdBetween(currentSegment->GetLabelmapValue(), currentSegment->GetLabelmapValue());
+    threshold->SetInValue(1);
+    threshold->SetOutValue(0);
+    threshold->Update();
+    thresholdedLabelmap->ShallowCopy(threshold->GetOutput());
+    thresholdedLabelmap->CopyDirections(binaryLabelmap);
+    binaryLabelmap = thresholdedLabelmap;
+
     // Copy image data voxels into merged labelmap with the proper color index
     vtkOrientedImageDataResample::ModifyImage(
       mergedImageData,
