@@ -1162,8 +1162,17 @@ bool vtkSegmentation::CreateRepresentation(const std::string& targetRepresentati
   std::deque< std::string > modifiedSegmentIds;
 
   bool wasSegmentModifiedEnabled = this->SetSegmentModifiedEnabled(false);
+  std::map<vtkDataObject*, bool> converted;
   for (SegmentMap::iterator segmentIt = this->Segments.begin(); segmentIt != this->Segments.end(); ++segmentIt)
     {
+    vtkSegment* segment = segmentIt->second;
+    vtkDataObject* masterRepresentation = segment->GetRepresentation(this->MasterRepresentationName);
+    if (converted[masterRepresentation])
+      {
+      continue;
+      }
+    converted[masterRepresentation] = true;
+
     std::vector<std::string> mergedSegmentIDs;
     this->GetMergedLabelmapSegmentIds(segmentIt->first, mergedSegmentIDs, true);
     vtkDataObject* representationBefore = segmentIt->second->GetRepresentation(targetRepresentationName);

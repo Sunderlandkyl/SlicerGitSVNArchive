@@ -69,6 +69,8 @@ public:
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
 
+  bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
+
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;
 
@@ -90,6 +92,8 @@ protected:
   std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
   std::map<std::string, vtkSmartPointer<vtkMultiBlockDataSet> > ConvertedSegments;
   std::map<std::string, int> SegmentBlocks;
+
+  std::map<vtkDataObject*, bool> Converted;
   std::map<std::string, vtkSmartPointer<vtkUnstructuredGrid> > Surfaces;
 
 protected:
