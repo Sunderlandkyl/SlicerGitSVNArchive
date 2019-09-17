@@ -65,7 +65,6 @@
 #include <vtkImageReslice.h>
 #include <vtkImageMapper.h>
 #include <vtkImageMapToRGBA.h>
-#include <vtkDiscretizableColorTransferFunction.h>
 #include <vtkStripper.h>
 #include <vtkTriangleFilter.h>
 #include <vtkCleanPolyData.h>
@@ -977,7 +976,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       for (std::string segmentId : mergedSegmentIds)
       {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
-        int labelmapValue = segment->GetLabelmapValue();
+        int labelmapValue = segment->GetValue();
         minLabelmapValue = std::min(minLabelmapValue, labelmapValue);
         maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
       }
@@ -999,7 +998,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       for (std::string segmentId : mergedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
-        int labelmapValue = segment->GetLabelmapValue();
+        int labelmapValue = segment->GetValue();
 
         // Get visibility
         vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
@@ -1706,7 +1705,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
           continue;
           }
 
-        int labelmapValue = segment->GetLabelmapValue();
+        int labelmapValue = segment->GetValue();
         if ((shownRepresenatationName == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName() && voxelValue != labelmapValue) ||
           segment->GetRepresentation(shownRepresenatationName) != imageData)
           {

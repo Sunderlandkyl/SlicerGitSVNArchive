@@ -495,7 +495,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
     segmentInverter->SetInValue(m_EraseValue);
     segmentInverter->SetOutValue(VTK_DOUBLE_MAX);
     segmentInverter->ReplaceInOn();
-    segmentInverter->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+    segmentInverter->ThresholdBetween(segment->GetValue(), segment->GetValue());
     segmentInverter->SetOutputScalarType(VTK_UNSIGNED_CHAR);
     segmentInverter->Update();
     vtkNew<vtkOrientedImageData> invertedModifierLabelmap;

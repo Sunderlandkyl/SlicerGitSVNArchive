@@ -1288,7 +1288,7 @@ bool vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(vtkMRML
     {
     int label = labelValues->GetValue(labelIndex);
     vtkSmartPointer<vtkSegment> segment = vtkSmartPointer<vtkSegment>::New();
-    segment->SetLabelmapValue(label);
+    segment->SetValue(label);
 
     // Set segment color
     double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0],
@@ -1861,7 +1861,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     threshold->SetInputData(labelmap);
     threshold->ThresholdByLower(0);
     threshold->SetInValue(0);
-    int labelmapValue = selectedSegment->GetLabelmapValue();
+    int labelmapValue = selectedSegment->GetValue();
     if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
       {
       threshold->SetOutValue(segmentLabelmap->GetScalarTypeMax());
@@ -2536,7 +2536,7 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
     vtkOrientedImageData* binaryLablemap = vtkOrientedImageData::SafeDownCast(dataObject);
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(binaryLablemap);
-    threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+    threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
     threshold->SetInValue(0); // TODO: Maybe outside value is not 0
     threshold->ReplaceOutOff();
     threshold->Update();
@@ -2644,7 +2644,7 @@ bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
   for (auto segmentID : mergedSegmentIDs)
     {
     vtkSegment* segment = segmentation->GetSegment(segmentID);
-    values[segment->GetLabelmapValue()] = false;
+    values[segment->GetValue()] = false;
     }
 
   vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
@@ -2686,7 +2686,7 @@ bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
   for (auto segmentID : mergedSegmentIDs)
     {
     vtkSegment* segment = segmentation->GetSegment(segmentID);
-    if (values[segment->GetLabelmapValue()])
+    if (values[segment->GetValue()])
       {
       segmentIDs.push_back(segmentID);
       }

@@ -579,8 +579,8 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
       for (auto segmentId : mergedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
-        scalarRange[0] = std::min(scalarRange[0], segment->GetLabelmapValue());
-        scalarRange[1] = std::max(scalarRange[1], segment->GetLabelmapValue());
+        scalarRange[0] = std::min(scalarRange[0], segment->GetValue());
+        scalarRange[1] = std::max(scalarRange[1], segment->GetValue());
         }
       pipeline->Actor->GetMapper()->SetScalarVisibility(true);
       lookupTable->SetTableRange(scalarRange);
@@ -597,7 +597,7 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
         bool segmentVisible = properties.Visible && properties.Visible3D;
         if (segmentVisible)
           {
-          pipeline->Selection->AddThreshold(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+          pipeline->Selection->AddThreshold(segment->GetValue(), segment->GetValue());
           }
 
         if (properties.Visible && properties.Visible3D)
@@ -608,7 +608,7 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
           {
           color[3] = 0.0;
           }
-        lookupTable->SetTableValue(lookupTable->GetIndex(segment->GetLabelmapValue()), color);
+        lookupTable->SetTableValue(lookupTable->GetIndex(segment->GetValue()), color);
         }
       }
 

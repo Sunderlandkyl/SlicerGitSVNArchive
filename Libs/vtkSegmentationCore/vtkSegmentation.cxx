@@ -1368,7 +1368,7 @@ void vtkSegmentation::MergeSegmentLabelmaps(std::vector<std::string> mergeSegmen
     {
     vtkSegment* segment = this->GetSegment(segmentId);
     ++value;
-    segment->SetLabelmapValue(value);
+    segment->SetValue(value);
     segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), mergedLabelmapRepresentation);
     }
 }
@@ -1508,7 +1508,7 @@ bool vtkSegmentation::GenerateMergedLabelmap(
     vtkNew<vtkOrientedImageData> thresholdedLabelmap;
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(binaryLabelmap);
-    threshold->ThresholdBetween(currentSegment->GetLabelmapValue(), currentSegment->GetLabelmapValue());
+    threshold->ThresholdBetween(currentSegment->GetValue(), currentSegment->GetValue());
     threshold->SetInValue(1);
     threshold->SetOutValue(0);
     threshold->Update();
@@ -1556,7 +1556,7 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     {
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(labelmap);
-    threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+    threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
     threshold->SetOutValue(0);
     threshold->SetInValue(1);
     threshold->Update();
@@ -1569,14 +1569,14 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
 
     vtkNew<vtkImageThreshold> thresholdErase;
     thresholdErase->SetInputData(labelmap);
-    thresholdErase->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+    thresholdErase->ThresholdBetween(segment->GetValue(), segment->GetValue());
     thresholdErase->SetInValue(0);
     thresholdErase->ReplaceOutOff();
     thresholdErase->Update();
     labelmap->ShallowCopy(thresholdErase->GetOutput());
 
     }
-  segment->SetLabelmapValue(1);
+  segment->SetValue(1);
 
   this->Modified();
   this->InvokeEvent(vtkSegmentation::MasterRepresentationModified, this);
@@ -1607,11 +1607,11 @@ void vtkSegmentation::ClearSegment(std::string segmentId)
     }
   else if (this->GetMasterRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())
     {
-    double labelmapValue = segment->GetLabelmapValue();
+    double labelmapValue = segment->GetValue();
     vtkOrientedImageData* labelmap = vtkOrientedImageData::SafeDownCast(masterRepresentation);
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(labelmap);
-    threshold->ThresholdBetween(segment->GetLabelmapValue(), segment->GetLabelmapValue());
+    threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
     threshold->SetOutValue(0.0);
     threshold->SetInValue(1.0);
     threshold->Update();
@@ -1639,7 +1639,7 @@ int vtkSegmentation::GetUniqueValueForMergedLabelmap(std::string segmentId)
   for (std::string currentSegmentId : mergedLabelmapIds)
     {
     vtkSegment* segment = this->GetSegment(currentSegmentId);
-    values.insert(segment->GetLabelmapValue());
+    values.insert(segment->GetValue());
     }
 
   int value = 1;
@@ -1810,7 +1810,7 @@ std::string vtkSegmentation::AddEmptySegment(std::string segmentId/*=""*/, std::
     vtkSegment* mergedSegment = this->GetSegment(mergedSegmentId);
     vtkDataObject* dataObject = mergedSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
     double mergedValue = this->GetUniqueValueForMergedLabelmap(mergedSegmentId);
-    segment->SetLabelmapValue(mergedValue);
+    segment->SetValue(mergedValue);
     segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), dataObject);
 
     vtkOrientedImageData* mergedLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);

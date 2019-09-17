@@ -625,9 +625,22 @@ bool qMRMLSegmentEditorWidgetPrivate::updateSelectedSegmentLabelmap()
     this->SelectedSegmentLabelmap->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
     return true;
     }
+
+  vtkNew<vtkImageThreshold> threshold;
+  threshold->SetInputData(segmentLabelmap);
+  threshold->ThresholdBetween(selectedSegment->GetValue(), selectedSegment->GetValue());
+  threshold->SetInValue(1);
+  threshold->SetOutValue(0);
+  threshold->Update();
+
+  vtkSmartPointer<vtkOrientedImageData> thresholdedSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+  thresholdedSegmentLabelmap->ShallowCopy(threshold->GetOutput());
+  thresholdedSegmentLabelmap->CopyDirections(segmentLabelmap);
+
   vtkNew<vtkOrientedImageData> referenceImage;
   vtkSegmentationConverter::DeserializeImageGeometry(referenceImageGeometry, referenceImage.GetPointer(), false);
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(segmentLabelmap, referenceImage.GetPointer(), this->SelectedSegmentLabelmap, /*linearInterpolation=*/false);
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
+    thresholdedSegmentLabelmap, referenceImage.GetPointer(), this->SelectedSegmentLabelmap, /*linearInterpolation=*/false);
 
   return true;
 }

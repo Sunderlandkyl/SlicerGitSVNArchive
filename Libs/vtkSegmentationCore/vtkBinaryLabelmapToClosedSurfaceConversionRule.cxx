@@ -26,43 +26,24 @@
 
 // VTK includes
 #include <vtkVersion.h> // must precede reference to VTK_MAJOR_VERSION
-#include <vtkCompositeDataGeometryFilter.h>
-#include <vtkCompositeDataIterator.h>
 #include <vtkDecimatePro.h>
 #if VTK_MAJOR_VERSION >= 9 || (VTK_MAJOR_VERSION >= 8 && VTK_MINOR_VERSION >= 2)
   #include <vtkDiscreteFlyingEdges3D.h>
 #else
   #include <vtkDiscreteMarchingCubes.h>
 #endif
-#include <vtkExtractSelectedThresholds.h>
-#include <vtkGeometryFilter.h>
 #include <vtkImageChangeInformation.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageThreshold.h>
-#include <vtkMultiBlockDataSet.h>
-#include <vtkMultiThreshold.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
-#include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
-#include <vtkSelection.h>
-#include <vtkSelectionNode.h>
-#include <vtkThreshold.h>
 #include <vtkTransform.h>
 #include <vtkTransformPolyDataFilter.h>
-#include <vtkUnstructuredGrid.h>
 #include <vtkWindowedSincPolyDataFilter.h>
 #include <vtkMatrix3x3.h>
 #include <vtkReverseSense.h>
-#include <vtkStringToNumeric.h>
-#include <vtkStringArray.h>
-
-#include <vtkSelection.h>
-#include <vtkSelectionNode.h>
-#include <vtkFloatArray.h>
-#include <vtkExtractSelectedIds.h>
-#include <vtkInformation.h>
 
 //----------------------------------------------------------------------------
 vtkSegmentationConverterRuleNewMacro(vtkBinaryLabelmapToClosedSurfaceConversionRule);
@@ -221,7 +202,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
       {
       vtkSegment* currentSegment = segmentation->GetSegment(*segmentIDIt);
-      double labelmapFillValue = currentSegment->GetLabelmapValue();
+      double labelmapFillValue = currentSegment->GetValue();
       marchingCubes->SetValue(valueIndex, labelmapFillValue);
       ++valueIndex;
       }
