@@ -977,25 +977,27 @@ void vtkSegmentation::ApplyNonLinearTransform(vtkAbstractTransform* transform)
 bool vtkSegmentation::ConvertSegmentsUsingPath(std::vector<std::string> segmentIDs, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting)
 {
   if (segmentIDs.empty())
-  {
-    this->SegmentIds;
-  }
+    {
+    return true;
+    }
 
   // Execute each conversion step in the selected path
   vtkSegmentationConverter::ConversionPathType::iterator pathIt;
   for (pathIt = path.begin(); pathIt != path.end(); ++pathIt)
-  {
+    {
     vtkSegmentationConverterRule* currentConversionRule = (*pathIt);
     if (!currentConversionRule)
-    {
+      {
       vtkErrorMacro("ConvertSegmentUsingPath: Invalid converter rule!");
       return false;
-    }
+      }
+
+    std::map<vtkDataObject*, vtkDataObject*> sourceAndTarget;
 
     // Perform conversion step
     currentConversionRule->PreConvert(this, segmentIDs);
     for (auto segmentID : segmentIDs)
-    {
+      {
       // TODO
       vtkSegment* segment = this->GetSegment(segmentID);
 
@@ -1003,10 +1005,10 @@ bool vtkSegmentation::ConvertSegmentsUsingPath(std::vector<std::string> segmentI
       vtkDataObject* sourceRepresentation = segment->GetRepresentation(
         currentConversionRule->GetSourceRepresentationName());
       if (!sourceRepresentation)
-      {
+        {
         vtkErrorMacro("ConvertSegmentUsingPath: Source representation does not exist!");
         return false;
-      }
+        }
 
       // Get target representation
       vtkSmartPointer<vtkDataObject> targetRepresentation = segment->GetRepresentation(
@@ -1014,21 +1016,34 @@ bool vtkSegmentation::ConvertSegmentsUsingPath(std::vector<std::string> segmentI
       // If target representation exists and we do not overwrite existing representations,
       // then no conversion is necessary with this conversion rule
       if (targetRepresentation.GetPointer() && !overwriteExisting)
-      {
+        {
         continue;
-      }
+        }
       // Create an empty target representation if it does not exist
       if (!targetRepresentation.GetPointer())
-      {
+        {
         targetRepresentation = vtkSmartPointer<vtkDataObject>::Take(
           currentConversionRule->ConstructRepresentationObjectByRepresentation(currentConversionRule->GetTargetRepresentationName()));
-      }
+        }
 
-      currentConversionRule->SetCurrentSegmentID(segmentID);
-      currentConversionRule->Convert(sourceRepresentation, targetRepresentation);
+      if (sourceAndTarget.find(sourceRepresentation) == sourceAndTarget.end())
+        {
+        currentConversionRule->SetCurrentSegmentID(segmentID);
+        currentConversionRule->Convert(sourceRepresentation, targetRepresentation);
+        }
+      else
+        {
+        targetRepresentation = sourceAndTarget[sourceRepresentation];
+        }
       // Add representation to segment
-      segment->AddRepresentation(currentConversionRule->GetTargetRepresentationName(), targetRepresentation);
-    }
+      std::vector<std::string> mergedSegmentIDs;
+      this->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, true);
+      for (std::string mergedSegmentID : mergedSegmentIDs)
+        {
+        vtkSegment* mergedSegment = this->GetSegment(mergedSegmentID);
+        mergedSegment->AddRepresentation(currentConversionRule->GetTargetRepresentationName(), targetRepresentation);
+        }
+      }
     currentConversionRule->PostConvert(this, segmentIDs);
 
   }
@@ -1227,18 +1242,21 @@ bool vtkSegmentation::CreateRepresentation(vtkSegmentationConverter::ConversionP
   this->Converter->SetConversionParameters(parameters);
 
   // Perform conversion on all segments (do overwrites)
-  for (SegmentMap::iterator segmentIt = this->Segments.begin(); segmentIt != this->Segments.end(); ++segmentIt)
-    {
-    std::vector<std::string> mergedSegmentIDs;
-    this->GetMergedLabelmapSegmentIds(segmentIt->first, mergedSegmentIDs, true);
-    if (!this->ConvertSegmentUsingPath(segmentIt->second, path, true))
-      {
-      vtkErrorMacro("CreateRepresentation: Conversion failed");
-      return false;
-      }
-    const char* segmentId = segmentIt->first.c_str();
-    this->InvokeEvent(vtkSegmentation::RepresentationModified, (void*)segmentId);
-    }
+  std::vector<std::string> segmentIDs;
+  this->GetSegmentIDs(segmentIDs);
+  this->ConvertSegmentsUsingPath(segmentIDs, path, true);
+  //for (SegmentMap::iterator segmentIt = this->Segments.begin(); segmentIt != this->Segments.end(); ++segmentIt)
+  //  {
+  //  std::vector<std::string> mergedSegmentIDs;
+  //  this->GetMergedLabelmapSegmentIds(segmentIt->first, mergedSegmentIDs, true);
+  //  if (!this->ConvertSegmentUsingPath(segmentIt->second, path, true))
+  //    {
+  //    vtkErrorMacro("CreateRepresentation: Conversion failed");
+  //    return false;
+  //    }
+  //  const char* segmentId = segmentIt->first.c_str();
+  //  this->InvokeEvent(vtkSegmentation::RepresentationModified, (void*)segmentId);
+  //  }
 
   this->InvokeEvent(vtkSegmentation::ContainedRepresentationNamesModified);
   return true;
@@ -1295,6 +1313,11 @@ void vtkSegmentation::InvalidateNonMasterRepresentations()
 void vtkSegmentation::GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds, bool includeMainSegmentId)
 {
   sharedSegmentIds.clear();
+  if (!segment)
+    {
+    return;
+    }
+
   if (this->GetMasterRepresentationName() != vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())
     {
     return;

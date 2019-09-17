@@ -88,13 +88,8 @@ protected:
   /// This function checks whether this is the case.
   bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap);
 
-  std::map<std::string, vtkMTimeType> InputMTime;
-  std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
-  std::map<std::string, vtkSmartPointer<vtkMultiBlockDataSet> > ConvertedSegments;
-  std::map<std::string, int> SegmentBlocks;
-
   std::map<vtkDataObject*, bool> Converted;
-  std::map<std::string, vtkSmartPointer<vtkUnstructuredGrid> > Surfaces;
+  std::map<vtkDataObject*, vtkSmartPointer<vtkPolyData> > InputOutput;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();
