@@ -1783,7 +1783,8 @@ bool vtkSlicerSegmentationsModuleLogic::GetSegmentClosedSurfaceRepresentation(vt
 
 //-----------------------------------------------------------------------------
 bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-  vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode/*=MODE_REPLACE*/, const int extent[6]/*=0*/ )
+  vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode/*=MODE_REPLACE*/, const int extent[6]/*=0*/,
+    bool minimumOfAllSegments/*=false*/)
 {
   if (!segmentationNode || segmentID.empty() || !labelmap)
     {
@@ -1893,7 +1894,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       resampledSegmentLabelmap = segmentLabelmap;
       }
 
-    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
+    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM && !minimumOfAllSegments)
       {
       vtkNew<vtkOrientedImageData> segmentMask;
       vtkNew<vtkImageThreshold> thresholdSegment;

@@ -483,20 +483,20 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
   vtkSmartPointer<vtkImageThreshold> inverter = vtkSmartPointer<vtkImageThreshold>::New();
   inverter->SetInputData(modifierLabelmap);
   //inverter->SetInValue(m_FillValue);
-  inverter->SetInValue(VTK_DOUBLE_MAX);
+  inverter->SetInValue(VTK_UNSIGNED_CHAR_MAX);
   inverter->SetOutValue(m_EraseValue);
   inverter->ThresholdByLower(0);
-  inverter->SetOutputScalarType(VTK_UNSIGNED_CHAR);
+  inverter->SetOutputScalarTypeToUnsignedChar();
 
   if (modificationMode == qSlicerSegmentEditorAbstractEffect::ModificationModeSet)
     {
     vtkSmartPointer<vtkImageThreshold> segmentInverter = vtkSmartPointer<vtkImageThreshold>::New();
     segmentInverter->SetInputData(segment->GetRepresentation(segmentationNode->GetSegmentation()->GetMasterRepresentationName()));
     segmentInverter->SetInValue(m_EraseValue);
-    segmentInverter->SetOutValue(VTK_DOUBLE_MAX);
+    segmentInverter->SetOutValue(VTK_UNSIGNED_CHAR_MAX);
     segmentInverter->ReplaceInOn();
     segmentInverter->ThresholdBetween(segment->GetValue(), segment->GetValue());
-    segmentInverter->SetOutputScalarType(VTK_UNSIGNED_CHAR);
+    segmentInverter->SetOutputScalarTypeToUnsignedChar();
     segmentInverter->Update();
     vtkNew<vtkOrientedImageData> invertedModifierLabelmap;
     invertedModifierLabelmap->ShallowCopy(segmentInverter->GetOutput());
@@ -557,12 +557,58 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
     vtkNew<vtkMatrix4x4> imageToWorldMatrix;
     modifierLabelmap->GetImageToWorldMatrix(imageToWorldMatrix.GetPointer());
     invertedModifierLabelmap->SetGeometryFromImageToWorldMatrix(imageToWorldMatrix.GetPointer());
-    for (std::vector<std::string>::iterator segmentIDIt = segmentIDsToOverwrite.begin(); segmentIDIt != segmentIDsToOverwrite.end(); ++segmentIDIt)
+
+    std::map<vtkDataObject*, bool> erased;
+    for (std::string currentSegmentID : segmentIDsToOverwrite)
       {
-      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
-        invertedModifierLabelmap.GetPointer(), segmentationNode, *segmentIDIt, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent))
+      vtkSegment* currentSegment = segmentationNode->GetSegmentation()->GetSegment(currentSegmentID);
+      vtkDataObject* dataObject = currentSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
+      if (erased[dataObject])
         {
-        qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (segmentIDIt->c_str());
+        continue;
+        }
+      erased[dataObject] = true;
+
+      vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);
+
+      std::vector<std::string> dontOverwriteIds;
+      std::vector<std::string> currentMergedIds;
+      segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIds(currentSegmentID, currentMergedIds, true);
+      for (std::string mergedSegmentId : currentMergedIds)
+        {
+        if (std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId) == segmentIDsToOverwrite.end())
+          {
+          dontOverwriteIds.push_back(mergedSegmentId);
+          }
+        }
+
+      vtkSmartPointer<vtkOrientedImageData> invertedModifierLabelmap2 = invertedModifierLabelmap;
+      if (dontOverwriteIds.size() > 0)
+        {
+        invertedModifierLabelmap2 = vtkSmartPointer<vtkOrientedImageData>::New();
+        invertedModifierLabelmap2->DeepCopy(invertedModifierLabelmap);
+
+        vtkNew<vtkOrientedImageData> maskImage;
+        maskImage->CopyDirections(currentLabelmap);
+        for (std::string dontOverwriteId : dontOverwriteIds)
+          {
+          vtkSegment* dontOverwriteSegment = segmentationNode->GetSegmentation()->GetSegment(dontOverwriteId);
+          vtkNew<vtkImageThreshold> threshold;
+          threshold->SetInputData(currentLabelmap);
+          threshold->ThresholdBetween(dontOverwriteSegment->GetValue(), dontOverwriteSegment->GetValue());
+          threshold->SetInValue(1);
+          threshold->SetOutValue(0);
+          threshold->SetOutputScalarTypeToUnsignedChar();
+          threshold->Update();
+          maskImage->ShallowCopy(threshold->GetOutput());
+          vtkOrientedImageDataResample::ApplyImageMask(invertedModifierLabelmap2, maskImage, VTK_UNSIGNED_CHAR_MAX, true);
+          }
+        }
+
+      if (!vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
+        invertedModifierLabelmap2, segmentationNode, currentSegmentID, vtkSlicerSegmentationsModuleLogic::MODE_MERGE_MIN, extent, true))
+        {
+        qCritical() << Q_FUNC_INFO << ": Failed to set modifier labelmap to segment " << (currentSegmentID.c_str());
         }
       }
     }

@@ -323,7 +323,8 @@ public:
     MODE_MERGE_MIN,
     MODE_MERGE_MASK
     };
-  static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=nullptr);
+  static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID,
+    int mergeMode=MODE_REPLACE, const int extent[6]=nullptr, bool minimumOfAllSegments=false);
 
   /// Assign terminology to segments in a segmentation node based on the labels of a labelmap node. Match is made based on the
   /// 3dSlicerLabel terminology type attribute. If the terminology context does not contain that attribute, match cannot be made.
