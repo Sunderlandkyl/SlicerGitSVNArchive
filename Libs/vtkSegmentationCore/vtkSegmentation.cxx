@@ -1083,6 +1083,10 @@ bool vtkSegmentation::ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentati
 
     // Perform conversion step
     std::string segmentID = this->GetSegmentIdBySegment(segment);
+    if (segmentID.empty())
+      {
+      continue; //TODO
+      }
     std::vector<std::string> segmentIDs = { segmentID };
     currentConversionRule->PreConvert(this, segmentIDs);
     currentConversionRule->SetCurrentSegmentID(segmentID);

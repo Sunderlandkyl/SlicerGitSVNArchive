@@ -47,6 +47,8 @@ public:
   static const std::string GetSmoothingFactorParameterName() { return "Smoothing factor"; };
   /// Conversion parameter: compute surface normals
   static const std::string GetComputeSurfaceNormalsParameterName() { return "Compute surface normals"; };
+  /// Conversion parameter: joint smoothing
+  static const std::string GetJointSmoothingParameterName() { return "Joint smoothing"; };
 
 public:
   static vtkBinaryLabelmapToClosedSurfaceConversionRule* New();
@@ -69,6 +71,8 @@ public:
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
 
+  bool CreateClosedSurface(vtkOrientedImageData* inputImage, vtkPolyData* outputPolydata, std::vector<std::string> segmentIDs);
+
   bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
 
   /// Get the cost of the conversion.
@@ -88,13 +92,8 @@ protected:
   /// This function checks whether this is the case.
   bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap);
 
-  std::map<std::string, vtkMTimeType> InputMTime;
-  std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
-  std::map<std::string, vtkSmartPointer<vtkMultiBlockDataSet> > ConvertedSegments;
-  std::map<std::string, double> SegmentValue;
-
-  std::map<vtkDataObject*, bool> Converted;
-  std::map<vtkDataObject*, vtkSmartPointer<vtkDataObject> > Surfaces;
+  std::map<std::string, int> LabelValues;
+  std::map<vtkDataObject*, vtkSmartPointer<vtkPolyData> > JointSmoothCache;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();
