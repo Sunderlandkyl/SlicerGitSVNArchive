@@ -71,21 +71,21 @@ public:
       {
       this->Actor = vtkSmartPointer<vtkActor>::New();
       vtkNew<vtkPolyDataMapper> mapper;
-      mapper->SetScalarVisibility(true);
-      mapper->SetColorModeToMapScalars();
-      mapper->UseLookupTableScalarRangeOn();
       this->Actor->SetMapper(mapper.GetPointer());
       this->Actor->SetVisibility(false);
       this->InputPolyData = vtkSmartPointer<vtkPolyData>::New();
       this->Selection = vtkSmartPointer<vtkSelectionSource>::New();
+      this->Selection->SetContentType(vtkSelectionNode::THRESHOLDS);
+      this->Selection->SetFieldType(vtkSelectionNode::POINT);
+      this->Selection->GetContainingCells();
       this->Extract = vtkSmartPointer<vtkExtractSelection>::New();
       this->Extract->SetInputData(this->InputPolyData);
       this->Extract->SetSelectionConnection(this->Selection->GetOutputPort());
       this->Geometry = vtkSmartPointer<vtkGeometryFilter>::New();
       this->Geometry->SetInputConnection(this->Extract->GetOutputPort());
       this->ModelWarper = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-      //this->ModelWarper->SetInputConnection(this->Geometry->GetOutputPort());
-      this->ModelWarper->SetInputData(this->InputPolyData);
+      this->ModelWarper->SetInputConnection(this->Geometry->GetOutputPort());
+      //this->ModelWarper->SetInputData(this->InputPolyData);
       mapper->SetInputConnection(this->ModelWarper->GetOutputPort());
       }
 
@@ -345,7 +345,10 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::AddDisplayNode(vtkMR
     {
     vtkSegment* segment = segmentation->GetSegment(*segmentIdIt);
     vtkDataObject* displayObject = segment->GetRepresentation(displayNode->GetDisplayRepresentationName3D());
-    pipelineVector[displayObject] = this->CreateSegmentPipeline(*segmentIdIt);
+    if (displayObject && pipelineVector.find(displayObject) == pipelineVector.end())
+      {
+      pipelineVector[displayObject] = this->CreateSegmentPipeline(*segmentIdIt);
+      }
     }
 
   this->DisplayPipelines.insert( std::make_pair(displayNode, pipelineVector) );
@@ -568,6 +571,8 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
       displayNode->GetSegmentDisplayProperties(segmentId, properties);
       pipeline->Actor->GetProperty()->SetOpacity(properties.Opacity3D * displayNode->GetOpacity3D() * displayNode->GetOpacity());
       pipeline->Actor->GetMapper()->SetScalarVisibility(false);
+      pipeline->Actor->GetMapper()->UseLookupTableScalarRangeOn();
+      pipeline->Actor->GetMapper()->SetColorModeToDefault();
       }
     else
       {
@@ -583,9 +588,12 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
         scalarRange[1] = std::max(scalarRange[1], segment->GetValue());
         }
       pipeline->Actor->GetMapper()->SetScalarVisibility(true);
+      pipeline->Actor->GetMapper()->UseLookupTableScalarRangeOn();
+      pipeline->Actor->GetMapper()->SetColorModeToMapScalars();
       lookupTable->SetTableRange(scalarRange);
       lookupTable->SetNumberOfTableValues(scalarRange[1] - scalarRange[0] + 1);
 
+      pipeline->Selection->RemoveAllThresholds();
       for (auto segmentId : mergedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
@@ -595,7 +603,7 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
         displayNode->GetSegmentColor(segmentId, color);
 
         bool segmentVisible = properties.Visible && properties.Visible3D;
-        if (segmentVisible)
+        if (segmentVisible) // TODO
           {
           pipeline->Selection->AddThreshold(segment->GetValue(), segment->GetValue());
           }
