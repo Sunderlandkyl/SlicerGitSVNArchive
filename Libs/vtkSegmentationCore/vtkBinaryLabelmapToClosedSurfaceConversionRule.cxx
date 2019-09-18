@@ -156,11 +156,11 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
       return false;
       }
 
-    if (this->Converted.find(orientedBinaryLabelmap) != this->Converted.end())
+    if (this->Converted[orientedBinaryLabelmap])
       {
       return true;
       }
-    this->Converted[binaryLabelmap] = true;
+    this->Converted[orientedBinaryLabelmap] = true;
 
     // Pad labelmap if it has non-background border voxels
     int* binaryLabelmapExtent = binaryLabelmap->GetExtent();
@@ -333,32 +333,11 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
       convertedSegment->ShallowCopy(transformPolyDataFilter->GetOutput());
       }
 
-    std::vector<std::string> segmentIDsToConvert;
-    for (std::string mergedSegmentID : mergedSegmentIDs)
-      {
-      std::vector<std::string>::iterator it = std::find(segmentIDs.begin(), segmentIDs.end(), mergedSegmentID);
-      if (it != segmentIDs.end())
-        {
-        segmentIDsToConvert.push_back(mergedSegmentID);
-        }
-      }
-
-    for (auto segmentID : segmentIDsToConvert)
+    this->Surfaces[orientedBinaryLabelmap] = convertedSegment;
+    for (std::string mergedSegmentID: mergedSegmentIDs)
       {
       vtkSegment* segment = segmentation->GetSegment(segmentID);
-
-      vtkNew<vtkSelectionSource> selection;
-      selection->SetContentType(vtkSelectionNode::THRESHOLDS);
-      selection->SetFieldType(vtkSelectionNode::POINT);
-      selection->GetContainingCells();
-      selection->AddThreshold(segment->GetValue(), segment->GetValue());
-      selection->SetContentType(vtkSelectionNode::THRESHOLDS);
-
-      vtkNew<vtkExtractSelection> threshold;
-      threshold->SetInputData(convertedSegment);
-      threshold->SetSelectionConnection(selection->GetOutputPort());
-      threshold->Update();
-      this->Surfaces[segmentID] = vtkUnstructuredGrid::SafeDownCast(threshold->GetOutput());
+      this->SegmentValue[mergedSegmentID] = segment->GetValue();
       }
     }
 
@@ -375,13 +354,20 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
     return false;
     }
 
-  std::map<std::string, vtkSmartPointer<vtkUnstructuredGrid> >::iterator surfaceIt = this->Surfaces.find(this->CurrentSegmentID);
+  vtkNew<vtkSelectionSource> selection;
+  selection->SetContentType(vtkSelectionNode::THRESHOLDS);
+  selection->SetFieldType(vtkSelectionNode::POINT);
+  selection->GetContainingCells();
+  selection->AddThreshold(this->SegmentValue[this->CurrentSegmentID], this->SegmentValue[this->CurrentSegmentID]);
+
+  vtkNew<vtkExtractSelection> threshold;
+  threshold->SetInputData(this->Surfaces[sourceRepresentation]);
+  threshold->SetSelectionConnection(selection->GetOutputPort());
+
   vtkNew<vtkGeometryFilter> geometryFilter;
-  geometryFilter->SetInputData(surfaceIt->second);
+  geometryFilter->SetInputConnection(threshold->GetOutputPort());
   geometryFilter->Update();
   closedSurfacePolyData->ShallowCopy(geometryFilter->GetOutput());
-
-  this->Surfaces.erase(surfaceIt);
 
   return true;
 }

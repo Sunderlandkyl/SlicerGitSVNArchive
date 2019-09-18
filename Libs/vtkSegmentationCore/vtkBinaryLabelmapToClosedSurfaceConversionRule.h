@@ -91,10 +91,10 @@ protected:
   std::map<std::string, vtkMTimeType> InputMTime;
   std::map<std::string, vtkWeakPointer<vtkOrientedImageData> > InputLabelmaps;
   std::map<std::string, vtkSmartPointer<vtkMultiBlockDataSet> > ConvertedSegments;
-  std::map<std::string, int> SegmentBlocks;
+  std::map<std::string, double> SegmentValue;
 
   std::map<vtkDataObject*, bool> Converted;
-  std::map<std::string, vtkSmartPointer<vtkUnstructuredGrid> > Surfaces;
+  std::map<vtkDataObject*, vtkSmartPointer<vtkDataObject> > Surfaces;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();
