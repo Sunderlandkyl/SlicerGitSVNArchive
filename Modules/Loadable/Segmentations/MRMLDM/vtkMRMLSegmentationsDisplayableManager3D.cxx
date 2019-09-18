@@ -33,7 +33,6 @@
 
 // VTK includes
 #include <vtkDataSetAttributes.h>
-#include <vtkLookupTable.h>
 #include <vtkMatrix4x4.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
@@ -49,10 +48,6 @@
 #include <vtkTransformPolyDataFilter.h>
 #include <vtkGeneralTransform.h>
 #include <vtkCellPicker.h>
-
-#include <vtkExtractSelection.h>
-#include <vtkGeometryFilter.h>
-#include <vtkSelectionSource.h>
 
 //---------------------------------------------------------------------------
 vtkStandardNewMacro ( vtkMRMLSegmentationsDisplayableManager3D );
@@ -71,33 +66,21 @@ public:
       {
       this->Actor = vtkSmartPointer<vtkActor>::New();
       vtkNew<vtkPolyDataMapper> mapper;
+      mapper->SetScalarVisibility(false); // ignore any scalars that an input mesh may contain
       this->Actor->SetMapper(mapper.GetPointer());
       this->Actor->SetVisibility(false);
       this->InputPolyData = vtkSmartPointer<vtkPolyData>::New();
-      this->Selection = vtkSmartPointer<vtkSelectionSource>::New();
-      this->Selection->SetContentType(vtkSelectionNode::THRESHOLDS);
-      this->Selection->SetFieldType(vtkSelectionNode::POINT);
-      this->Selection->GetContainingCells();
-      this->Extract = vtkSmartPointer<vtkExtractSelection>::New();
-      this->Extract->SetInputData(this->InputPolyData);
-      this->Extract->SetSelectionConnection(this->Selection->GetOutputPort());
-      this->Geometry = vtkSmartPointer<vtkGeometryFilter>::New();
-      this->Geometry->SetInputConnection(this->Extract->GetOutputPort());
       this->ModelWarper = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-      this->ModelWarper->SetInputConnection(this->Geometry->GetOutputPort());
-      //this->ModelWarper->SetInputData(this->InputPolyData);
+      this->ModelWarper->SetInputData(this->InputPolyData);
       mapper->SetInputConnection(this->ModelWarper->GetOutputPort());
       }
 
     vtkSmartPointer<vtkActor> Actor;
     vtkSmartPointer<vtkPolyData> InputPolyData;
-    vtkSmartPointer<vtkSelectionSource> Selection;
-    vtkSmartPointer<vtkExtractSelection> Extract;
-    vtkSmartPointer<vtkGeometryFilter> Geometry;
     vtkSmartPointer<vtkTransformPolyDataFilter> ModelWarper;
     };
 
-  typedef std::map<vtkWeakPointer<vtkDataObject>, const Pipeline*> PipelineMapType; // first: segment ID; second: display pipeline
+  typedef std::map<std::string, const Pipeline*> PipelineMapType; // first: segment ID; second: display pipeline
   typedef std::map<vtkMRMLSegmentationDisplayNode*, PipelineMapType> PipelinesCacheType;
   PipelinesCacheType DisplayPipelines;
 
@@ -343,12 +326,7 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::AddDisplayNode(vtkMR
   segmentation->GetSegmentIDs(segmentIDs);
   for (std::vector< std::string >::const_iterator segmentIdIt = segmentIDs.begin(); segmentIdIt != segmentIDs.end(); ++segmentIdIt)
     {
-    vtkSegment* segment = segmentation->GetSegment(*segmentIdIt);
-    vtkDataObject* displayObject = segment->GetRepresentation(displayNode->GetDisplayRepresentationName3D());
-    if (displayObject && pipelineVector.find(displayObject) == pipelineVector.end())
-      {
-      pipelineVector[displayObject] = this->CreateSegmentPipeline(*segmentIdIt);
-      }
+    pipelineVector[*segmentIdIt] = this->CreateSegmentPipeline(*segmentIdIt);
     }
 
   this->DisplayPipelines.insert( std::make_pair(displayNode, pipelineVector) );
@@ -422,21 +400,18 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateSegmentPipelin
   segmentation->GetSegmentIDs(segmentIDs);
   for (std::vector< std::string >::const_iterator segmentIdIt = segmentIDs.begin(); segmentIdIt != segmentIDs.end(); ++segmentIdIt)
     {
-    vtkSegment* segment = segmentation->GetSegment(*segmentIdIt);
-    vtkDataObject* displayedRepresentation = segment->GetRepresentation(displayNode->GetDisplayRepresentationName3D());
     // If segment does not have a pipeline, create one
-
-    PipelineMapType::iterator pipelineIt = segmentPipelines.find(displayedRepresentation);
+    PipelineMapType::iterator pipelineIt = segmentPipelines.find(*segmentIdIt);
     if (pipelineIt == segmentPipelines.end())
       {
-      segmentPipelines[displayedRepresentation] = this->CreateSegmentPipeline(*segmentIdIt);
+      segmentPipelines[*segmentIdIt] = this->CreateSegmentPipeline(*segmentIdIt);
       vtkNew<vtkGeneralTransform> nodeToWorld;
       this->GetNodeTransformToWorld(segmentationNode, nodeToWorld.GetPointer());
       // It is important to only update the transform if the transform chain is actually changed,
       // because recomputing a non-linear transformation on a complex model may be very time-consuming.
-      if (!vtkMRMLTransformNode::AreTransformsEqual(nodeToWorld.GetPointer(), segmentPipelines[displayedRepresentation]->ModelWarper->GetTransform()))
+      if (!vtkMRMLTransformNode::AreTransformsEqual(nodeToWorld.GetPointer(), segmentPipelines[*segmentIdIt]->ModelWarper->GetTransform()))
         {
-        segmentPipelines[displayedRepresentation]->ModelWarper->SetTransform(nodeToWorld.GetPointer());
+        segmentPipelines[*segmentIdIt]->ModelWarper->SetTransform(nodeToWorld.GetPointer());
         }
       }
     }
@@ -444,26 +419,10 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateSegmentPipelin
   // Make sure each pipeline belongs to an existing segment
   PipelineMapType::iterator pipelineIt = segmentPipelines.begin();
   while (pipelineIt != segmentPipelines.end())
-  {
+    {
     const Pipeline* pipeline = pipelineIt->second;
-    vtkDataObject* dataObject = pipelineIt->first;
-    bool displayObjectInSegment = false;
-    if (dataObject)
-      {
-      for (int i = 0; i < segmentation->GetNumberOfSegments(); ++i)
-        {
-        vtkSegment* segment = segmentation->GetNthSegment(i);
-        std::string displayRepresentation = displayNode->GetDisplayRepresentationName3D();
-        vtkDataObject* displayObject = segment->GetRepresentation(displayRepresentation);
-        if (dataObject && displayObject == dataObject)
-          {
-          displayObjectInSegment = true;
-          break;
-          }
-        }
-      }
-
-    if (!displayObjectInSegment)
+    vtkSegment* segment = segmentation->GetSegment(pipelineIt->first);
+    if (segment == nullptr)
       {
       PipelineMapType::iterator erasedIt = pipelineIt;
       ++pipelineIt;
@@ -520,104 +479,27 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
     }
 
   // For all pipelines (pipeline per segment)
-  for (PipelineMapType::iterator pipelineIt = segmentPipelines.begin(); pipelineIt != segmentPipelines.end(); ++pipelineIt)
+  for (PipelineMapType::iterator pipelineIt=segmentPipelines.begin(); pipelineIt!=segmentPipelines.end(); ++pipelineIt)
     {
     const Pipeline* pipeline = pipelineIt->second;
 
-    vtkDataObject* dataObject = pipelineIt->first;
-    vtkSegment* firstSegment = nullptr;
-    for (int i = 0; i < segmentation->GetNumberOfSegments(); ++i)
-      {
-      vtkSegment* segment = segmentation->GetNthSegment(i);
-      std::string displayRepresentation = displayNode->GetDisplayRepresentationName3D();
-      vtkDataObject* displayObject = segment->GetRepresentation(displayRepresentation);
-      if (displayObject == dataObject)
-        {
-        firstSegment = segment;
-        break;
-        }
-      }
-
     // Update visibility
     vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-    if (!displayNodeVisible)
+    displayNode->GetSegmentDisplayProperties(pipelineIt->first, properties);
+    bool segmentVisible = displayNodeVisible && properties.Visible && properties.Visible3D;
+    pipeline->Actor->SetVisibility(segmentVisible);
+    if (!segmentVisible)
       {
-      pipeline->Actor->SetVisibility(false);
-      return;
+      continue;
       }
 
-    pipeline->Actor->SetVisibility(true);
-
     // Get poly data to display
-    vtkPolyData* polyData = vtkPolyData::SafeDownCast(dataObject);
+    vtkPolyData* polyData = vtkPolyData::SafeDownCast(
+      segmentation->GetSegmentRepresentation(pipelineIt->first, shownRepresentationName));
     if (!polyData || polyData->GetNumberOfPoints() == 0)
       {
       pipeline->Actor->SetVisibility(false);
       continue;
-      }
-
-    std::vector<std::string> mergedSegmentIds;
-    segmentation->GetMergedLabelmapSegmentIds(firstSegment, mergedSegmentIds, true);
-
-    // Get displayed color (if no override is defined then use the color from the segment)
-    double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 1.0 };
-    if (mergedSegmentIds.size() == 1)
-      {
-      std::string segmentId = mergedSegmentIds[0];
-      displayNode->GetSegmentColor(segmentId, color);
-      pipeline->Actor->GetProperty()->SetColor(color[0], color[1], color[2]);
-
-      vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-      displayNode->GetSegmentDisplayProperties(segmentId, properties);
-      pipeline->Actor->GetProperty()->SetOpacity(properties.Opacity3D * displayNode->GetOpacity3D() * displayNode->GetOpacity());
-      pipeline->Actor->GetMapper()->SetScalarVisibility(false);
-      pipeline->Actor->GetMapper()->UseLookupTableScalarRangeOn();
-      pipeline->Actor->GetMapper()->SetColorModeToDefault();
-      }
-    else
-      {
-      pipeline->Actor->GetProperty()->SetOpacity(1.0);
-      vtkLookupTable* lookupTable = vtkLookupTable::SafeDownCast(pipeline->Actor->GetMapper()->GetLookupTable());
-      lookupTable->ResetAnnotations();
-
-      double scalarRange[2] = { VTK_DOUBLE_MAX, VTK_DOUBLE_MIN };
-      for (auto segmentId : mergedSegmentIds)
-        {
-        vtkSegment* segment = segmentation->GetSegment(segmentId);
-        scalarRange[0] = std::min(scalarRange[0], segment->GetValue());
-        scalarRange[1] = std::max(scalarRange[1], segment->GetValue());
-        }
-      pipeline->Actor->GetMapper()->SetScalarVisibility(true);
-      pipeline->Actor->GetMapper()->UseLookupTableScalarRangeOn();
-      pipeline->Actor->GetMapper()->SetColorModeToMapScalars();
-      lookupTable->SetTableRange(scalarRange);
-      lookupTable->SetNumberOfTableValues(scalarRange[1] - scalarRange[0] + 1);
-
-      pipeline->Selection->RemoveAllThresholds();
-      for (auto segmentId : mergedSegmentIds)
-        {
-        vtkSegment* segment = segmentation->GetSegment(segmentId);
-
-        vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-        displayNode->GetSegmentDisplayProperties(segmentId, properties);
-        displayNode->GetSegmentColor(segmentId, color);
-
-        bool segmentVisible = properties.Visible && properties.Visible3D;
-        if (segmentVisible) // TODO
-          {
-          pipeline->Selection->AddThreshold(segment->GetValue(), segment->GetValue());
-          }
-
-        if (properties.Visible && properties.Visible3D)
-          {
-          color[3] = properties.Opacity3D * displayNode->GetOpacity3D() * displayNode->GetOpacity();
-          }
-        else
-          {
-          color[3] = 0.0;
-          }
-        lookupTable->SetTableValue(lookupTable->GetIndex(segment->GetValue()), color);
-        }
       }
 
     // Set node to world transform to identity by default
@@ -626,6 +508,10 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
     this->GetNodeTransformToWorld(segmentationNode, nodeToWorld.GetPointer());
     pipeline->ModelWarper->SetTransform(nodeToWorld.GetPointer());
     pipeline->InputPolyData->ShallowCopy(polyData);
+
+    // Get displayed color (if no override is defined then use the color from the segment)
+    double color[3] = {vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2]};
+    displayNode->GetSegmentColor(pipelineIt->first, color);
 
     // Update pipeline actor
     pipeline->Actor->GetProperty()->SetRepresentation(displayNode->GetRepresentation());
@@ -636,6 +522,9 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::UpdateDisplayNodePip
     pipeline->Actor->GetProperty()->SetShading(displayNode->GetShading());
     pipeline->Actor->GetProperty()->SetFrontfaceCulling(displayNode->GetFrontfaceCulling());
     pipeline->Actor->GetProperty()->SetBackfaceCulling(displayNode->GetBackfaceCulling());
+
+    pipeline->Actor->GetProperty()->SetColor(color[0], color[1], color[2]);
+    pipeline->Actor->GetProperty()->SetOpacity(properties.Opacity3D * displayNode->GetOpacity3D() * displayNode->GetOpacity());
 
     pipeline->Actor->SetPickable(segmentationNode->GetSelectable());
     if (displayNode->GetSelected())
@@ -760,58 +649,56 @@ void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::FindPickedDisplayNod
     return;
     }
 
-  // TODO
-  //PipelinesCacheType::iterator pipelinesIt;
-  //for (pipelinesIt = this->DisplayPipelines.begin(); pipelinesIt!=this->DisplayPipelines.end(); ++pipelinesIt)
-  //  {
-  //  vtkMRMLSegmentationDisplayNode* currentDisplayNode = pipelinesIt->first;
-  //  for (PipelineMapType::iterator pipelineIt=pipelinesIt->second.begin(); pipelineIt!=pipelinesIt->second.end(); ++pipelineIt)
-  //    {
-  //    if (pipelineIt->second->ModelWarper->GetOutput() == mesh)
-  //      {
-  //      this->PickedDisplayNodeID = currentDisplayNode->GetID();
-  //      this->PickedSegmentID = pipelineIt->first;
-  //      return; // Display node and segment found
-  //      }
-  //    }
-  //  }
+  PipelinesCacheType::iterator pipelinesIt;
+  for (pipelinesIt = this->DisplayPipelines.begin(); pipelinesIt!=this->DisplayPipelines.end(); ++pipelinesIt)
+    {
+    vtkMRMLSegmentationDisplayNode* currentDisplayNode = pipelinesIt->first;
+    for (PipelineMapType::iterator pipelineIt=pipelinesIt->second.begin(); pipelineIt!=pipelinesIt->second.end(); ++pipelineIt)
+      {
+      if (pipelineIt->second->ModelWarper->GetOutput() == mesh)
+        {
+        this->PickedDisplayNodeID = currentDisplayNode->GetID();
+        this->PickedSegmentID = pipelineIt->first;
+        return; // Display node and segment found
+        }
+      }
+    }
 }
 
 //---------------------------------------------------------------------------
 void vtkMRMLSegmentationsDisplayableManager3D::vtkInternal::FindFirstPickedDisplayNodeFromPickerProp3Ds()
 {
-  // TODO
-  //this->PickedDisplayNodeID = "";
-  //this->PickedSegmentID = "";
-  //if (!this->CellPicker)
-  //  {
-  //  return;
-  //  }
+  this->PickedDisplayNodeID = "";
+  this->PickedSegmentID = "";
+  if (!this->CellPicker)
+    {
+    return;
+    }
 
-  //vtkProp3DCollection* props = this->CellPicker->GetProp3Ds();
-  //for (int propIndex=0; propIndex<props->GetNumberOfItems(); ++propIndex)
-  //  {
-  //  vtkProp3D* pickedProp = vtkProp3D::SafeDownCast(props->GetItemAsObject(propIndex));
-  //  if (!pickedProp)
-  //    {
-  //    continue;
-  //    }
+  vtkProp3DCollection* props = this->CellPicker->GetProp3Ds();
+  for (int propIndex=0; propIndex<props->GetNumberOfItems(); ++propIndex)
+    {
+    vtkProp3D* pickedProp = vtkProp3D::SafeDownCast(props->GetItemAsObject(propIndex));
+    if (!pickedProp)
+      {
+      continue;
+      }
 
-  //  PipelinesCacheType::iterator pipelinesIt;
-  //  for (pipelinesIt = this->DisplayPipelines.begin(); pipelinesIt!=this->DisplayPipelines.end(); ++pipelinesIt)
-  //    {
-  //    vtkMRMLSegmentationDisplayNode* currentDisplayNode = pipelinesIt->first;
-  //    for (PipelineMapType::iterator pipelineIt=pipelinesIt->second.begin(); pipelineIt!=pipelinesIt->second.end(); ++pipelineIt)
-  //      {
-  //      if (pipelineIt->second->Actor.GetPointer() == pickedProp)
-  //        {
-  //        this->PickedDisplayNodeID = currentDisplayNode->GetID();
-  //        this->PickedSegmentID = pipelineIt->first;
-  //        return; // Display node and segment found
-  //        }
-  //      }
-  //    }
-  //  }
+    PipelinesCacheType::iterator pipelinesIt;
+    for (pipelinesIt = this->DisplayPipelines.begin(); pipelinesIt!=this->DisplayPipelines.end(); ++pipelinesIt)
+      {
+      vtkMRMLSegmentationDisplayNode* currentDisplayNode = pipelinesIt->first;
+      for (PipelineMapType::iterator pipelineIt=pipelinesIt->second.begin(); pipelineIt!=pipelinesIt->second.end(); ++pipelineIt)
+        {
+        if (pipelineIt->second->Actor.GetPointer() == pickedProp)
+          {
+          this->PickedDisplayNodeID = currentDisplayNode->GetID();
+          this->PickedSegmentID = pipelineIt->first;
+          return; // Display node and segment found
+          }
+        }
+      }
+    }
 }
 
 

@@ -26,24 +26,45 @@
 
 // VTK includes
 #include <vtkVersion.h> // must precede reference to VTK_MAJOR_VERSION
+#include <vtkCompositeDataGeometryFilter.h>
+#include <vtkCompositeDataIterator.h>
 #include <vtkDecimatePro.h>
 #if VTK_MAJOR_VERSION >= 9 || (VTK_MAJOR_VERSION >= 8 && VTK_MINOR_VERSION >= 2)
   #include <vtkDiscreteFlyingEdges3D.h>
 #else
   #include <vtkDiscreteMarchingCubes.h>
 #endif
+#include <vtkExtractSelectedThresholds.h>
+#include <vtkGeometryFilter.h>
 #include <vtkImageChangeInformation.h>
 #include <vtkImageConstantPad.h>
 #include <vtkImageThreshold.h>
+#include <vtkMultiBlockDataSet.h>
+#include <vtkMultiThreshold.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
 #include <vtkPolyDataNormals.h>
+#include <vtkSelection.h>
+#include <vtkSelectionNode.h>
+#include <vtkThreshold.h>
 #include <vtkTransform.h>
 #include <vtkTransformPolyDataFilter.h>
+#include <vtkUnstructuredGrid.h>
 #include <vtkWindowedSincPolyDataFilter.h>
 #include <vtkMatrix3x3.h>
 #include <vtkReverseSense.h>
+#include <vtkStringToNumeric.h>
+#include <vtkStringArray.h>
+
+#include <vtkSelection.h>
+#include <vtkSelectionNode.h>
+#include <vtkFloatArray.h>
+#include <vtkExtractSelectedIds.h>
+#include <vtkInformation.h>
+#include <vtkExtractSelection.h>
+#include <vtkSelectionSource.h>
 
 //----------------------------------------------------------------------------
 vtkSegmentationConverterRuleNewMacro(vtkBinaryLabelmapToClosedSurfaceConversionRule);
@@ -199,7 +220,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
     segmentation->GetMergedLabelmapSegmentIds(segment, mergedSegmentIDs, true);
 
     int valueIndex = 0;
-    for (std::vector<std::string>::iterator segmentIDIt = mergedSegmentIDs.begin(); segmentIDIt != mergedSegmentIDs.end(); ++segmentIDIt)
+    for (std::vector<std::string>::iterator segmentIDIt = segmentIDs.begin(); segmentIDIt != segmentIDs.end(); ++segmentIDIt)
       {
       vtkSegment* currentSegment = segmentation->GetSegment(*segmentIDIt);
       double labelmapFillValue = currentSegment->GetValue();
@@ -253,7 +274,6 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
       smoother->FeatureEdgeSmoothingOff();
       smoother->NonManifoldSmoothingOn();
       smoother->NormalizeCoordinatesOn();
-      smoother->SetFeatureAngle(90.0);
       smoother->Update();
       processingResult = smoother->GetOutput();
       }
@@ -313,7 +333,33 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
       convertedSegment->ShallowCopy(transformPolyDataFilter->GetOutput());
       }
 
-    this->InputOutput[segment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())] = convertedSegment;
+    std::vector<std::string> segmentIDsToConvert;
+    for (std::string mergedSegmentID : mergedSegmentIDs)
+      {
+      std::vector<std::string>::iterator it = std::find(segmentIDs.begin(), segmentIDs.end(), mergedSegmentID);
+      if (it != segmentIDs.end())
+        {
+        segmentIDsToConvert.push_back(mergedSegmentID);
+        }
+      }
+
+    for (auto segmentID : segmentIDsToConvert)
+      {
+      vtkSegment* segment = segmentation->GetSegment(segmentID);
+
+      vtkNew<vtkSelectionSource> selection;
+      selection->SetContentType(vtkSelectionNode::THRESHOLDS);
+      selection->SetFieldType(vtkSelectionNode::POINT);
+      selection->GetContainingCells();
+      selection->AddThreshold(segment->GetValue(), segment->GetValue());
+      selection->SetContentType(vtkSelectionNode::THRESHOLDS);
+
+      vtkNew<vtkExtractSelection> threshold;
+      threshold->SetInputData(convertedSegment);
+      threshold->SetSelectionConnection(selection->GetOutputPort());
+      threshold->Update();
+      this->Surfaces[segmentID] = vtkUnstructuredGrid::SafeDownCast(threshold->GetOutput());
+      }
     }
 
   return true;
@@ -329,8 +375,13 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
     return false;
     }
 
-  vtkPolyData* object = this->InputOutput[sourceRepresentation];
-  closedSurfacePolyData->ShallowCopy(object);
+  std::map<std::string, vtkSmartPointer<vtkUnstructuredGrid> >::iterator surfaceIt = this->Surfaces.find(this->CurrentSegmentID);
+  vtkNew<vtkGeometryFilter> geometryFilter;
+  geometryFilter->SetInputData(surfaceIt->second);
+  geometryFilter->Update();
+  closedSurfacePolyData->ShallowCopy(geometryFilter->GetOutput());
+
+  this->Surfaces.erase(surfaceIt);
 
   return true;
 }
@@ -339,7 +390,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkDataObject* sour
 bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs)
 {
   this->Converted.clear();
-  this->InputOutput.clear();
+  this->Surfaces.clear();
   return true;
 }
 

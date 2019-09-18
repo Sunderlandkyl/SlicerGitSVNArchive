@@ -771,8 +771,8 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentToRepresentationNode(vtkSeg
       }
 
     // Export closed surface representation into model node
-    vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::Take(vtkPolyData::SafeDownCast(
-      segmentationNode->GetClosedSurfaceRepresentation(segmentId)));
+    vtkPolyData* polyData = vtkPolyData::SafeDownCast(
+      segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName()) );
     vtkSmartPointer<vtkPolyData> polyDataCopy = vtkSmartPointer<vtkPolyData>::New();
     polyDataCopy->DeepCopy(polyData); // Make copy of poly data so that the model node does not change if segment changes
     modelNode->SetAndObservePolyData(polyDataCopy);

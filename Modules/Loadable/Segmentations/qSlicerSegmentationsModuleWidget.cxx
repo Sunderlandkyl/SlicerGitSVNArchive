@@ -856,8 +856,6 @@ bool qSlicerSegmentationsModuleWidget::importToCurrentSegmentation()
     qWarning() << Q_FUNC_INFO << ": No segmentation selected";
     return false;
     }
-
-  MRMLNodeModifyBlocker blocker(currentSegmentationNode);
   currentSegmentationNode->CreateDefaultDisplayNodes();
 
   vtkMRMLNode* otherRepresentationNode = d->MRMLNodeComboBox_ImportExportNode->currentNode();
