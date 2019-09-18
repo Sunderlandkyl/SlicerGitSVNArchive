@@ -40,6 +40,7 @@
 #include <vtkBoundingBox.h>
 #include <vtkCallbackCommand.h>
 #include <vtkGeneralTransform.h>
+#include <vtkGeometryFilter.h>
 #include <vtkHomogeneousTransform.h>
 #include <vtkImageThreshold.h>
 #include <vtkIntArray.h>
@@ -51,6 +52,7 @@
 #include <vtkSmartPointer.h>
 #include <vtkStringArray.h>
 #include <vtkMatrix4x4.h>
+#include <vtkThreshold.h>
 #include <vtkTransform.h>
 
 // STD includes
@@ -946,7 +948,23 @@ vtkPolyData* vtkMRMLSegmentationNode::GetClosedSurfaceRepresentation(const std::
     vtkErrorMacro("GetClosedSurfaceRepresentation: Invalid segment");
     return nullptr;
     }
-  return vtkPolyData::SafeDownCast(segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName()));
+
+  vtkDataObject* dataObject = segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName());
+  if (!dataObject)
+    {
+    return nullptr;
+    }
+
+  vtkNew<vtkThreshold> threshold;
+  threshold->SetInputData(dataObject);
+  threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
+  vtkNew<vtkGeometryFilter> geometry;
+  geometry->SetInputConnection(threshold->GetOutputPort());
+  geometry->Update();
+
+  vtkPolyData* outputPolyData = vtkPolyData::New();
+  outputPolyData->ShallowCopy(geometry->GetOutput());
+  return vtkPolyData::SafeDownCast(outputPolyData);
 }
 
 //---------------------------------------------------------------------------

@@ -221,6 +221,7 @@ public:
   /// If representation does not exist yet then call CreateClosedSurfaceRepresentation() before.
   /// If closed surface is the master representation then the returned object can be modified, and
   /// all other representations will be automatically updated.
+  VTK_NEWINSTANCE
   virtual vtkPolyData* GetClosedSurfaceRepresentation(const std::string segmentId);
 
   /// Add new segment from a closed surface.

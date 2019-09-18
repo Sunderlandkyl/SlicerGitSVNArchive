@@ -743,8 +743,8 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentToRepresentationNode(vtkSeg
       }
 
     // Export binary labelmap representation into labelmap volume node
-    vtkOrientedImageData* orientedImageData = vtkOrientedImageData::SafeDownCast(
-      segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) );
+    vtkSmartPointer<vtkOrientedImageData> orientedImageData = vtkSmartPointer<vtkOrientedImageData>::Take(vtkOrientedImageData::SafeDownCast(
+      segmentationNode->GetBinaryLabelmapRepresentation(segmentId)));
     bool success = vtkSlicerSegmentationsModuleLogic::CreateLabelmapVolumeFromOrientedImageData(orientedImageData, labelmapNode);
     if (!success)
       {
@@ -771,8 +771,8 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentToRepresentationNode(vtkSeg
       }
 
     // Export closed surface representation into model node
-    vtkPolyData* polyData = vtkPolyData::SafeDownCast(
-      segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName()) );
+    vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::Take(vtkPolyData::SafeDownCast(
+      segmentationNode->GetClosedSurfaceRepresentation(segmentId)));
     vtkSmartPointer<vtkPolyData> polyDataCopy = vtkSmartPointer<vtkPolyData>::New();
     polyDataCopy->DeepCopy(polyData); // Make copy of poly data so that the model node does not change if segment changes
     modelNode->SetAndObservePolyData(polyDataCopy);
