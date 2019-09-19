@@ -894,7 +894,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         }
 
       // Get displayed color (if no override is defined then use the color from the segment)
-      double color[3] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2] };
+      double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 1.0 };
       displayNode->GetSegmentColor(segmentID, color);
 
       // Update pipeline actors
@@ -904,7 +904,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->PolyDataOutlineActor->GetProperty()->SetLineWidth(displayNode->GetSliceIntersectionThickness());
       pipeline->PolyDataOutlineActor->SetPosition(0,0);
       pipeline->PolyDataFillActor->SetVisibility(segmentFillVisible);
-      pipeline->PolyDataFillActor->GetProperty()->SetColor(color[0], color[1], color[2]);
+      pipeline->PolyDataFillActor->GetProperty()->SetColor(color);
       pipeline->PolyDataFillActor->GetProperty()->SetOpacity(fillOpacity);
       pipeline->PolyDataFillActor->SetPosition(0,0);
       }
@@ -959,31 +959,33 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         maximumValue = scalarRange->GetValue(1);
         }
 
-      // Set segment color
-      int minLabelmapValue = VTK_INT_MAX;
-      int maxLabelmapValue = VTK_INT_MIN;
+      vtkNew<vtkPiecewiseFunction> outlineOpacityFunction;
+      vtkNew<vtkPiecewiseFunction> fillOpacityFunction;
 
-      for (std::string segmentId : mergedSegmentIds)
+      if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())
         {
-        vtkSegment* segment = segmentation->GetSegment(segmentId);
-        int labelmapValue = segment->GetValue();
-        minLabelmapValue = std::min(minLabelmapValue, labelmapValue);
-        maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
+        // Set segment color
+        int minLabelmapValue = VTK_INT_MAX;
+        int maxLabelmapValue = VTK_INT_MIN;
+
+        for (std::string segmentId : mergedSegmentIds)
+        {
+          vtkSegment* segment = segmentation->GetSegment(segmentId);
+          int labelmapValue = segment->GetValue();
+          minLabelmapValue = std::min(minLabelmapValue, labelmapValue);
+          maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
         }
 
-      double colorInvisible[4] = { 0,0,0,0 };
+        double colorInvisible[4] = { 0.0, 0.0, 0.0, 0.0 };
 
-      unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(minLabelmapValue-1 , 0,0, 0);
-      pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, colorInvisible);
+        unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(minLabelmapValue - 1, 0, 0, 0);
+        pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, colorInvisible);
+        outlineOpacityFunction->AddPoint(minLabelmapValue - 1, 0.0);
 
-      unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(minLabelmapValue - 1, 0, 0, 0);
-      pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, colorInvisible);
-
-      vtkNew<vtkPiecewiseFunction> outlineOpacityFunction;
-      outlineOpacityFunction->AddPoint(minLabelmapValue - 1, 0);
-
-      vtkNew<vtkPiecewiseFunction> fillOpacityFunction;
-      fillOpacityFunction->AddPoint(minLabelmapValue - 1, 0);
+        unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(minLabelmapValue - 1, 0, 0, 0);
+        pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, colorInvisible);
+        fillOpacityFunction->AddPoint(minLabelmapValue - 1, 0.0);
+        }
 
       for (std::string segmentId : mergedSegmentIds)
         {
@@ -1014,44 +1016,56 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
         displayNode->GetSegmentColor(segmentId, color);
 
-        unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(labelmapValue, color[0], color[1], color[2]);
-        color[3] = outlineOpacity;
-        pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, color);
-        outlineOpacityFunction->AddPoint(labelmapValue, color[3]);
+        //if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
+        //  {
+        //  unsigned int minimumOutlineIndex = pipeline->LookupTableOutline->AddRGBPoint(0.0, color[0], color[1], color[2]);
+        //  color[3] = 0.0;
+        //  pipeline->LookupTableOutline->SetIndexedColorRGBA(minimumOutlineIndex, color);
+        //  outlineOpacityFunction->AddPoint(labelmapValue, color[3]);
 
-        if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
+        //  unsigned int maximumOutlineIndex = pipeline->LookupTableOutline->AddRGBPoint(1.0, color[0], color[1], color[2]);
+        //  color[3] = outlineOpacity;
+        //  pipeline->LookupTableOutline->SetIndexedColorRGBA(maximumOutlineIndex, color);
+        //  outlineOpacityFunction->AddPoint(labelmapValue, color[3]);
+
+        //  if (this->SmoothFractionalLabelMapBorder)
+        //    {
+        //    //TODO: this works for labelmaps that are int or char type, but would need
+        //    // to be changed for floating point representations since it only creates table values in integer increments
+        //    unsigned int minimumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(minimumValue, color[0], color[1], color[2]);
+        //    color[3] = 0.0;
+        //    pipeline->LookupTableFill->SetIndexedColorRGBA(minimumFillIndex, color);
+        //    fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+
+        //    unsigned int maximumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(maximumValue, color[0], color[1], color[2]);
+        //    color[3] = fillOpacity;
+        //    pipeline->LookupTableFill->SetIndexedColorRGBA(maximumFillIndex, color);
+        //    fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+        //    }
+        //  else
+        //    {
+        //    color[3] = 0.0;
+        //    unsigned int minimumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(0.0, color[0], color[1], color[2]);
+        //    pipeline->LookupTableFill->SetIndexedColorRGBA(minimumFillIndex, color);
+        //    fillOpacityFunction->AddPoint(0.0, 0.0);
+
+        //    unsigned int maximumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(1.0, color[0], color[1], color[2]);
+        //    color[3] = fillOpacity;
+        //    pipeline->LookupTableFill->SetIndexedColorRGBA(maximumFillIndex, color);
+        //    fillOpacityFunction->AddPoint(1.0, color[3]);
+        //    }
+        //  }
+        //else
           {
-          if (!this->SmoothFractionalLabelMapBorder)
-            {
-            //TODO: this works for labelmaps that are int or char type, but would need
-            // to be changed for floating point representations since it only creates table values in integer increments
-            unsigned int minimumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(minimumValue, color[0], color[1], color[2]);
-            color[3] = 0.0;
-            pipeline->LookupTableFill->SetIndexedColorRGBA(minimumFillIndex, color);
-            fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+          unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(labelmapValue, color[0], color[1], color[2]);
+          color[3] = outlineOpacity;
+          pipeline->LookupTableFill->SetIndexedColorRGBA(outlineIndex, color);
+          outlineOpacityFunction->AddPoint(minimumValue, color[3]);
 
-            unsigned int maximumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(maximumValue, color[0], color[1], color[2]);
-            color[3] = fillOpacity;
-            pipeline->LookupTableFill->SetIndexedColorRGBA(maximumFillIndex, color);
-            fillOpacityFunction->AddPoint(labelmapValue, color[3]);
-            }
-          else
-            {
-            color[3] = 0.0;
-            unsigned int zeroIndex = pipeline->LookupTableOutline->AddRGBPoint(0.0, color[0], color[1], color[2]);
-            fillOpacityFunction->AddPoint(zeroIndex, color[3]);
-
-            color[3] = fillOpacity;
-            unsigned int fillIndex = pipeline->LookupTableOutline->AddRGBPoint(1.0, color[0], color[1], color[2]);
-            fillOpacityFunction->AddPoint(fillIndex, color[3]);
-            }
-          }
-        else
-          {
           unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(labelmapValue, color[0], color[1], color[2]);
           color[3] = fillOpacity;
           pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, color);
-          fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+          fillOpacityFunction->AddPoint(maximumValue, color[3]);
           }
         }
       pipeline->LookupTableFill->SetScalarOpacityFunction(fillOpacityFunction);
