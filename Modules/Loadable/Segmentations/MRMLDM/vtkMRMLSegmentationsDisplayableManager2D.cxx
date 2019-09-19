@@ -225,8 +225,8 @@ public:
       this->LookupTableFill->EnableOpacityMappingOn();
 
       this->ImageThreshold->SetInputConnection(this->Reslice->GetOutputPort());
-      this->ImageThreshold->SetOutValue(0); // TODO
-      this->ImageThreshold->SetInValue(1); // TODO
+      this->ImageThreshold->SetOutValue(1);
+      this->ImageThreshold->SetInValue(0);
 
       // Image outline
       this->LabelOutline->SetInputConnection(this->Reslice->GetOutputPort());
@@ -774,14 +774,13 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         }
       }
 
-
     if (!firstSegment)
       {
       continue;
       }
 
     std::vector<std::string> mergedSegmentIds;
-    segmentation->GetMergedLabelmapSegmentIds(firstSegment, mergedSegmentIds, true);
+    segmentation->GetMergedLabelmapSegmentIdsForRepresentation(firstSegment, displayNode->GetDisplayRepresentationName2D(), mergedSegmentIds, true);
 
     // Get representation to display
     vtkPolyData* polyData = vtkPolyData::SafeDownCast(dataObject);
@@ -796,28 +795,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         }
       }
 
-    /*if ( (!segmentOutlineVisible && !segmentFillVisible)
-      || ((!polyData || polyData->GetNumberOfPoints() == 0) && !imageData) )
-      {
-      pipeline->PolyDataOutlineActor->SetVisibility(false);
-      pipeline->PolyDataFillActor->SetVisibility(false);
-      pipeline->ImageOutlineActor->SetVisibility(false);
-      pipeline->ImageFillActor->SetVisibility(false);
-      continue;
-      }*/
-
-
-    //bool pipelineVisiblity = this->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, mergedSegmentIds[0]); //TODO: Actually determine
     bool pipelineVisiblity = false;
     for (std::string segmentId : mergedSegmentIds)
       {
-      vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
-      displayNode->GetSegmentDisplayProperties(segmentId, properties);
-      if (displayNode->GetSegmentVisibility(segmentId))
-        {
-        pipelineVisiblity = true;
-        break;
-        }
+      pipelineVisiblity |= this->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, segmentId);
       }
 
     if (!pipelineVisiblity)
@@ -848,6 +829,15 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       // Turn off image visibility when showing poly data
       pipeline->ImageOutlineActor->SetVisibility(false);
       pipeline->ImageFillActor->SetVisibility(false);
+
+      if ((!segmentOutlineVisible && !segmentFillVisible) || (!polyData || polyData->GetNumberOfPoints() == 0))
+        {
+        pipeline->PolyDataOutlineActor->SetVisibility(false);
+        pipeline->PolyDataFillActor->SetVisibility(false);
+        pipeline->ImageOutlineActor->SetVisibility(false);
+        pipeline->ImageFillActor->SetVisibility(false);
+        continue;
+        }
 
       // Only update slice intersection if it has changed
       if ( pipeline->SliceIntersectionUpdatedTime < polyData->GetMTime()
@@ -903,7 +893,8 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
           }
         }
 
-      double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
+      // Get displayed color (if no override is defined then use the color from the segment)
+      double color[3] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2] };
       displayNode->GetSegmentColor(segmentID, color);
 
       // Update pipeline actors
@@ -913,13 +904,12 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       pipeline->PolyDataOutlineActor->GetProperty()->SetLineWidth(displayNode->GetSliceIntersectionThickness());
       pipeline->PolyDataOutlineActor->SetPosition(0,0);
       pipeline->PolyDataFillActor->SetVisibility(segmentFillVisible);
-      pipeline->PolyDataFillActor->GetProperty()->SetColor(color);
+      pipeline->PolyDataFillActor->GetProperty()->SetColor(color[0], color[1], color[2]);
       pipeline->PolyDataFillActor->GetProperty()->SetOpacity(fillOpacity);
       pipeline->PolyDataFillActor->SetPosition(0,0);
       }
     // If shown representation is image data
     else if (imageData)
-
       {
       // Turn off poly data visibility when showing image
       pipeline->PolyDataOutlineActor->SetVisibility(false);
@@ -974,12 +964,12 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       int maxLabelmapValue = VTK_INT_MIN;
 
       for (std::string segmentId : mergedSegmentIds)
-      {
+        {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
         int labelmapValue = segment->GetValue();
         minLabelmapValue = std::min(minLabelmapValue, labelmapValue);
         maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
-      }
+        }
 
       double colorInvisible[4] = { 0,0,0,0 };
 
@@ -1024,35 +1014,49 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
         displayNode->GetSegmentColor(segmentId, color);
 
-        unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(labelmapValue,color[0], color[1], color[2]);
+        unsigned int outlineIndex = pipeline->LookupTableOutline->AddRGBPoint(labelmapValue, color[0], color[1], color[2]);
         color[3] = outlineOpacity;
         pipeline->LookupTableOutline->SetIndexedColorRGBA(outlineIndex, color);
         outlineOpacityFunction->AddPoint(labelmapValue, color[3]);
 
-        unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(labelmapValue,color[0], color[1], color[2]);
-        color[3] = fillOpacity;
-        pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, color);
-        fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+        if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
+          {
+          if (!this->SmoothFractionalLabelMapBorder)
+            {
+            //TODO: this works for labelmaps that are int or char type, but would need
+            // to be changed for floating point representations since it only creates table values in integer increments
+            unsigned int minimumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(minimumValue, color[0], color[1], color[2]);
+            color[3] = 0.0;
+            pipeline->LookupTableFill->SetIndexedColorRGBA(minimumFillIndex, color);
+            fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+
+            unsigned int maximumFillIndex = pipeline->LookupTableOutline->AddRGBPoint(maximumValue, color[0], color[1], color[2]);
+            color[3] = fillOpacity;
+            pipeline->LookupTableFill->SetIndexedColorRGBA(maximumFillIndex, color);
+            fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+            }
+          else
+            {
+            color[3] = 0.0;
+            unsigned int zeroIndex = pipeline->LookupTableOutline->AddRGBPoint(0.0, color[0], color[1], color[2]);
+            fillOpacityFunction->AddPoint(zeroIndex, color[3]);
+
+            color[3] = fillOpacity;
+            unsigned int fillIndex = pipeline->LookupTableOutline->AddRGBPoint(1.0, color[0], color[1], color[2]);
+            fillOpacityFunction->AddPoint(fillIndex, color[3]);
+            }
+          }
+        else
+          {
+          unsigned int fillIndex = pipeline->LookupTableFill->AddRGBPoint(labelmapValue, color[0], color[1], color[2]);
+          color[3] = fillOpacity;
+          pipeline->LookupTableFill->SetIndexedColorRGBA(fillIndex, color);
+          fillOpacityFunction->AddPoint(labelmapValue, color[3]);
+          }
         }
       pipeline->LookupTableFill->SetScalarOpacityFunction(fillOpacityFunction);
       pipeline->LookupTableOutline->SetScalarOpacityFunction(outlineOpacityFunction);
 
-      //if (!this->SmoothFractionalLabelMapBorder)
-      //  {
-      //  //TODO: this works for labelmaps that are int or char type, but would need
-      //  // to be changed for floating point representations since it only creates table values in integer increments
-      //  pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
-      //  pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
-      //  }
-
-      //double hsv[3] = {0,0,0};
-      //vtkMath::RGBToHSV(color, hsv);
-      //pipeline->LookupTableFill->SetHueRange(hsv[0], hsv[0]);
-      //pipeline->LookupTableFill->SetSaturationRange(hsv[1], hsv[1]);
-      //pipeline->LookupTableFill->SetValueRange(hsv[2], hsv[2]);
-      //double opacity = properties.Opacity2DFill * displayNode->GetOpacity2DFill() * displayNode->GetOpacity();
-      //pipeline->LookupTableFill->SetAlphaRange(opacity, opacity);
-      //pipeline->LookupTableFill->ForceBuild();
       pipeline->Reslice->SetBackgroundLevel(minimumValue);
 
       // Calculate image IJK to world RAS transform
@@ -1087,6 +1091,9 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       // Set the interpolation mode from the InterpolationType field if it exists
       // Default to nearest neighbor interpolation otherwise
       pipeline->Reslice->SetInterpolationModeToNearestNeighbor();
+      //if (shownRepresenatationName == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName()) //TODO
+      //  {
+      //  }
       vtkIntArray* interpolationType = vtkIntArray::SafeDownCast(
         imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetInterpolationTypeFieldName()));
       if (interpolationType && interpolationType->GetNumberOfValues() == 1)
@@ -1105,36 +1112,28 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       int sliceOutputExtent[6] = { 0, dimensions[0] - 1, 0, dimensions[1] - 1, 0, dimensions[2] - 1 };
       pipeline->Reslice->SetOutputExtent(sliceOutputExtent);
 
-      //// If ThresholdValue is not specified, then do not perform thresholding
-      //vtkDoubleArray* thresholdValue = vtkDoubleArray::SafeDownCast(
-      //  imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
-      //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-      //  {
-      //  pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
-      //  }
-      //if (!segment->GetIsMergedLabelmap())
-      //{
-      //  labelmapValue = 1;// TODO: Maybe labemap value could be something other than one for non merged segment
-      //}
-
-      //pipeline->ImageThreshold->ThresholdBetween(labelmapValue, labelmapValue);
-
-      //// Smooth the border of fractional labelmaps
-      //pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
-      //if (this->SmoothFractionalLabelMapBorder && thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-      //  {
-      //    pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
-      //  }
+      // Smooth the border of fractional labelmaps
+      pipeline->LabelOutline->SetInputConnection(pipeline->Reslice->GetOutputPort());
+      pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->Reslice->GetOutputPort());
+      if (shownRepresenatationName == vtkSegmentationConverter::GetSegmentationFractionalLabelmapRepresentationName())
+        {
+        // If ThresholdValue is not specified, then do not perform thresholding
+        vtkDoubleArray* thresholdValue = vtkDoubleArray::SafeDownCast(
+          imageData->GetFieldData()->GetAbstractArray(vtkSegmentationConverter::GetThresholdValueFieldName()));
+        if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+          {
+          if (!this->SmoothFractionalLabelMapBorder && thresholdValue && thresholdValue->GetNumberOfValues() == 1)
+            {
+            pipeline->ImageFillActor->GetMapper()->GetInputAlgorithm()->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
+            }
+          pipeline->ImageThreshold->ThresholdByLower(thresholdValue->GetValue(0));
+          pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
+          }
+        }
 
       // Set outline properties and turn it off if not shown
-      if (/*segmentOutlineVisible*/true)
+      if (true) //TODO outline visible
         {
-        // Set the outline threshold from the ThresholdValue field if it exists
-        //if (thresholdValue && thresholdValue->GetNumberOfValues() == 1)
-        //  {
-          //pipeline->LabelOutline->SetInputConnection(pipeline->ImageThreshold->GetOutputPort());
-          //}
-
         pipeline->LabelOutline->SetOutline(displayNode->GetSliceIntersectionThickness());
         }
       else
@@ -1253,7 +1252,16 @@ bool vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::IsSegmentVisibleInCu
     {
     return false;
     }
-  segment->GetBounds(segmentBounds_Segment);
+
+  if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetClosedSurfaceRepresentationName())
+    {
+    vtkPolyData* polyData = vtkPolyData::SafeDownCast(segment->GetRepresentation(displayNode->GetDisplayRepresentationName2D()));
+    polyData->GetBounds(segmentBounds_Segment);
+    }
+  else
+    {
+    segment->GetBounds(segmentBounds_Segment);
+    }
 
   vtkSmartPointer<vtkGeneralTransform> segmentationToSliceTransform = vtkSmartPointer<vtkGeneralTransform>::New();
   vtkNew<vtkMatrix4x4> rasToSliceXY;
@@ -1647,12 +1655,6 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
     {
     vtkInternal::Pipeline* pipeline = pipelineIt->second;
 
-    // Skip if segment is not visible in the current slice
-    //if (!this->Internal->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, pipelineIt->first))
-    //  {
-    //  continue;
-    //  }
-
     // Get displayed representation
     vtkPolyData* polyData = vtkPolyData::SafeDownCast(pipelineIt->first);
     vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(pipelineIt->first);
@@ -1694,6 +1696,12 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
         {
         vtkSegment* segment = segmentation->GetNthSegment(i);
         std::string segmentID = segmentation->GetSegmentIdBySegment(segment);
+
+        // Skip if segment is not visible in the current slice
+        if (!this->Internal->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, segmentID))
+          {
+          continue;
+          }
 
         // Get visibility
         vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
@@ -1751,7 +1759,22 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
         // Inside bounds the position is evaluated in the cell
         if (cell->EvaluatePosition(ras, nullptr, subId, pcoords, dist2, weights) == 1)
           {
-          //segmentIDsAtPosition.insert(pipelineIt->first); TODO: Get segment ID from data object
+          std::string segmentID;
+          for (int i = 0; i < segmentation->GetNumberOfSegments(); ++i)
+            {
+            vtkSegment* segment = segmentation->GetNthSegment(0);
+            if (pipelineIt->first == segment->GetRepresentation(displayNode->GetDisplayRepresentationName2D()))
+              {
+              segmentID = segmentation->GetSegmentIdBySegment(segment);
+              break;
+              }
+            }
+
+          // TODO: Make more efficient (Map from segment ID to data object?)
+          if (!segmentID.empty())
+            {
+            segmentIDsAtPosition.insert(segmentID);
+            }
           break;
           }
         }

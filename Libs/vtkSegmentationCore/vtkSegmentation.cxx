@@ -1286,16 +1286,16 @@ void vtkSegmentation::InvalidateNonMasterRepresentations()
     }
 }
 
-//---------------------------------------------------------------------------
-void vtkSegmentation::GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds, bool includeMainSegmentId)
+void vtkSegmentation::GetMergedLabelmapSegmentIdsForRepresentation(vtkSegment* segment, std::string representationName,
+  std::vector<std::string>& sharedSegmentIds, bool includeMainSegmentId)
 {
   sharedSegmentIds.clear();
-  if (this->GetMasterRepresentationName() != vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())
+  if (!segment)
     {
     return;
     }
 
-  vtkDataObject* originalBinaryLabelmap = segment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
+  vtkDataObject* originalBinaryLabelmap = segment->GetRepresentation(representationName);
   if (!originalBinaryLabelmap)
     {
     return;
@@ -1310,17 +1310,20 @@ void vtkSegmentation::GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vect
       continue;
       }
 
-    vtkDataObject* binaryLabelmap = nullptr;
-    if (segment)
-      {
-      binaryLabelmap = currentSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
-      }
-
+    vtkDataObject* binaryLabelmap = binaryLabelmap = currentSegment->GetRepresentation(representationName);
     if (originalBinaryLabelmap == binaryLabelmap)
       {
       sharedSegmentIds.push_back(segmentPair.first);
       }
     }
+}
+
+//---------------------------------------------------------------------------
+void vtkSegmentation::GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds,
+  bool includeMainSegmentId)
+{
+  this->GetMergedLabelmapSegmentIdsForRepresentation(segment, this->GetMasterRepresentationName(), sharedSegmentIds,
+    includeMainSegmentId);
 }
 
 //---------------------------------------------------------------------------
@@ -1592,6 +1595,14 @@ void vtkSegmentation::ClearSegment(std::string segmentId)
     tempImage->CopyDirections(labelmap);
     vtkOrientedImageDataResample::ModifyImage(labelmap, tempImage, vtkOrientedImageDataResample::OPERATION_MASKING, nullptr, 0.0, 0.0);
     }
+}
+
+//---------------------------------------------------------------------------
+void vtkSegmentation::GetMergedLabelmapSegmentIdsForRepresentation(std::string segmentId, std::string representationName,
+  std::vector<std::string>& sharedSegmentIds, bool includeMainSegmentId)
+{
+  vtkSegment* segment = this->GetSegment(segmentId);
+  this->GetMergedLabelmapSegmentIdsForRepresentation(segment, representationName, sharedSegmentIds, includeMainSegmentId);
 }
 
 //---------------------------------------------------------------------------
