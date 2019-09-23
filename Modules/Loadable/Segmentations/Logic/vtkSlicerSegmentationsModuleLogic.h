@@ -365,9 +365,9 @@ public:
   static bool ClearSegment(vtkSegmentation* segmentation, std::string segmentID);
 
   static bool GetSegmentIDsInMask(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* mask,
-    std::vector<std::string> &segmentIDs, double maskThreshold = 0.0, bool includeInputSegmentID = false);
+    std::vector<std::string>& segmentIDs, double maskThreshold = 0.0, bool includeInputSegmentID = false);
   static bool GetSegmentIDsInMask(vtkSegmentation* segmentationNode, std::string segmentID, vtkOrientedImageData* mask,
-    std::vector<std::string>& segmentIDs, double maskThreshold=0.0, bool includeInputSegmentID=false);
+    std::vector<std::string>& segmentIDs, double maskThreshold = 0.0, bool includeInputSegmentID = false);
 
 public:
   /// Set Terminologies module logic

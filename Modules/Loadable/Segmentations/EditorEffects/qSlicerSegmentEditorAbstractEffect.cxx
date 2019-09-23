@@ -649,8 +649,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
     }
 }
 
-
-
 //-----------------------------------------------------------------------------
 void qSlicerSegmentEditorAbstractEffect::selectEffect(QString effectName)
 {

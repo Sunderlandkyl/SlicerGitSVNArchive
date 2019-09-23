@@ -20,6 +20,7 @@
 
 // SegmentationCore includes
 #include "vtkClosedSurfaceToBinaryLabelmapConversionRule.h"
+#include "vtkSegmentation.h"
 
 #include "vtkOrientedImageData.h"
 #include "vtkCalculateOversamplingFactor.h"
@@ -225,6 +226,32 @@ bool vtkClosedSurfaceToBinaryLabelmapConversionRule::Convert(vtkDataObject* sour
   // (so that we can perform the stencil operations in IJK space)
   binaryLabelMap->SetGeometryFromImageToWorldMatrix(outputLabelmapImageToWorldMatrix);
 
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool vtkClosedSurfaceToBinaryLabelmapConversionRule::PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIds)
+{
+  for (std::string segmentId : segmentIds)
+    {
+    vtkSegment* segment = segmentation->GetSegment(segmentId);
+    vtkSmartPointer<vtkOrientedImageData> oldLabelmap = vtkOrientedImageData::SafeDownCast(segment->GetRepresentation(
+      vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()));
+    if (oldLabelmap)
+      {
+      vtkSmartPointer<vtkOrientedImageData> newLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      newLabelmap->DeepCopy(oldLabelmap);
+      segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), newLabelmap);
+      }
+    segment->SetValue(1);
+    }
+  return true;
+}
+
+//----------------------------------------------------------------------------
+bool vtkClosedSurfaceToBinaryLabelmapConversionRule::PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs)
+{
+  segmentation->CollapseBinaryLabelmaps(true);
   return true;
 }
 

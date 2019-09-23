@@ -39,6 +39,7 @@
 
 class vtkAbstractTransform;
 class vtkCallbackCommand;
+class vtkCollection;
 class vtkStringArray;
 
 /// \ingroup SegmentationCore
@@ -315,6 +316,7 @@ public:
   void GetMergedLabelmapSegmentIds(std::string segmentId, std::vector<std::string> &sharedSegmentIds,
     bool includeMainSegmentId);
   int GetUniqueValueForMergedLabelmap(std::string segmentId);
+  int GetUniqueValueForMergedLabelmap(vtkOrientedImageData* labelmap);
   void MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds);
 #ifndef __VTK_WRAP__
   //BTX
@@ -324,6 +326,19 @@ public:
 #endif // __VTK_WRAP__
   void SeparateSegmentLabelmap(std::string segmentId);
   void ClearSegment(std::string segmentId);
+
+  /// Merged representation layer functions
+
+  /// TODO
+  int GetNumberOfLayers(std::string representationName="");
+  int GetLayerIndex(std::string segmentId, std::string representationName="");
+  vtkDataObject* GetLayerDataObject(int layer, std::string representationName="");
+  void GetLayerObjects(vtkCollection* layerObjects, std::string representationName = "");
+  std::vector<std::string> GetSegmentIdsForLayer(int layer, std::string representationName = "");
+  std::vector<std::string> GetSegmentIdsForDataObject(vtkDataObject* dataObject, std::string representationName = "");
+
+  /// TODO
+  void CollapseBinaryLabelmaps(bool safeMerge = true);
 
 // Conversion related methods
 
