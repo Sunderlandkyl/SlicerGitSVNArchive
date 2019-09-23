@@ -2254,9 +2254,9 @@ void vtkSegmentation::GetLayerObjects(vtkCollection* layerObjects, std::string r
 
   int layerCount = 0;
   std::set<vtkDataObject*> objects;
-  for (std::pair<std::string, vtkSegment*> idAndSegment : this->Segments)
+  for (std::string segmentId : this->SegmentIds)
     {
-    vtkSegment* segment = idAndSegment.second;
+    vtkSegment* segment = this->GetSegment(segmentId);
     vtkDataObject* dataObject = segment->GetRepresentation(representationName);
     if (objects.find(dataObject) == objects.end())
       {
@@ -2375,7 +2375,9 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
     std::vector<std::string> currentLayerSegmentIds = this->GetSegmentIdsForLayer(i, representationName);
     if (i == 0)
       {
-      newLayers.push_back( std::make_pair(layerLabelmap, currentLayerSegmentIds));
+      vtkSmartPointer<vtkOrientedImageData> newLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      newLabelmap->DeepCopy(layerLabelmap);
+      newLayers.push_back( std::make_pair(newLabelmap, currentLayerSegmentIds));
       continue;
       }
 
@@ -2407,19 +2409,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
         {
         vtkOrientedImageData* newLayerLabelmap = newLayer.first;
 
-        std::vector<double> valuesInMask;
-        vtkOrientedImageDataResample::GetValuesInMask(newLayerLabelmap, thresholdedLabelmap, 0.0, valuesInMask);
-
-        bool safeToMerge = true;
-        for (double value : valuesInMask)
-          {
-          if (value != 0.0)
-            {
-            safeToMerge = false;
-            break;
-            }
-          }
-
+        bool safeToMerge = !vtkOrientedImageDataResample::IsLabelInMask(newLayerLabelmap, thresholdedLabelmap);
         if (safeToMerge)
           {
           merged = true;
@@ -2452,50 +2442,4 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
       segment->AddRepresentation(representationName, newLayer.first);
       }
     }
-
-  //TODO: Only binary labelmap
-
-  //int currentLayer = 0;
-  //std::map<vtkDataObject*, int> layerFromObject;
-  //std::map<int, vtkDataObject*> objectFromLayer;
-  //std::map<std::string, int> layerFromSegmentID;
-  //std::map<int, int> layerCount;
-  //for (std::string segmentID : this->SegmentIds)
-  //  {
-  //  vtkSegment* segment = this->GetSegment(segmentID);
-  //  vtkDataObject* dataObject = segment->GetRepresentation(this->MasterRepresentationName);
-  //  if (!dataObject)
-  //    {
-  //    continue;
-  //    }
-  //  if (layerFromObject.find(dataObject) == layerFromObject.end())
-  //    {
-  //    ++currentLayer;
-  //    objectFromLayer[currentLayer] = dataObject;
-  //    layerFromObject[dataObject] = currentLayer;
-  //    }
-  //  layerFromSegmentID[segmentID] = currentLayer;
-  //  ++layerCount[currentLayer];
-  //  }
-
-  //std::vector<std::pair<int, int> > sortedLayers;
-  //for (std::pair<int, int> count : layerCount)
-  //  {
-  //  sortedLayers.push_back(count);
-  //  }
-  //std::sort(sortedLayers.rbegin(), sortedLayers.rend());
-  //
-  //std::vector<vtkOrientedImageData*> newLayers;
-  //for (std::vector<std::pair<int, int> >::iterator layerIt = sortedLayers.begin(); layerIt != sortedLayers.end(); ++layerIt)
-  //  {
-  //  vtkOrientedImageData* currentLayer = vtkOrientedImageData::SafeDownCast(objectFromLayer[layerIt->first]);
-  //  if (layerIt == sortedLayers.begin())
-  //    {
-  //    newLayers.push_back(currentLayer);
-  //    continue; // First layer is already merged
-  //    }
-
-  //  // Iterate through remaining layers?
-  //  // Check if segments in layer can be merged, one by one
-  //  }
 }

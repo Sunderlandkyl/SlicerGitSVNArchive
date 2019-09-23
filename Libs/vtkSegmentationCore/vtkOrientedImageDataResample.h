@@ -168,6 +168,8 @@ public:
   /// TODO
   static void GetValuesInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap, double maskThreshold, std::vector<double> &values);
 
+  static bool IsLabelInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap);
+
 protected:
   vtkOrientedImageDataResample();
   ~vtkOrientedImageDataResample() override;
