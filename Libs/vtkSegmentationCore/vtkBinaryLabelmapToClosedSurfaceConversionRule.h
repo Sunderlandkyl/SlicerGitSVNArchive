@@ -27,6 +27,11 @@
 
 #include "vtkSegmentationCoreConfigure.h"
 
+#include <vtkPolyData.h>
+#include <vtkMultiBlockDataSet.h>
+#include <vtkWeakPointer.h>
+#include <vtkUnstructuredGrid.h>
+
 /// \ingroup SegmentationCore
 /// \brief Convert binary labelmap representation (vtkOrientedImageData type) to
 ///   closed surface representation (vtkPolyData type). The conversion algorithm
@@ -42,6 +47,8 @@ public:
   static const std::string GetSmoothingFactorParameterName() { return "Smoothing factor"; };
   /// Conversion parameter: compute surface normals
   static const std::string GetComputeSurfaceNormalsParameterName() { return "Compute surface normals"; };
+  /// Conversion parameter: joint smoothing
+  static const std::string GetJointSmoothingParameterName() { return "Joint smoothing"; };
 
 public:
   static vtkBinaryLabelmapToClosedSurfaceConversionRule* New();
@@ -58,8 +65,15 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
+  /// TODO
+  bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
+
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
+
+  bool CreateClosedSurface(vtkOrientedImageData* inputImage, vtkPolyData* outputPolydata, std::vector<std::string> segmentIDs);
+
+  bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
 
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;
@@ -77,6 +91,9 @@ protected:
   /// If input labelmap has non-background border voxels, then those regions remain open in the output closed surface.
   /// This function checks whether this is the case.
   bool IsLabelmapPaddingNecessary(vtkImageData* binaryLabelMap);
+
+  std::map<std::string, int> LabelValues;
+  std::map<vtkDataObject*, vtkSmartPointer<vtkPolyData> > JointSmoothCache;
 
 protected:
   vtkBinaryLabelmapToClosedSurfaceConversionRule();

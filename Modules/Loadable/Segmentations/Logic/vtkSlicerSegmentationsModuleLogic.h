@@ -319,9 +319,11 @@ public:
     {
     MODE_REPLACE = 0,
     MODE_MERGE_MAX,
-    MODE_MERGE_MIN
+    MODE_MERGE_MIN,
+    MODE_MERGE_MASK
     };
-  static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, int mergeMode=MODE_REPLACE, const int extent[6]=nullptr);
+  static bool SetBinaryLabelmapToSegment(vtkOrientedImageData* labelmap, vtkMRMLSegmentationNode* segmentationNode, std::string segmentID,
+    int mergeMode=MODE_REPLACE, const int extent[6]=nullptr, bool minimumOfAllSegments=false);
 
   /// Assign terminology to segments in a segmentation node based on the labels of a labelmap node. Match is made based on the
   /// 3dSlicerLabel terminology type attribute. If the terminology context does not contain that attribute, match cannot be made.
@@ -360,6 +362,11 @@ public:
 
   static bool ClearSegment(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID);
   static bool ClearSegment(vtkSegmentation* segmentation, std::string segmentID);
+
+  static bool GetSegmentIDsInMask(vtkMRMLSegmentationNode* segmentationNode, std::string segmentID, vtkOrientedImageData* mask,
+    std::vector<std::string>& segmentIDs, double maskThreshold = 0.0, bool includeInputSegmentID = false);
+  static bool GetSegmentIDsInMask(vtkSegmentation* segmentationNode, std::string segmentID, vtkOrientedImageData* mask,
+    std::vector<std::string>& segmentIDs, double maskThreshold = 0.0, bool includeInputSegmentID = false);
 
 public:
   /// Set Terminologies module logic

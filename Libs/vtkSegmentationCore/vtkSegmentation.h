@@ -28,6 +28,7 @@
 // STD includes
 #include <map>
 #include <deque>
+#include <vector>
 
 // SegmentationCore includes
 #include "vtkSegment.h"
@@ -38,6 +39,7 @@
 
 class vtkAbstractTransform;
 class vtkCallbackCommand;
+class vtkCollection;
 class vtkStringArray;
 
 /// \ingroup SegmentationCore
@@ -304,6 +306,40 @@ public:
   /// Invalidate (remove) non-master representations in all the segments if this segmentation node
   void InvalidateNonMasterRepresentations();
 
+  /// TODO
+  void GetMergedLabelmapSegmentIdsForRepresentation(vtkSegment* segment, std::string representationName,
+    std::vector<std::string>& sharedSegmentIds, bool includeMainSegmentId);
+  void GetMergedLabelmapSegmentIdsForRepresentation(std::string segmentId, std::string representationName,
+    std::vector<std::string>& sharedSegmentIds, bool includeMainSegmentId);
+  void GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds,
+    bool includeMainSegmentId);
+  void GetMergedLabelmapSegmentIds(std::string segmentId, std::vector<std::string> &sharedSegmentIds,
+    bool includeMainSegmentId);
+  int GetUniqueValueForMergedLabelmap(std::string segmentId);
+  int GetUniqueValueForMergedLabelmap(vtkOrientedImageData* labelmap);
+  void MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds);
+#ifndef __VTK_WRAP__
+  //BTX
+  bool GenerateMergedLabelmap(vtkOrientedImageData* mergedImageData, int extentComputationMode, vtkOrientedImageData* mergedLabelmapGeometry = nullptr,
+    const std::vector<std::string>& segmentIDs = std::vector<std::string>());
+  ///ETX
+#endif // __VTK_WRAP__
+  void SeparateSegmentLabelmap(std::string segmentId);
+  void ClearSegment(std::string segmentId);
+
+  /// Merged representation layer functions
+
+  /// TODO
+  int GetNumberOfLayers(std::string representationName="");
+  int GetLayerIndex(std::string segmentId, std::string representationName="");
+  vtkDataObject* GetLayerDataObject(int layer, std::string representationName="");
+  void GetLayerObjects(vtkCollection* layerObjects, std::string representationName = "");
+  std::vector<std::string> GetSegmentIdsForLayer(int layer, std::string representationName = "");
+  std::vector<std::string> GetSegmentIdsForDataObject(vtkDataObject* dataObject, std::string representationName = "");
+
+  /// TODO
+  void CollapseBinaryLabelmaps(bool safeMerge = true);
+
 // Conversion related methods
 
   /// Create a representation in all segments, using the conversion path with the
@@ -379,13 +415,16 @@ public:
   virtual void SetMasterRepresentationName(const std::string& representationName);
 
 protected:
+  bool ConvertSegmentsUsingPath(std::vector<std::string> segmentIDs, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting = false);
+  bool ConvertSegments(std::vector<std::string> segmentIDs, bool overwriteExisting = false);
+
   /// Convert given segment along a specified path
   /// \param segment Segment to convert
   /// \param path Path to do the conversion along
   /// \param overwriteExisting If true then do each conversion step regardless the target representation
   ///   exists. If false then skip those conversion steps that would overwrite existing representation
   /// \return Success flag
-  bool ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting=false);
+  bool ConvertSegmentUsingPath(vtkSegment* segment, vtkSegmentationConverter::ConversionPathType path, bool overwriteExisting = false);
 
   /// Converts a single segment to a representation.
   bool ConvertSingleSegment(std::string segmentId, std::string targetRepresentationName);

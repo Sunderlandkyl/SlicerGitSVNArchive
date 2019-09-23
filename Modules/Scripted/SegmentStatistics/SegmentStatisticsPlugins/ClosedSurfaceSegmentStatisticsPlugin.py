@@ -27,9 +27,7 @@ class ClosedSurfaceSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
     if not containsClosedSurfaceRepresentation:
       return {}
 
-    segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-    closedSurfaceName = vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationClosedSurfaceRepresentationName()
-    segmentClosedSurface = segment.GetRepresentation(closedSurfaceName)
+    segmentClosedSurface = segmentationNode.GetClosedSurfaceRepresentation(segmentID)
 
     # Compute statistics
     massProperties = vtk.vtkMassProperties()

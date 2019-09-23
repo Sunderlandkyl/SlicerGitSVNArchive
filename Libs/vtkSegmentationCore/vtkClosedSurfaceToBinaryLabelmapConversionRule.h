@@ -59,8 +59,14 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
+  ///TODO
+  bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
+
   /// Update the target representation based on the source representation
   bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
+
+  ///TODO
+  bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) override;
 
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;

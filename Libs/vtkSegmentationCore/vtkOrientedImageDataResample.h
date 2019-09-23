@@ -24,9 +24,14 @@
 // Segmentation includes
 #include "vtkSegmentationCoreConfigure.h"
 
+// VTK includes
 #include "vtkObject.h"
 
+// std includes
+#include <vector>
+
 class vtkImageData;
+class vtkIntArray;
 class vtkMatrix4x4;
 class vtkOrientedImageData;
 class vtkTransform;
@@ -159,6 +164,11 @@ public:
   ///   The effect is to pass the input pixels where the mask is zero, and replace the pixels where the
   ///   mask is non zero
   static bool ApplyImageMask(vtkOrientedImageData* input, vtkOrientedImageData* mask, double fillValue, bool notMask = false);
+
+  /// TODO
+  static void GetValuesInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap, double maskThreshold, std::vector<double> &values);
+
+  static bool IsLabelInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap);
 
 protected:
   vtkOrientedImageDataResample();

@@ -291,9 +291,9 @@ void qMRMLSegmentsTableViewPrivate::init()
   QObject::connect(this->SortFilterModel, &qMRMLSortFilterSegmentsProxyModel::filterModified, q, &qMRMLSegmentsTableView::onSegmentsFilterModified);
 
   // Set item delegate to handle color and opacity changes
-  qMRMLItemDelegate* itemDelegate = new qMRMLItemDelegate(this->SegmentsTable);
   this->SegmentsTable->setItemDelegateForColumn(this->Model->colorColumn(), new qSlicerTerminologyItemDelegate(this->SegmentsTable));
-  this->SegmentsTable->setItemDelegateForColumn(this->Model->opacityColumn(), itemDelegate);
+  this->SegmentsTable->setItemDelegateForColumn(this->Model->opacityColumn(), new qMRMLItemDelegate(this->SegmentsTable));
+  this->SegmentsTable->setItemDelegateForColumn(this->Model->layerColumn(), new qMRMLItemDelegate(this->SegmentsTable));
   this->SegmentsTable->installEventFilter(q);
 }
 
@@ -824,6 +824,13 @@ void qMRMLSegmentsTableView::setStatusColumnVisible(bool visible)
 }
 
 //------------------------------------------------------------------------------
+void qMRMLSegmentsTableView::setLayerColumnVisible(bool visible)
+{
+  Q_D(qMRMLSegmentsTableView);
+  d->SegmentsTable->setColumnHidden(d->Model->layerColumn(), !visible);
+}
+
+//------------------------------------------------------------------------------
 void qMRMLSegmentsTableView::setReadOnly(bool aReadOnly)
 {
   Q_D(qMRMLSegmentsTableView);
@@ -886,6 +893,13 @@ bool qMRMLSegmentsTableView::statusColumnVisible()
 {
   Q_D(qMRMLSegmentsTableView);
   return !d->SegmentsTable->isColumnHidden(d->Model->statusColumn());
+}
+
+//------------------------------------------------------------------------------
+bool qMRMLSegmentsTableView::layerColumnVisible()
+{
+  Q_D(qMRMLSegmentsTableView);
+  return !d->SegmentsTable->isColumnHidden(d->Model->layerColumn());
 }
 
 //------------------------------------------------------------------------------
