@@ -43,6 +43,7 @@
 
 // STD includes
 #include <algorithm>
+#include <vector>
 
 vtkStandardNewMacro(vtkOrientedImageDataResample);
 
@@ -1359,8 +1360,186 @@ bool vtkOrientedImageDataResample::ApplyImageMask(vtkOrientedImageData* input, v
   // Copy masked input to input
   vtkNew<vtkMatrix4x4> inputImageToWorldMatrix;
   input->GetImageToWorldMatrix(inputImageToWorldMatrix.GetPointer());
-  input->DeepCopy(masker->GetOutput());
+  input->ShallowCopy(masker->GetOutput());
   input->SetGeometryFromImageToWorldMatrix(inputImageToWorldMatrix.GetPointer());
 
   return true;
+}
+
+//----------------------------------------------------------------------------
+template <class ImageScalarType, class MaskScalarType>
+void GetValuesInMaskGeneric2(
+  vtkOrientedImageData* binaryLabelmap,
+  vtkOrientedImageData* resampledMask,
+  double maskThreshold,
+  std::set<double> &foundValues)
+{
+  int extent[6] = { 0, -1, 0, -1, 0, -1 };
+  resampledMask->GetExtent(extent);
+
+  ImageScalarType* binaryLabelmapPointer = (ImageScalarType*)binaryLabelmap->GetScalarPointer();
+  MaskScalarType* maskPointer = (MaskScalarType*)resampledMask->GetScalarPointer();
+  for (int k = extent[4]; k <= extent[5]; ++k)
+    {
+    for (int j = extent[2]; j <= extent[3]; ++j)
+      {
+      for (int i = extent[0]; i <= extent[1]; ++i)
+        {
+        if (*maskPointer > maskThreshold)
+          {
+          foundValues.insert(*binaryLabelmapPointer);
+          }
+        ++binaryLabelmapPointer;
+        ++maskPointer;
+        }
+      }
+    }
+}
+
+//----------------------------------------------------------------------------
+template <class ImageScalarType>
+void GetValuesInMaskGeneric(
+  vtkOrientedImageData* binaryLabelmap,
+  vtkOrientedImageData* resampledMask,
+  double maskThreshold,
+  std::set<double> &foundValues)
+{
+  switch (resampledMask->GetScalarType())
+    {
+    vtkTemplateMacro((GetValuesInMaskGeneric2<ImageScalarType, VTK_TT>(
+      binaryLabelmap,
+      resampledMask,
+      maskThreshold,
+      foundValues)));
+    default:
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::GetValuesInMaskGeneric: Unknown ScalarType");
+    }
+}
+
+//-----------------------------------------------------------------------------
+void vtkOrientedImageDataResample::GetValuesInMask(
+  vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap, double maskThreshold, std::vector<double>& values)
+{
+  values.clear();
+
+  int binaryLabelmapExtent[6] = { 0 };
+  binaryLabelmap->GetExtent(binaryLabelmapExtent);
+
+  int maskLabelmapExtent[6] = { 0 };
+  maskLabelmap->GetExtent(maskLabelmapExtent);
+
+  vtkSmartPointer<vtkOrientedImageData> resampledMask = vtkSmartPointer<vtkOrientedImageData>::New();
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, binaryLabelmap, resampledMask);
+
+  std::set<double> foundValues;
+  switch (binaryLabelmap->GetScalarType())
+    {
+    vtkTemplateMacro((GetValuesInMaskGeneric<VTK_TT>(
+      binaryLabelmap,
+      resampledMask,
+      maskThreshold,
+      foundValues)));
+    default:
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::GetSegmentIDsInMask: Unknown ScalarType");
+    }
+
+  for (double foundValue : foundValues)
+    {
+    values.push_back(foundValue);
+    }
+  return;
+}
+
+//----------------------------------------------------------------------------
+template <class ImageScalarType, class MaskScalarType>
+void IsLabelInMaskGeneric2(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap,
+  double maskThreshold, bool &inMask)
+{
+  int extent[6] = { 0, -1, 0, -1, 0, -1 };
+  maskLabelmap->GetExtent(extent);
+
+  inMask = false;
+
+  ImageScalarType* binaryLabelmapPointer = (ImageScalarType*)binaryLabelmap->GetScalarPointer();
+  MaskScalarType* maskPointer = (MaskScalarType*)maskLabelmap->GetScalarPointer();
+  for (int k = extent[4]; k <= extent[5]; ++k)
+    {
+    for (int j = extent[2]; j <= extent[3]; ++j)
+      {
+      for (int i = extent[0]; i <= extent[1]; ++i)
+        {
+        if (*maskPointer > maskThreshold && *binaryLabelmapPointer != (ImageScalarType)0)
+          {
+          inMask = true;
+          return;
+          }
+        ++binaryLabelmapPointer;
+        ++maskPointer;
+        }
+      }
+    }
+}
+
+//----------------------------------------------------------------------------
+template <class ImageScalarType>
+void IsLabelInMaskGeneric(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap,
+  double maskThreshold, bool &inMask)
+{
+  switch (maskLabelmap->GetScalarType())
+    {
+    vtkTemplateMacro((IsLabelInMaskGeneric2<ImageScalarType, VTK_TT>(
+      binaryLabelmap,
+      maskLabelmap,
+      maskThreshold,
+      inMask)));
+    default:
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::IsLabelInMaskGeneric: Unknown ScalarType");
+    }
+}
+
+//-----------------------------------------------------------------------------
+bool vtkOrientedImageDataResample::IsLabelInMask(
+  vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap)
+{
+
+  int binaryExtent[6] = { 0 };
+  binaryLabelmap->GetExtent(binaryExtent);
+
+  int maskExtent[6] = { 0 };
+  vtkOrientedImageDataResample::CalculateEffectiveExtent(maskLabelmap, maskExtent);
+
+  int effectiveExtent[6] = { 0 };
+  for (int i = 0; i < 3; ++i)
+    {
+    effectiveExtent[2 * i] = std::max(binaryExtent[2 * i], maskExtent[2 * i]);
+    effectiveExtent[2 * i + 1] = std::min(binaryExtent[2 * i + 1], maskExtent[2 * i + 1]);
+    }
+
+  // No labels in mask if effective extent is emptyy
+  if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
+    {
+    return false;
+    }
+
+  vtkNew<vtkOrientedImageData> referenceImage;
+  referenceImage->ShallowCopy(maskLabelmap);
+  referenceImage->SetExtent(effectiveExtent);
+
+  vtkNew<vtkOrientedImageData> resampledBinaryLabelmap;
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(binaryLabelmap, referenceImage, resampledBinaryLabelmap);
+  vtkNew<vtkOrientedImageData> resampledMask;
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, referenceImage, resampledMask);
+
+  bool valueFound = false;
+  switch (binaryLabelmap->GetScalarType())
+    {
+    vtkTemplateMacro((IsLabelInMaskGeneric<VTK_TT>(
+      resampledBinaryLabelmap,
+      resampledMask,
+      0.0,
+      valueFound)));
+    default:
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::IsLabelInMask: Unknown ScalarType");
+    }
+  return valueFound;
 }

@@ -64,6 +64,7 @@ qMRMLSegmentsModelPrivate::qMRMLSegmentsModelPrivate(qMRMLSegmentsModel& object)
   , ColorColumn(-1)
   , OpacityColumn(-1)
   , StatusColumn(-1)
+  , LayerColumn(-1)
   , SegmentationNode(nullptr)
 {
   this->CallBack = vtkSmartPointer<vtkCallbackCommand>::New();
@@ -101,7 +102,8 @@ void qMRMLSegmentsModelPrivate::init()
   q->setColorColumn(1);
   q->setOpacityColumn(2);
   q->setNameColumn(3);
-  q->setStatusColumn(4);
+  q->setLayerColumn(4);
+  q->setStatusColumn(5);
 
   QStringList columnLabels;
   for (int i = 0; i < q->columnCount(); ++i)
@@ -121,6 +123,10 @@ void qMRMLSegmentsModelPrivate::init()
     else if (i == q->nameColumn())
       {
       columnLabels << "Name";
+      }
+    else if (i == q->layerColumn())
+      {
+      columnLabels << "Layer";
       }
     else if (i == q->statusColumn())
       {
@@ -483,6 +489,12 @@ void qMRMLSegmentsModel::updateItemDataFromSegment(QStandardItem* item, QString 
       item->setToolTip(statusTooltip);
       item->setIcon(statusIcon);
       }
+    }
+  else if (column == this->layerColumn())
+    {
+    int layer = segmentation->GetLayerIndex(segmentID.toStdString(), segmentation->GetMasterRepresentationName());
+    QString displayedLayerStr = QString::number(layer, 'f', 2);
+    item->setData(displayedLayerStr, Qt::EditRole);
     }
   else
     {
@@ -926,7 +938,6 @@ void qMRMLSegmentsModel::setOpacityColumn(int column)
   this->updateColumnCount();
 }
 
-
 //------------------------------------------------------------------------------
 int qMRMLSegmentsModel::statusColumn()const
 {
@@ -939,6 +950,21 @@ void qMRMLSegmentsModel::setStatusColumn(int column)
 {
   Q_D(qMRMLSegmentsModel);
   d->StatusColumn = column;
+  this->updateColumnCount();
+}
+
+//------------------------------------------------------------------------------
+int qMRMLSegmentsModel::layerColumn()const
+{
+  Q_D(const qMRMLSegmentsModel);
+  return d->LayerColumn;
+}
+
+//------------------------------------------------------------------------------
+void qMRMLSegmentsModel::setLayerColumn(int column)
+{
+  Q_D(qMRMLSegmentsModel);
+  d->LayerColumn = column;
   this->updateColumnCount();
 }
 

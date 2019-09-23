@@ -29,8 +29,11 @@
 // STD includes
 #include <map>
 #include <string>
+#include <vector>
 
 class vtkDataObject;
+class vtkSegmentation;
+class vtkSegment;
 
 /// Helper macro for supporting cloning of rules
 #ifndef vtkSegmentationConverterRuleNewMacro
@@ -80,8 +83,14 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   virtual vtkDataObject* ConstructRepresentationObjectByClass(std::string className) = 0;
 
+  /// Perform pre-conversion steps across the specified segments in the segmentation
+  virtual bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) { return true; };
+
   /// Update the target representation based on the source representation
-  virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) = 0;
+  virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation)= 0;
+
+/// Perform post-conversion steps across the specified segments in the segmentation
+  virtual bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) { return true; };
 
   /// Get the cost of the conversion.
   /// \return Expected duration of the conversion in milliseconds. If the arguments are omitted, then a rough average can be
@@ -119,6 +128,10 @@ public:
   /// Determine if the rule has a parameter with a certain name
   bool HasConversionParameter(const std::string& name);
 
+  // TODO
+  vtkSetMacro(CurrentSegmentID, std::string);
+  vtkGetMacro(CurrentSegmentID, std::string);
+
 protected:
   vtkSegmentationConverterRule();
   ~vtkSegmentationConverterRule() override;
@@ -131,6 +144,8 @@ protected:
   /// When the user changes the parameter value, then the default is being overwritten to contain the
   /// custom value, but for new segmentations, it is initially the default.
   ConversionParameterListType ConversionParameters;
+
+  std::string CurrentSegmentID;
 
   friend class vtkSegmentationConverter;
 };
