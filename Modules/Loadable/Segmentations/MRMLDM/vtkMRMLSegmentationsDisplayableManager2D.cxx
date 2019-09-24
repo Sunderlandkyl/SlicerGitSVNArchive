@@ -635,6 +635,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateAllDisplayNode
     this->UpdateDisplayNode(*dnodesIter);
     }
 }
+
 //---------------------------------------------------------------------------
 void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateSegmentPipelines(vtkMRMLSegmentationDisplayNode* displayNode, PipelineMapType &pipelines)
 {
@@ -833,17 +834,6 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       continue;
       }
 
-    // Get displayed color (if no override is defined then use the color from the segment)
-    double color[3] = {vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2]};
-    if (overrideHierarchyDisplayNode)
-      {
-      overrideHierarchyDisplayNode->GetColor(color);
-      }
-    else
-      {
-      displayNode->GetSegmentColor(pipelineIt->first, color);
-      }
-
     // If shown representation is poly data
     if (polyData)
       {
@@ -933,7 +923,14 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
 
       // Get displayed color (if no override is defined then use the color from the segment)
       double color[3] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2] };
-      displayNode->GetSegmentColor(segmentID, color);
+      if (overrideHierarchyDisplayNode)
+        {
+        overrideHierarchyDisplayNode->GetColor(color);
+        }
+      else
+        {
+        displayNode->GetSegmentColor(segmentID, color);
+        }
 
       // Update pipeline actors
       pipeline->PolyDataOutlineActor->SetVisibility(segmentOutlineVisible);
@@ -1054,8 +1051,15 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
           }
 
         // Get displayed color (if no override is defined then use the color from the segment)
-        double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 0.0 };
-        displayNode->GetSegmentColor(segmentId, color);
+        double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0], vtkSegment::SEGMENT_COLOR_INVALID[1], vtkSegment::SEGMENT_COLOR_INVALID[2], 1.0};
+        if (overrideHierarchyDisplayNode)
+          {
+          overrideHierarchyDisplayNode->GetColor(color);
+          }
+        else
+          {
+          displayNode->GetSegmentColor(segmentId, color);
+          }
 
         if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
           {
@@ -1206,10 +1210,10 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::AddObservations(vtkM
     {
     broker->AddObservation(node, vtkSegmentation::SegmentModified, this->External, this->External->GetMRMLNodesCallbackCommand());
     }
-  if (!broker->GetObservationExist(node, vtkSegmentation::ContainedRepresentationNamesModified, this->External,
+  if (!broker->GetObservationExist(node, vtkSegmentation::SegmentRepresentationObjectChanged, this->External,
         this->External->GetMRMLNodesCallbackCommand()))
     {
-    broker->AddObservation(node, vtkSegmentation::ContainedRepresentationNamesModified, this->External, this->External->GetMRMLNodesCallbackCommand());
+    broker->AddObservation(node, vtkSegmentation::SegmentRepresentationObjectChanged, this->External, this->External->GetMRMLNodesCallbackCommand());
     }
 }
 
@@ -1232,7 +1236,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::RemoveObservations(v
   broker->RemoveObservations(observations);
   observations = broker->GetObservations(node, vtkSegmentation::SegmentModified, this->External, this->External->GetMRMLNodesCallbackCommand());
   broker->RemoveObservations(observations);
-  observations = broker->GetObservations(node, vtkSegmentation::ContainedRepresentationNamesModified, this->External,
+  observations = broker->GetObservations(node, vtkSegmentation::SegmentRepresentationObjectChanged, this->External,
     this->External->GetMRMLNodesCallbackCommand());
   broker->RemoveObservations(observations);
 }
@@ -1452,7 +1456,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::ProcessMRMLNodesEvents(vtkObject*
       }
     else if ( (event == vtkCommand::ModifiedEvent) // segmentation object may be replaced
            || (event == vtkSegmentation::SegmentAdded)
-           || (event == vtkSegmentation::ContainedRepresentationNamesModified)
+           || (event == vtkSegmentation::SegmentRepresentationObjectChanged)
            || (event == vtkSegmentation::SegmentRemoved) )
       {
       this->Internal->UpdateAllDisplayNodesForSegment(displayableNode);

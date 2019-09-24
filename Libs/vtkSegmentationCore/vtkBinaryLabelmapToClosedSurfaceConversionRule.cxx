@@ -326,6 +326,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::CreateClosedSurface(vtkOrie
     {
     vtkDebugMacro("Convert: No polygons can be created, probably all voxels are empty");
     convertedSegment = nullptr;
+    closedSurfacePolyData->Reset();
     }
 
   if (!convertedSegment)
@@ -363,6 +364,11 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::CreateClosedSurface(vtkOrie
     smoother->FeatureEdgeSmoothingOff();
     smoother->NonManifoldSmoothingOn();
     smoother->NormalizeCoordinatesOn();
+    if (jointSmoothing > 0)
+      {
+      smoother->SetFeatureAngle(90.0);
+      smoother->SetPassBand(100);
+      }
     smoother->Update();
     processingResult = smoother->GetOutput();
     }

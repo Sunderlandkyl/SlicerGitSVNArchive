@@ -107,7 +107,9 @@ public:
     /// Invoked if a representation is created or removed in the segments (e.g., created by conversion from master).
     ContainedRepresentationNamesModified,
     /// Invoked if segment IDs order is changed. Not called when a segment is added or removed.
-    SegmentsOrderModified
+    SegmentsOrderModified,
+    /// Invoked when content the data object of a representation is changed.
+    SegmentRepresentationObjectChanged,
     };
 
   enum

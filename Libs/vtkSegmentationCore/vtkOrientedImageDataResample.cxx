@@ -1412,7 +1412,7 @@ void GetValuesInMaskGeneric(
       maskThreshold,
       foundValues)));
     default:
-      vtkGenericWarningMacro("GetValuesInMask: Unknown ScalarType");
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::GetValuesInMaskGeneric: Unknown ScalarType");
     }
 }
 
@@ -1428,17 +1428,6 @@ void vtkOrientedImageDataResample::GetValuesInMask(
   int maskLabelmapExtent[6] = { 0 };
   maskLabelmap->GetExtent(maskLabelmapExtent);
 
-  for (int i = 0; i < 3; ++i)
-    {
-    int roi[2] = { 0 };
-    roi[0] = std::max(binaryLabelmapExtent[2 * i], maskLabelmapExtent[2 * i]);
-    roi[1] = std::min(binaryLabelmapExtent[2 * i + 1], maskLabelmapExtent[2 * i + 1]);
-    if (roi[1] <= roi[0])
-      {
-      return;
-      }
-    }
-
   vtkSmartPointer<vtkOrientedImageData> resampledMask = vtkSmartPointer<vtkOrientedImageData>::New();
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, binaryLabelmap, resampledMask);
 
@@ -1451,7 +1440,7 @@ void vtkOrientedImageDataResample::GetValuesInMask(
       maskThreshold,
       foundValues)));
     default:
-      vtkGenericWarningMacro("vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask: Unknown ScalarType");
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::GetSegmentIDsInMask: Unknown ScalarType");
     }
 
   for (double foundValue : foundValues)
@@ -1463,11 +1452,8 @@ void vtkOrientedImageDataResample::GetValuesInMask(
 
 //----------------------------------------------------------------------------
 template <class ImageScalarType, class MaskScalarType>
-void IsLabelInMaskGeneric2(
-  vtkOrientedImageData* binaryLabelmap,
-  vtkOrientedImageData* maskLabelmap,
-  double maskThreshold,
-  bool &inMask)
+void IsLabelInMaskGeneric2(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap,
+  double maskThreshold, bool &inMask)
 {
   int extent[6] = { 0, -1, 0, -1, 0, -1 };
   maskLabelmap->GetExtent(extent);
@@ -1477,30 +1463,27 @@ void IsLabelInMaskGeneric2(
   ImageScalarType* binaryLabelmapPointer = (ImageScalarType*)binaryLabelmap->GetScalarPointer();
   MaskScalarType* maskPointer = (MaskScalarType*)maskLabelmap->GetScalarPointer();
   for (int k = extent[4]; k <= extent[5]; ++k)
-  {
-    for (int j = extent[2]; j <= extent[3]; ++j)
     {
-      for (int i = extent[0]; i <= extent[1]; ++i)
+    for (int j = extent[2]; j <= extent[3]; ++j)
       {
-        if (*maskPointer > maskThreshold && *binaryLabelmapPointer != (ImageScalarType)0)
+      for (int i = extent[0]; i <= extent[1]; ++i)
         {
+        if (*maskPointer > maskThreshold && *binaryLabelmapPointer != (ImageScalarType)0)
+          {
           inMask = true;
           return;
-        }
+          }
         ++binaryLabelmapPointer;
         ++maskPointer;
+        }
       }
     }
-  }
 }
 
 //----------------------------------------------------------------------------
 template <class ImageScalarType>
-void IsLabelInMaskGeneric(
-  vtkOrientedImageData* binaryLabelmap,
-  vtkOrientedImageData* maskLabelmap,
-  double maskThreshold,
-  bool &inMask)
+void IsLabelInMaskGeneric(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap,
+  double maskThreshold, bool &inMask)
 {
   switch (maskLabelmap->GetScalarType())
     {
@@ -1510,7 +1493,7 @@ void IsLabelInMaskGeneric(
       maskThreshold,
       inMask)));
     default:
-      vtkGenericWarningMacro("GetValuesInMask: Unknown ScalarType");
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::IsLabelInMaskGeneric: Unknown ScalarType");
     }
 }
 
@@ -1552,15 +1535,14 @@ bool vtkOrientedImageDataResample::IsLabelInMask(
 
   bool valueFound = false;
   switch (binaryLabelmap->GetScalarType())
-  {
+    {
     vtkTemplateMacro((IsLabelInMaskGeneric<VTK_TT>(
       binaryLabelmap,
       resampledMask,
       0.0,
       valueFound)));
     default:
-      vtkGenericWarningMacro("vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask: Unknown ScalarType");
-  }
-
+      vtkGenericWarningMacro("vtkOrientedImageDataResample::IsLabelInMask: Unknown ScalarType");
+    }
   return valueFound;
 }

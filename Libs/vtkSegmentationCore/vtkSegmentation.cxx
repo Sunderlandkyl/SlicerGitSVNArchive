@@ -286,10 +286,15 @@ bool vtkSegmentation::SetSegmentModifiedEnabled(bool enabled)
         {
         segmentIt->second->AddObserver(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
         }
+      if (!segmentIt->second->HasObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand))
+        {
+        segmentIt->second->AddObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
+        }
       }
     else
       {
       segmentIt->second->RemoveObservers(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
+      segmentIt->second->RemoveObservers(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
       }
     }
   this->SegmentModifiedEnabled = enabled;
@@ -347,6 +352,10 @@ bool vtkSegmentation::AddSegment(vtkSegment* segment, std::string segmentId/*=""
   if (this->SegmentModifiedEnabled && !segment->HasObserver(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand))
     {
     segment->AddObserver(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
+    }
+  if (this->SegmentModifiedEnabled && !segment->HasObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand))
+    {
+    segment->AddObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
     }
 
   // Get representation names contained by the added segment
@@ -569,11 +578,14 @@ void vtkSegmentation::RemoveSegment(SegmentMap::iterator segmentIt)
 
   // Remove observation of segment modified event
   segmentIt->second.GetPointer()->RemoveObservers(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
+  segmentIt->second.GetPointer()->RemoveObservers(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
+
   // Remove observation of master representation of removed segment
   vtkDataObject* masterRepresentation = segmentIt->second->GetRepresentation(this->MasterRepresentationName);
   if (masterRepresentation)
     {
     masterRepresentation->RemoveObservers(vtkCommand::ModifiedEvent, this->MasterRepresentationCallbackCommand);
+
     }
 
   this->ClearSegment(segmentId);
@@ -610,7 +622,7 @@ void vtkSegmentation::RemoveAllSegments()
 
 //---------------------------------------------------------------------------
 void vtkSegmentation::OnSegmentModified(vtkObject* caller,
-                                        unsigned long vtkNotUsed(eid),
+                                        unsigned long eid,
                                         void* clientData,
                                         void* vtkNotUsed(callData))
 {
@@ -629,7 +641,15 @@ void vtkSegmentation::OnSegmentModified(vtkObject* caller,
     return;
     }
   const char* segmentIdChars = segmentId.c_str();
-  self->InvokeEvent(vtkSegmentation::SegmentModified, (void*)(segmentIdChars));
+
+  if (eid == vtkCommand::ModifiedEvent)
+    {
+    self->InvokeEvent(vtkSegmentation::SegmentModified, (void*)(segmentIdChars));
+    }
+  else if (eid = vtkSegment::RepresentationObjectChanged)
+    {
+    self->InvokeEvent(vtkSegmentation::SegmentRepresentationObjectChanged, (void*)(segmentIdChars));
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -990,7 +1010,7 @@ bool vtkSegmentation::ConvertSegmentsUsingPath(std::vector<std::string> segmentI
     vtkSegmentationConverterRule* currentConversionRule = (*pathIt);
     if (!currentConversionRule)
       {
-      vtkErrorMacro("ConvertSegmentUsingPath: Invalid converter rule!");
+      vtkErrorMacro("ConvertSegmentsUsingPath: Invalid converter rule!");
       return false;
       }
 
@@ -1006,7 +1026,7 @@ bool vtkSegmentation::ConvertSegmentsUsingPath(std::vector<std::string> segmentI
         currentConversionRule->GetSourceRepresentationName());
       if (!sourceRepresentation)
         {
-        vtkErrorMacro("ConvertSegmentUsingPath: Source representation does not exist!");
+        vtkErrorMacro("ConvertSegmentsUsingPath: Source representation does not exist!");
         return false;
         }
 
@@ -1237,6 +1257,11 @@ bool vtkSegmentation::CreateRepresentation(vtkSegmentationConverter::ConversionP
   this->GetSegmentIDs(segmentIDs);
   this->ConvertSegmentsUsingPath(segmentIDs, path, true);
 
+  for (std::string segmentID : segmentIDs)
+    {
+    this->InvokeEvent(vtkSegmentation::RepresentationModified, (void*)segmentID.c_str());
+    }
+
   this->InvokeEvent(vtkSegmentation::ContainedRepresentationNamesModified);
   return true;
 }
@@ -1286,6 +1311,7 @@ void vtkSegmentation::InvalidateNonMasterRepresentations()
     {
     segmentIt->second->RemoveAllRepresentations(this->MasterRepresentationName);
     }
+  this->InvokeEvent(vtkSegmentation::ContainedRepresentationNamesModified);
 }
 
 //---------------------------------------------------------------------------
@@ -1558,7 +1584,7 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
 
   this->Modified();
   this->InvokeEvent(vtkSegmentation::MasterRepresentationModified, this);
-  this->InvokeEvent(vtkSegmentation::SegmentAdded, this);
+  this->InvokeEvent(vtkSegmentation::ContainedRepresentationNamesModified);
 }
 
 //---------------------------------------------------------------------------
@@ -2258,7 +2284,7 @@ void vtkSegmentation::GetLayerObjects(vtkCollection* layerObjects, std::string r
     {
     vtkSegment* segment = this->GetSegment(segmentId);
     vtkDataObject* dataObject = segment->GetRepresentation(representationName);
-    if (objects.find(dataObject) == objects.end())
+    if (dataObject && objects.find(dataObject) == objects.end())
       {
       objects.insert(dataObject);
       layerObjects->AddItem(dataObject);

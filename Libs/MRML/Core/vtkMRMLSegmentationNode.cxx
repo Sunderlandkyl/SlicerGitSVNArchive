@@ -221,6 +221,8 @@ void vtkMRMLSegmentationNode::SetAndObserveSegmentation(vtkSegmentation* segment
       this->Segmentation, vtkSegmentation::RepresentationModified, this, this->SegmentationModifiedCallbackCommand);
     vtkEventBroker::GetInstance()->AddObservation(
       this->Segmentation, vtkSegmentation::SegmentsOrderModified, this, this->SegmentationModifiedCallbackCommand);
+    vtkEventBroker::GetInstance()->AddObservation(
+      this->Segmentation, vtkSegmentation::SegmentRepresentationObjectChanged, this, this->SegmentationModifiedCallbackCommand);
   }
 }
 
@@ -267,6 +269,10 @@ void vtkMRMLSegmentationNode::SegmentationModifiedCallback(vtkObject* vtkNotUsed
       self->InvokeCustomModifiedEvent(eid, callData);
       break;
     case vtkSegmentation::SegmentsOrderModified:
+      self->StorableModifiedTime.Modified();
+      self->InvokeCustomModifiedEvent(eid);
+      break;
+    case vtkSegmentation::SegmentRepresentationObjectChanged:
       self->StorableModifiedTime.Modified();
       self->InvokeCustomModifiedEvent(eid);
       break;
