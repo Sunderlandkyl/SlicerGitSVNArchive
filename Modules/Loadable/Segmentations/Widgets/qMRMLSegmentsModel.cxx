@@ -242,6 +242,7 @@ void qMRMLSegmentsModel::setSegmentationNode(vtkMRMLSegmentationNode* segmentati
     d->SegmentationNode->AddObserver(vtkSegmentation::SegmentModified, d->CallBack, -10.0);
     d->SegmentationNode->AddObserver(vtkSegmentation::SegmentsOrderModified, d->CallBack, -15.0);
     d->SegmentationNode->AddObserver(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->CallBack, -15.0);
+    d->SegmentationNode->AddObserver(vtkSegmentation::SegmentRepresentationObjectChanged, d->CallBack, -15);
     }
 }
 
@@ -492,9 +493,11 @@ void qMRMLSegmentsModel::updateItemDataFromSegment(QStandardItem* item, QString 
     }
   else if (column == this->layerColumn())
     {
-    int layer = segmentation->GetLayerIndex(segmentID.toStdString(), segmentation->GetMasterRepresentationName());
-    QString displayedLayerStr = QString::number(layer, 'f', 2);
-    item->setData(displayedLayerStr, Qt::EditRole);
+    int layer = segmentation->GetLayerIndex(segmentID.toStdString(), vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
+    std::stringstream ss;
+    ss << layer;
+    item->setText(QString::fromStdString(ss.str()));
+    item->setTextAlignment(Qt::AlignCenter);
     }
   else
     {
@@ -751,6 +754,7 @@ void qMRMLSegmentsModel::onEvent(
       break;
     case vtkSegmentation::SegmentRemoved:
         model->onSegmentRemoved(segmentID);
+        model->updateItemsFromColumnIndex(model->layerColumn());
       break;
     case vtkSegmentation::SegmentModified:
       if (!segmentID.isEmpty())
@@ -761,6 +765,9 @@ void qMRMLSegmentsModel::onEvent(
         {
         model->updateFromSegments();
         }
+      break;
+    case vtkSegmentation::SegmentRepresentationObjectChanged:
+      model->updateItemsFromColumnIndex(model->layerColumn());
       break;
     case vtkSegmentation::SegmentsOrderModified:
       model->onSegmentOrderModified();

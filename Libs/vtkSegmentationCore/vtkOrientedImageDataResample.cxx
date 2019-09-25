@@ -1501,12 +1501,11 @@ void IsLabelInMaskGeneric(vtkOrientedImageData* binaryLabelmap, vtkOrientedImage
 bool vtkOrientedImageDataResample::IsLabelInMask(
   vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap)
 {
-
   int binaryExtent[6] = { 0 };
   binaryLabelmap->GetExtent(binaryExtent);
 
   int maskExtent[6] = { 0 };
-  vtkOrientedImageDataResample::CalculateEffectiveExtent(maskLabelmap, maskExtent);
+  maskLabelmap->GetExtent(maskExtent);
 
   int effectiveExtent[6] = { 0 };
   for (int i = 0; i < 3; ++i)

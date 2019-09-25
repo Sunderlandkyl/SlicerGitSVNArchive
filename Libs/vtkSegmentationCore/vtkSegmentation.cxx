@@ -2304,13 +2304,13 @@ std::vector<std::string> vtkSegmentation::GetSegmentIdsForDataObject(vtkDataObje
     }
 
   std::vector<std::string> segmentIds;
-  for (std::pair<std::string, vtkSegment*> idAndSegment : this->Segments)
+  for (std::string segmentID : this->SegmentIds)
     {
-    vtkSegment* segment = idAndSegment.second;
+    vtkSegment* segment = this->GetSegment(segmentID);
     vtkDataObject* representationObject = segment->GetRepresentation(representationName);
     if (dataObject == representationObject)
       {
-      segmentIds.push_back(idAndSegment.first);
+      segmentIds.push_back(segmentID);
       }
     }
   return segmentIds;
@@ -2416,6 +2416,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
 
   typedef std::pair<vtkSmartPointer<vtkOrientedImageData>, std::vector<std::string> > LayerType;
   typedef std::vector<LayerType> LayerListType;
+  std::map<std::string, int> newLabelmapValues;
   LayerListType newLayers;
   for (int i = 0; i < numberOfLayers; ++i)
     {
@@ -2426,6 +2427,11 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
       vtkSmartPointer<vtkOrientedImageData> newLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
       newLabelmap->DeepCopy(layerLabelmap);
       newLayers.push_back( std::make_pair(newLabelmap, currentLayerSegmentIds));
+      for (std::string currentSegmentId : currentLayerSegmentIds)
+        {
+        vtkSegment* segment = this->GetSegment(currentSegmentId);
+        newLabelmapValues[currentSegmentId] = segment->GetValue();
+        }
       continue;
       }
 
@@ -2433,23 +2439,31 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
       {
       vtkSegment* currentSegment = this->GetSegment(currentSegmentId);
       vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(currentSegment->GetRepresentation(labelmapRepresentationName));
-      if (!currentLabelmap)
-        {
-        newLayers[0].second.push_back(currentSegmentId);
-        continue;
-        }
-
-      vtkNew<vtkImageThreshold> imageThreshold;
-      imageThreshold->SetInputData(currentLabelmap);
-      imageThreshold->ThresholdBetween(currentSegment->GetValue(), currentSegment->GetValue());
-      imageThreshold->SetInValue(1);
-      imageThreshold->SetOutValue(0);
-      imageThreshold->SetOutputScalarTypeToUnsignedChar();
-      imageThreshold->Update();
 
       vtkSmartPointer<vtkOrientedImageData> thresholdedLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
-      thresholdedLabelmap->ShallowCopy(imageThreshold->GetOutput());
-      thresholdedLabelmap->CopyDirections(currentLabelmap);
+      if (currentLabelmap)
+        {
+        vtkNew<vtkImageThreshold> imageThreshold;
+        imageThreshold->SetInputData(currentLabelmap);
+        imageThreshold->ThresholdBetween(currentSegment->GetValue(), currentSegment->GetValue());
+        imageThreshold->SetInValue(1);
+        imageThreshold->SetOutValue(0);
+        imageThreshold->SetOutputScalarTypeToUnsignedChar();
+        imageThreshold->Update();
+
+        thresholdedLabelmap->ShallowCopy(imageThreshold->GetOutput());
+        thresholdedLabelmap->CopyDirections(currentLabelmap);
+
+        int effectiveExtent[6] = { 0 };
+        vtkOrientedImageDataResample::CalculateEffectiveExtent(thresholdedLabelmap, effectiveExtent);
+
+        vtkNew<vtkOrientedImageData> referenceImage;
+        referenceImage->ShallowCopy(thresholdedLabelmap);
+        referenceImage->SetExtent(effectiveExtent);
+
+        vtkNew<vtkOrientedImageData> resampledBinaryLabelmap;
+        vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(thresholdedLabelmap, referenceImage, thresholdedLabelmap);
+        }
 
       bool merged = false;
       int layerCount = 0;
@@ -2457,29 +2471,34 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
         {
         vtkOrientedImageData* newLayerLabelmap = newLayer.first;
 
-        bool safeToMerge = !vtkOrientedImageDataResample::IsLabelInMask(newLayerLabelmap, thresholdedLabelmap);
+        bool safeToMerge = true;
+        if (currentLabelmap)
+          {
+          safeToMerge = !vtkOrientedImageDataResample::IsLabelInMask(newLayerLabelmap, thresholdedLabelmap);
+          }
+
         if (safeToMerge)
           {
           merged = true;
           double value = this->GetUniqueValueForMergedLabelmap(newLayerLabelmap);
-          this->CastLabelmapForValue(newLayerLabelmap, value);
 
-          vtkOrientedImageDataResample::MergeImage(newLayerLabelmap, thresholdedLabelmap, newLayerLabelmap,
-            vtkOrientedImageDataResample::OPERATION_MASKING, nullptr, 0.0, value);
+          if (currentLabelmap)
+            {
+            this->CastLabelmapForValue(newLayerLabelmap, value);
+            vtkOrientedImageDataResample::MergeImage(newLayerLabelmap, thresholdedLabelmap, newLayerLabelmap,
+              vtkOrientedImageDataResample::OPERATION_MASKING, nullptr, 0.0, value); // Add segment to new layer
+            }
           newLayers[layerCount].second.push_back(currentSegmentId);
-          vtkSegment* segment = this->GetSegment(currentSegmentId);
-          segment->SetValue(value);
+          newLabelmapValues[currentSegmentId] = value;
           break;
           }
         ++layerCount;
         }
-      if (merged)
+      if (!merged)
         {
-        break;
+        newLayers.push_back(std::make_pair(thresholdedLabelmap, std::vector<std::string>({ currentSegmentId })));
+        newLabelmapValues[currentSegmentId] = 1;
         }
-      newLayers.push_back(std::make_pair(thresholdedLabelmap, std::vector<std::string>({ currentSegmentId })));
-      vtkSegment* segment = this->GetSegment(currentSegmentId);
-      segment->SetValue(1);
       }
     }
 
@@ -2489,6 +2508,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
       {
       vtkSegment* segment = this->GetSegment(segmentId);
       segment->AddRepresentation(labelmapRepresentationName, newLayer.first);
+      segment->SetValue(newLabelmapValues[segmentId]);
       }
     }
 
