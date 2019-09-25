@@ -139,7 +139,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
   for (std::string segmentID : segmentIDs)
     {
     vtkSegment* segment = segmentation->GetSegment(segmentID);
-    this->LabelValues[segmentID] = segment->GetValue();
+    this->LabelValues[segmentID] = segment->GetLabelValue();
     if (jointSmoothing > 0 && smoothingFactor > 0)
       {
       vtkOrientedImageData* dataObject = vtkOrientedImageData::SafeDownCast(
@@ -153,7 +153,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
       this->JointSmoothCache[dataObject] = jointSmoothedSurface;
 
       std::vector<std::string> mergedSegmentIDs;
-      segmentation->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, true);
+      segmentation->GetMergedLabelmapSegmentIDs(segmentID, mergedSegmentIDs, true);
       for (std::string mergedSegmentID : mergedSegmentIDs)
         {
         vtkSegment* mergedSegment = segmentation->GetSegment(mergedSegmentID);
@@ -161,7 +161,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::PreConvert(vtkSegmentation*
           {
           continue;
           }
-        this->LabelValues[mergedSegmentID] = mergedSegment->GetValue();
+        this->LabelValues[mergedSegmentID] = mergedSegment->GetLabelValue();
         }
       this->CreateClosedSurface(dataObject, jointSmoothedSurface, mergedSegmentIDs);
       }

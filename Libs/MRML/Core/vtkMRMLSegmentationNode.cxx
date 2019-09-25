@@ -905,7 +905,7 @@ vtkOrientedImageData* vtkMRMLSegmentationNode::GetBinaryLabelmapRepresentation(c
 
   vtkNew<vtkImageThreshold> threshold;
   threshold->SetInputData(binaryLabelmap);
-  threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
+  threshold->ThresholdBetween(segment->GetLabelValue(), segment->GetLabelValue());
   threshold->SetInValue(1);
   threshold->SetOutValue(0);
   threshold->Update();

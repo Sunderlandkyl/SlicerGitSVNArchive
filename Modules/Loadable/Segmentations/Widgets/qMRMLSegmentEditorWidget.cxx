@@ -626,7 +626,7 @@ bool qMRMLSegmentEditorWidgetPrivate::updateSelectedSegmentLabelmap()
 
   vtkNew<vtkImageThreshold> threshold;
   threshold->SetInputData(segmentLabelmap);
-  threshold->ThresholdBetween(selectedSegment->GetValue(), selectedSegment->GetValue());
+  threshold->ThresholdBetween(selectedSegment->GetLabelValue(), selectedSegment->GetLabelValue());
   threshold->SetInValue(1);
   threshold->SetOutValue(0);
   threshold->Update();

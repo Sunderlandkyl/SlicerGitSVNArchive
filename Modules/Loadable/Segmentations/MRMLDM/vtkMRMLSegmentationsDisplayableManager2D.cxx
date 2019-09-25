@@ -804,7 +804,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       }
 
     std::vector<std::string> mergedSegmentIds;
-    segmentation->GetMergedLabelmapSegmentIdsForRepresentation(firstSegment, displayNode->GetDisplayRepresentationName2D(), mergedSegmentIds, true);
+    segmentation->GetMergedSegmentIDsForRepresentation(firstSegment, displayNode->GetDisplayRepresentationName2D(), mergedSegmentIds, true);
 
     // Get representation to display
     vtkPolyData* polyData = vtkPolyData::SafeDownCast(dataObject);
@@ -1001,7 +1001,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       for (std::string segmentId : mergedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
-        int labelmapValue = segment->GetValue();
+        int labelmapValue = segment->GetLabelValue();
         minLabelmapValue = std::min(minLabelmapValue, labelmapValue);
         maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
         }
@@ -1028,7 +1028,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       for (std::string segmentId : mergedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
-        int labelmapValue = segment->GetValue();
+        int labelmapValue = segment->GetLabelValue();
 
         // Get visibility
         vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
@@ -1756,7 +1756,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
           continue;
           }
 
-        int labelmapValue = segment->GetValue();
+        int labelmapValue = segment->GetLabelValue();
         if ((shownRepresenatationName == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName() && voxelValue != labelmapValue) ||
           segment->GetRepresentation(shownRepresenatationName) != imageData)
           {

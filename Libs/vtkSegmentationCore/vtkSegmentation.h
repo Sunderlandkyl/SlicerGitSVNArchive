@@ -309,13 +309,13 @@ public:
   void InvalidateNonMasterRepresentations();
 
   /// TODO
-  void GetMergedLabelmapSegmentIdsForRepresentation(vtkSegment* segment, std::string representationName,
+  void GetMergedSegmentIDsForRepresentation(vtkSegment* segment, std::string representationName,
     std::vector<std::string>& sharedSegmentIds, bool includeMainSegmentId);
-  void GetMergedLabelmapSegmentIdsForRepresentation(std::string segmentId, std::string representationName,
+  void GetMergedSegmentIDsForRepresentation(std::string segmentId, std::string representationName,
     std::vector<std::string>& sharedSegmentIds, bool includeMainSegmentId);
-  void GetMergedLabelmapSegmentIds(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds,
+  void GetMergedLabelmapSegmentIDs(vtkSegment* segment, std::vector<std::string> &sharedSegmentIds,
     bool includeMainSegmentId);
-  void GetMergedLabelmapSegmentIds(std::string segmentId, std::vector<std::string> &sharedSegmentIds,
+  void GetMergedLabelmapSegmentIDs(std::string segmentId, std::vector<std::string> &sharedSegmentIds,
     bool includeMainSegmentId);
   int GetUniqueValueForMergedLabelmap(std::string segmentId);
   int GetUniqueValueForMergedLabelmap(vtkOrientedImageData* labelmap);

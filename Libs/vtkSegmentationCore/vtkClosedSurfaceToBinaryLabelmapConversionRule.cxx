@@ -243,7 +243,7 @@ bool vtkClosedSurfaceToBinaryLabelmapConversionRule::PreConvert(vtkSegmentation*
       newLabelmap->DeepCopy(oldLabelmap);
       segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), newLabelmap);
       }
-    segment->SetValue(1);
+    segment->SetLabelValue(1);
     }
   return true;
 }

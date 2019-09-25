@@ -1275,7 +1275,7 @@ bool vtkSlicerSegmentationsModuleLogic::ImportLabelmapToSegmentationNode(vtkMRML
     {
     int label = labelValues->GetValue(labelIndex);
     vtkSmartPointer<vtkSegment> segment = vtkSmartPointer<vtkSegment>::New();
-    segment->SetValue(label);
+    segment->SetLabelValue(label);
 
     // Set segment color
     double color[4] = { vtkSegment::SEGMENT_COLOR_INVALID[0],
@@ -1881,7 +1881,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       resampledSegmentLabelmap = segmentLabelmap;
       }
 
-    int labelmapValue = selectedSegment->GetValue();
+    int labelmapValue = selectedSegment->GetLabelValue();
     // Ensure that the value for the segment can be contained in the labelmap.
     segmentationNode->GetSegmentation()->CastLabelmapForValue(segmentLabelmap, labelmapValue);
 
@@ -2519,7 +2519,7 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
     }
 
   std::vector<std::string> mergedSegmentIds;
-  segmentation->GetMergedLabelmapSegmentIds(segment, mergedSegmentIds, false);
+  segmentation->GetMergedLabelmapSegmentIDs(segment, mergedSegmentIds, false);
 
   vtkDataObject* dataObject = segment->GetRepresentation(segmentation->GetMasterRepresentationName());
   if (segmentation->GetMasterRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName()
@@ -2528,7 +2528,7 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
     vtkOrientedImageData* binaryLablemap = vtkOrientedImageData::SafeDownCast(dataObject);
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(binaryLablemap);
-    threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
+    threshold->ThresholdBetween(segment->GetLabelValue(), segment->GetLabelValue());
     threshold->SetInValue(0);
     threshold->ReplaceOutOff();
     threshold->Update();
@@ -2575,7 +2575,7 @@ bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
     }
 
   std::vector<std::string> mergedSegmentIDs;
-  segmentation->GetMergedLabelmapSegmentIds(segmentID, mergedSegmentIDs, includeInputSegmentID);
+  segmentation->GetMergedLabelmapSegmentIDs(segmentID, mergedSegmentIDs, includeInputSegmentID);
   if (mergedSegmentIDs.empty())
     {
     // No merged segments to compare against, so there are no relevant IDs in the mask
@@ -2586,7 +2586,7 @@ bool vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(
   for (auto segmentID : mergedSegmentIDs)
     {
     vtkSegment* segment = segmentation->GetSegment(segmentID);
-    segmentValues[segment->GetValue()] = segmentID;
+    segmentValues[segment->GetLabelValue()] = segmentID;
     }
 
   vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(

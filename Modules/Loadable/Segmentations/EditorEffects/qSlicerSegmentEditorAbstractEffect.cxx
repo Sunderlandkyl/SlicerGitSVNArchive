@@ -448,7 +448,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
 
   vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(segmentID);
   std::vector<std::string> mergedSegmentIds;
-  segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIds(segment, mergedSegmentIds, false);
+  segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIDs(segment, mergedSegmentIds, false);
 
   std::vector<std::string> mergedSegmentsUnderModifier;
   vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, segmentID, modifierLabelmapInput, mergedSegmentsUnderModifier, 0.0, false);
@@ -492,7 +492,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
     segmentInverter->SetInValue(m_EraseValue);
     segmentInverter->SetOutValue(VTK_UNSIGNED_CHAR_MAX);
     segmentInverter->ReplaceInOn();
-    segmentInverter->ThresholdBetween(segment->GetValue(), segment->GetValue());
+    segmentInverter->ThresholdBetween(segment->GetLabelValue(), segment->GetLabelValue());
     segmentInverter->SetOutputScalarTypeToUnsignedChar();
     segmentInverter->Update();
     vtkNew<vtkOrientedImageData> invertedModifierLabelmap;
@@ -570,7 +570,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
 
       std::vector<std::string> dontOverwriteIds;
       std::vector<std::string> currentMergedIds;
-      segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIds(currentSegmentID, currentMergedIds, true);
+      segmentationNode->GetSegmentation()->GetMergedLabelmapSegmentIDs(currentSegmentID, currentMergedIds, true);
       for (std::string mergedSegmentId : currentMergedIds)
         {
         if (std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId) == segmentIDsToOverwrite.end())
@@ -592,7 +592,7 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
           vtkSegment* dontOverwriteSegment = segmentationNode->GetSegmentation()->GetSegment(dontOverwriteId);
           vtkNew<vtkImageThreshold> threshold;
           threshold->SetInputData(currentLabelmap);
-          threshold->ThresholdBetween(dontOverwriteSegment->GetValue(), dontOverwriteSegment->GetValue());
+          threshold->ThresholdBetween(dontOverwriteSegment->GetLabelValue(), dontOverwriteSegment->GetLabelValue());
           threshold->SetInValue(1);
           threshold->SetOutValue(0);
           threshold->SetOutputScalarTypeToUnsignedChar();
