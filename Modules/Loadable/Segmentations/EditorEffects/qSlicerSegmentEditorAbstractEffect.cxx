@@ -305,9 +305,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
 {
   Q_D(qSlicerSegmentEditorAbstractEffect);
 
-  // TODO: When segments are not allowed to overlap, merge with a segment
-  // When segments are allowed to overlap, put in own labelmap
-
   vtkMRMLSegmentEditorNode* parameterSetNode = this->parameterSetNode();
   if (!parameterSetNode)
     {

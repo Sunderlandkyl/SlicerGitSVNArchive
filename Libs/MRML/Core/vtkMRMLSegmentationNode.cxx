@@ -900,11 +900,11 @@ vtkOrientedImageData* vtkMRMLSegmentationNode::GetBinaryLabelmapRepresentation(c
     return nullptr;
     }
 
-  vtkOrientedImageData* imageData = vtkOrientedImageData::SafeDownCast(
+  vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
     segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
 
   vtkNew<vtkImageThreshold> threshold;
-  threshold->SetInputData(imageData);
+  threshold->SetInputData(binaryLabelmap);
   threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
   threshold->SetInValue(1);
   threshold->SetOutValue(0);
@@ -912,7 +912,7 @@ vtkOrientedImageData* vtkMRMLSegmentationNode::GetBinaryLabelmapRepresentation(c
 
   vtkOrientedImageData* thresholdedBinaryLabelmap = vtkOrientedImageData::New();
   thresholdedBinaryLabelmap->ShallowCopy(threshold->GetOutput());
-  thresholdedBinaryLabelmap->CopyDirections(imageData);
+  thresholdedBinaryLabelmap->CopyDirections(binaryLabelmap);
   return thresholdedBinaryLabelmap;
 }
 

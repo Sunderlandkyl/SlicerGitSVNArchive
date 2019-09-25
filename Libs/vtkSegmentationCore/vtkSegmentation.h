@@ -342,6 +342,9 @@ public:
   /// TODO
   void CollapseBinaryLabelmaps(bool safeMerge = true);
 
+  // TODO
+  void CastLabelmapForValue(vtkOrientedImageData* labelmap, double value);
+
 // Conversion related methods
 
   /// Create a representation in all segments, using the conversion path with the

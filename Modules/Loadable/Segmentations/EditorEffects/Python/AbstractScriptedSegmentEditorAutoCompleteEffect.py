@@ -473,7 +473,6 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
         color = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
         newSegment.SetColor(color)
         previewNode.GetSegmentation().AddSegment(newSegment, segmentID)
-
       self.scriptedEffect.modifySegmentByLabelmap(previewNode, segmentID, newSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
       # Automatically hide result segments that are background (all eight corners are non-zero)

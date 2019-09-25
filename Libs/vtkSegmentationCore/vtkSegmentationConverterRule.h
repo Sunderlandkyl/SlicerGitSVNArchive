@@ -83,11 +83,13 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   virtual vtkDataObject* ConstructRepresentationObjectByClass(std::string className) = 0;
 
+  /// Perform pre-conversion steps across the specified segments in the segmentation
   virtual bool PreConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) { return true; };
 
   /// Update the target representation based on the source representation
   virtual bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation)= 0;
 
+/// Perform post-conversion steps across the specified segments in the segmentation
   virtual bool PostConvert(vtkSegmentation* segmentation, std::vector<std::string> segmentIDs) { return true; };
 
   /// Get the cost of the conversion.

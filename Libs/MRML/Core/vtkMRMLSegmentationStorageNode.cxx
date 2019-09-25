@@ -1029,6 +1029,7 @@ int vtkMRMLSegmentationStorageNode::WriteBinaryLabelmapRepresentation(vtkMRMLSeg
     return 0;
     }
   vtkSegmentation* segmentation = segmentationNode->GetSegmentation();
+  segmentation->CollapseBinaryLabelmaps(true);
 
   // Get and check master representation
   if (!segmentationNode->GetSegmentation()->IsMasterRepresentationImageData())
@@ -1118,11 +1119,11 @@ int vtkMRMLSegmentationStorageNode::WriteBinaryLabelmapRepresentation(vtkMRMLSeg
 
   vtkNew<vtkImageAppendComponents> appender;
 
-  std::map<vtkDataObject*, int> imageLayers;
+  unsigned int layerIndex = 0;
+  std::map<vtkDataObject*, int> labelmapLayers;
 
   // Dimensions of the output 4D NRRD file: (i, j, k, segment)
   unsigned int segmentIndex = 0;
-  unsigned int layerIndex = 0;
   for (std::vector< std::string >::const_iterator segmentIdIt = segmentIDs.begin(); segmentIdIt != segmentIDs.end(); ++segmentIdIt, ++segmentIndex)
     {
     std::string currentSegmentID = *segmentIdIt;
@@ -1204,13 +1205,13 @@ int vtkMRMLSegmentationStorageNode::WriteBinaryLabelmapRepresentation(vtkMRMLSeg
     writer->SetAttribute(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_VALUE).c_str(), labelValueSS.str());
 
     vtkDataObject* originalRepresentation = currentSegment->GetRepresentation(segmentationNode->GetSegmentation()->GetMasterRepresentationName());
-    if (imageLayers.find(originalRepresentation) == imageLayers.end())
+    if (labelmapLayers.find(originalRepresentation) == labelmapLayers.end())
       {
-      imageLayers[originalRepresentation] = layerIndex;
+      labelmapLayers[originalRepresentation] = layerIndex;
       appender->AddInputData(currentBinaryLabelmap);
       ++layerIndex;
       }
-    unsigned int layer = imageLayers[originalRepresentation];
+    unsigned int layer = labelmapLayers[originalRepresentation];
     std::stringstream layerIndexSS;
     layerIndexSS << layer;
     writer->SetAttribute(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_LAYER).c_str(), layerIndexSS.str());

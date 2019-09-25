@@ -33,7 +33,6 @@
 #include <vtkBoundingBox.h>
 #include <vtkCallbackCommand.h>
 #include <vtkCollection.h>
-#include <vtkImageAccumulate.h>
 #include <vtkImageCast.h>
 #include <vtkImageThreshold.h>
 #include <vtkMath.h>
@@ -152,10 +151,23 @@ void vtkSegmentation::DeepCopy(vtkSegmentation* aSegmentation)
   this->Converter->DeepCopy(aSegmentation->Converter);
 
   // Deep copy segments list
+  std::map<vtkDataObject*, vtkDataObject*> copiedDataObjects;
   for (std::deque< std::string >::iterator segmentIdIt = aSegmentation->SegmentIds.begin(); segmentIdIt != aSegmentation->SegmentIds.end(); ++segmentIdIt)
     {
     vtkSmartPointer<vtkSegment> segment = vtkSmartPointer<vtkSegment>::New();
     segment->DeepCopy(aSegmentation->Segments[*segmentIdIt]);
+
+    // Check to see if we have already added a segment that used the same vtkDataObject (i.e. merged)
+    vtkDataObject* originalRepresentation = aSegmentation->Segments[*segmentIdIt]->GetRepresentation(this->GetMasterRepresentationName());
+    if (copiedDataObjects.find(originalRepresentation) == copiedDataObjects.end())
+      {
+      copiedDataObjects[originalRepresentation] = segment->GetRepresentation(this->MasterRepresentationName);
+      }
+    else
+      {
+      segment->AddRepresentation(this->MasterRepresentationName, copiedDataObjects[originalRepresentation]);
+      }
+
     this->AddSegment(segment, *segmentIdIt);
     }
 }
@@ -1602,7 +1614,6 @@ void vtkSegmentation::ClearSegment(std::string segmentId)
     return;
     }
 
-
   std::vector<std::string> mergedSegmentIDs;
   this->GetMergedLabelmapSegmentIds(segment, mergedSegmentIDs, false);
   if (mergedSegmentIDs.empty())
@@ -1835,81 +1846,8 @@ std::string vtkSegmentation::AddEmptySegment(std::string segmentId/*=""*/, std::
       double mergedValue = this->GetUniqueValueForMergedLabelmap(mergedSegmentId);
       segment->SetValue(mergedValue);
       segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), dataObject);
-
       vtkOrientedImageData* mergedLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);
-      if (mergedLabelmap && mergedValue > mergedLabelmap->GetScalarTypeMax())
-        {
-        vtkNew<vtkImageCast> imageCast;
-        imageCast->SetInputData(mergedLabelmap);
-        int scalarType = mergedLabelmap->GetScalarType();
-        bool typeIsSigned = false;
-        switch (scalarType)
-          {
-          case VTK_CHAR:
-            typeIsSigned = (bool)VTK_TYPE_CHAR_IS_SIGNED;
-            break;
-          case VTK_SIGNED_CHAR:
-          case VTK_SHORT:
-          case VTK_INT:
-          case VTK_LONG:
-          case VTK_FLOAT:
-          case VTK_DOUBLE:
-            typeIsSigned = true;
-            break;
-          case VTK_UNSIGNED_CHAR:
-          case VTK_UNSIGNED_INT:
-          case VTK_UNSIGNED_SHORT:
-          case VTK_UNSIGNED_LONG:
-            typeIsSigned = false;
-            break;
-          }
-
-        if (typeIsSigned)
-          {
-          if (mergedValue > VTK_FLOAT_MAX || mergedValue < VTK_FLOAT_MIN)
-            {
-            scalarType = VTK_DOUBLE;
-            }
-          else if (mergedValue > VTK_LONG_MAX || mergedValue < VTK_LONG_MIN)
-            {
-            scalarType = VTK_FLOAT;
-            }
-          else if (mergedValue > VTK_INT_MAX || mergedValue < VTK_INT_MIN)
-            {
-            scalarType = VTK_LONG;
-            }
-          else if (mergedValue > VTK_SHORT_MAX || mergedValue < VTK_SHORT_MIN)
-            {
-            scalarType = VTK_SHORT;
-            }
-          }
-        else
-          {
-          if (mergedValue > VTK_FLOAT_MAX)
-          {
-            scalarType = VTK_DOUBLE;
-          }
-          else if (mergedValue > VTK_UNSIGNED_LONG_MAX)
-          {
-            scalarType = VTK_FLOAT;
-          }
-          else if (mergedValue > VTK_UNSIGNED_INT_MAX)
-            {
-            scalarType = VTK_UNSIGNED_LONG;
-            }
-          else if (mergedValue > VTK_UNSIGNED_SHORT_MAX)
-            {
-            scalarType = VTK_UNSIGNED_INT;
-            }
-          else if (mergedValue > VTK_UNSIGNED_CHAR_MAX)
-            {
-            scalarType = VTK_UNSIGNED_SHORT;
-            }
-          }
-        imageCast->SetOutputScalarType(scalarType);
-        imageCast->Update();
-        mergedLabelmap->vtkImageData::ShallowCopy(imageCast->GetOutput());
-        }
+      this->CastLabelmapForValue(mergedLabelmap, mergedValue);
       }
     }
   // Add segment
@@ -2379,26 +2317,110 @@ std::vector<std::string> vtkSegmentation::GetSegmentIdsForDataObject(vtkDataObje
 }
 
 //----------------------------------------------------------------------------
+void vtkSegmentation::CastLabelmapForValue(vtkOrientedImageData* labelmap, double value)
+{
+  if (labelmap && value > labelmap->GetScalarTypeMax())
+  {
+    vtkNew<vtkImageCast> imageCast;
+    imageCast->SetInputData(labelmap);
+    int scalarType = labelmap->GetScalarType();
+    bool typeIsSigned = false;
+    switch (scalarType)
+    {
+    case VTK_CHAR:
+      typeIsSigned = (bool)VTK_TYPE_CHAR_IS_SIGNED;
+      break;
+    case VTK_SIGNED_CHAR:
+    case VTK_SHORT:
+    case VTK_INT:
+    case VTK_LONG:
+    case VTK_FLOAT:
+    case VTK_DOUBLE:
+      typeIsSigned = true;
+      break;
+    case VTK_UNSIGNED_CHAR:
+    case VTK_UNSIGNED_INT:
+    case VTK_UNSIGNED_SHORT:
+    case VTK_UNSIGNED_LONG:
+      typeIsSigned = false;
+      break;
+    }
+
+    if (typeIsSigned)
+    {
+      if (value > VTK_FLOAT_MAX || value < VTK_FLOAT_MIN)
+      {
+        scalarType = VTK_DOUBLE;
+      }
+      else if (value > VTK_LONG_MAX || value < VTK_LONG_MIN)
+      {
+        scalarType = VTK_FLOAT;
+      }
+      else if (value > VTK_INT_MAX || value < VTK_INT_MIN)
+      {
+        scalarType = VTK_LONG;
+      }
+      else if (value > VTK_SHORT_MAX || value < VTK_SHORT_MIN)
+      {
+        scalarType = VTK_SHORT;
+      }
+    }
+    else
+    {
+      if (value > VTK_FLOAT_MAX)
+      {
+        scalarType = VTK_DOUBLE;
+      }
+      else if (value > VTK_UNSIGNED_LONG_MAX)
+      {
+        scalarType = VTK_FLOAT;
+      }
+      else if (value > VTK_UNSIGNED_INT_MAX)
+      {
+        scalarType = VTK_UNSIGNED_LONG;
+      }
+      else if (value > VTK_UNSIGNED_SHORT_MAX)
+      {
+        scalarType = VTK_UNSIGNED_INT;
+      }
+      else if (value > VTK_UNSIGNED_CHAR_MAX)
+      {
+        scalarType = VTK_UNSIGNED_SHORT;
+      }
+    }
+    imageCast->SetOutputScalarType(scalarType);
+    imageCast->Update();
+    labelmap->vtkImageData::ShallowCopy(imageCast->GetOutput());
+  }
+}
+
+//----------------------------------------------------------------------------
 void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
 {
+  std::string labelmapRepresentationName = vtkSegmentationConverter::GetBinaryLabelmapRepresentationName();
+  int numberOfLayers = this->GetNumberOfLayers(labelmapRepresentationName);
+  if (numberOfLayers <= 1)
+    {
+    // No need to try to merge, the minimum number of labelmaps has been reached.
+    return;
+    }
+
   if (!safeMerge)
     {
+    // If the merge is unsafe, segments can be overwritten.
     std::vector<std::string> segmentIds;
     this->GetSegmentIDs(segmentIds);
     this->MergeSegmentLabelmaps(segmentIds);
     return;
     }
 
-  std::string representationName = vtkSegmentationConverter::GetBinaryLabelmapRepresentationName();
-
   typedef std::pair<vtkSmartPointer<vtkOrientedImageData>, std::vector<std::string> > LayerType;
   typedef std::vector<LayerType> LayerListType;
   LayerListType newLayers;
-  int numberOfLayers = this->GetNumberOfLayers(representationName);
   for (int i = 0; i < numberOfLayers; ++i)
     {
-    vtkOrientedImageData* layerLabelmap = vtkOrientedImageData::SafeDownCast(this->GetLayerDataObject(i, representationName));
-    std::vector<std::string> currentLayerSegmentIds = this->GetSegmentIdsForLayer(i, representationName);
+    vtkOrientedImageData* layerLabelmap = vtkOrientedImageData::SafeDownCast(this->GetLayerDataObject(i, labelmapRepresentationName));
+    std::vector<std::string> currentLayerSegmentIds = this->GetSegmentIdsForLayer(i, labelmapRepresentationName);
     if (i == 0)
       {
       vtkSmartPointer<vtkOrientedImageData> newLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
@@ -2410,7 +2432,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
     for (std::string currentSegmentId : currentLayerSegmentIds)
       {
       vtkSegment* currentSegment = this->GetSegment(currentSegmentId);
-      vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(currentSegment->GetRepresentation(representationName));
+      vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(currentSegment->GetRepresentation(labelmapRepresentationName));
       if (!currentLabelmap)
         {
         newLayers[0].second.push_back(currentSegmentId);
@@ -2440,7 +2462,8 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
           {
           merged = true;
           double value = this->GetUniqueValueForMergedLabelmap(newLayerLabelmap);
-          // TODO cast image up if there are too many labels in the image?
+          this->CastLabelmapForValue(newLayerLabelmap, value);
+
           vtkOrientedImageDataResample::MergeImage(newLayerLabelmap, thresholdedLabelmap, newLayerLabelmap,
             vtkOrientedImageDataResample::OPERATION_MASKING, nullptr, 0.0, value);
           newLayers[layerCount].second.push_back(currentSegmentId);
@@ -2465,7 +2488,36 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
     for (std::string segmentId : newLayer.second)
       {
       vtkSegment* segment = this->GetSegment(segmentId);
-      segment->AddRepresentation(representationName, newLayer.first);
+      segment->AddRepresentation(labelmapRepresentationName, newLayer.first);
+      }
+    }
+
+  if (labelmapRepresentationName == this->MasterRepresentationName)
+    {
+    std::vector<std::string> segmentIDs;
+    this->GetSegmentIDs(segmentIDs);
+
+    // Re-convert all other representations
+    std::vector<std::string> representationNames;
+    this->GetContainedRepresentationNames(representationNames);
+
+    for (std::vector<std::string>::iterator reprIt = representationNames.begin();
+      reprIt != representationNames.end(); ++reprIt)
+      {
+      std::string targetRepresentationName = (*reprIt);
+      if (targetRepresentationName.compare(this->MasterRepresentationName))
+        {
+        vtkSegmentationConverter::ConversionPathAndCostListType pathCosts;
+        this->GetPossibleConversions(targetRepresentationName, pathCosts);
+
+        // Get cheapest path from found conversion paths
+        vtkSegmentationConverter::ConversionPathType cheapestPath = vtkSegmentationConverter::GetCheapestPath(pathCosts);
+        if (cheapestPath.empty())
+          {
+          return;
+          }
+        this->ConvertSegmentsUsingPath(segmentIDs, cheapestPath, true);
+        }
       }
     }
 }

@@ -139,8 +139,9 @@ bool vtkSegmentationHistory::SaveState()
         baselineSegment = baselineSegmentIt->second.GetPointer();
         }
       }
-
     vtkSmartPointer<vtkSegment> segmentClone = vtkSmartPointer<vtkSegment>::New();
+    // If the same object (i.e. merged labelmap) has already been copied into previous segmentation, then point to that
+    // object instead.
     vtkDataObject* masterRepresentation = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
     if (savedObjects.find(masterRepresentation) == savedObjects.end())
       {
@@ -265,7 +266,6 @@ bool vtkSegmentationHistory::RestoreState(unsigned int stateIndex)
     restoredSegmentsIt != restoredState.Segments.end(); ++restoredSegmentsIt)
     {
     segmentIDsToKeep.insert(restoredSegmentsIt->first);
-
     vtkSmartPointer<vtkSegment> segment = this->Segmentation->GetSegment(restoredSegmentsIt->first);
     if (segment == nullptr)
       {
@@ -282,13 +282,9 @@ bool vtkSegmentationHistory::RestoreState(unsigned int stateIndex)
     else
       {
       segment->AddRepresentation(this->Segmentation->GetMasterRepresentationName(), restoredDataObjects[restoredRepresentation]);
+      segment->DeepCopyMetadata(restoredSegmentsIt->second);
       }
-    segment->DeepCopyMetadata(restoredSegmentsIt->second);
     }
-
-
-
-
 
   // Removed segments that were not in the restored state
   std::vector<std::string> segmentIDs;

@@ -706,7 +706,6 @@ bool vtkSlicerSegmentationsModuleLogic::ExportSegmentToRepresentationNode(vtkSeg
     vtkErrorWithObjectMacro(segment, "ExportSegmentToRepresentationNode: Invalid representation MRML node");
     return false;
     }
-
   vtkMRMLLabelMapVolumeNode* labelmapNode = vtkMRMLLabelMapVolumeNode::SafeDownCast(representationNode);
   vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(representationNode);
   if (!labelmapNode && !modelNode)
@@ -1850,7 +1849,7 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
     threshold->SetInputData(labelmap);
     threshold->ThresholdByLower(0);
     threshold->SetInValue(0);
-    int labelmapValue = selectedSegment->GetValue();
+
     if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
       {
       threshold->SetOutValue(segmentLabelmap->GetScalarTypeMax());
@@ -1881,6 +1880,10 @@ bool vtkSlicerSegmentationsModuleLogic::SetBinaryLabelmapToSegment(
       {
       resampledSegmentLabelmap = segmentLabelmap;
       }
+
+    int labelmapValue = selectedSegment->GetValue();
+    // Ensure that the value for the segment can be contained in the labelmap.
+    segmentationNode->GetSegmentation()->CastLabelmapForValue(segmentLabelmap, labelmapValue);
 
     if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM && !minimumOfAllSegments)
       {
@@ -2526,7 +2529,7 @@ bool vtkSlicerSegmentationsModuleLogic::ClearSegment(vtkSegmentation* segmentati
     vtkNew<vtkImageThreshold> threshold;
     threshold->SetInputData(binaryLablemap);
     threshold->ThresholdBetween(segment->GetValue(), segment->GetValue());
-    threshold->SetInValue(0); // TODO: Maybe outside value is not 0
+    threshold->SetInValue(0);
     threshold->ReplaceOutOff();
     threshold->Update();
     binaryLablemap->ShallowCopy(threshold->GetOutput());

@@ -1502,42 +1502,39 @@ bool vtkOrientedImageDataResample::IsLabelInMask(
   vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap)
 {
 
-  //int binaryExtent[6] = { 0 };
-  //binaryLabelmap->GetExtent(binaryExtent);
+  int binaryExtent[6] = { 0 };
+  binaryLabelmap->GetExtent(binaryExtent);
 
-  //int maskExtent[6] = { 0 };
-  //vtkOrientedImageDataResample::CalculateEffectiveExtent(maskLabelmap, maskExtent);
+  int maskExtent[6] = { 0 };
+  vtkOrientedImageDataResample::CalculateEffectiveExtent(maskLabelmap, maskExtent);
 
-  //int effectiveExtent[6] = { 0 };
-  //for (int i = 0; i < 3; ++i)
-  //  {
-  //  effectiveExtent[2 * i] = std::max(binaryExtent[2 * i], maskExtent[2 * i]);
-  //  effectiveExtent[2 * i + 1] = std::min(binaryExtent[2 * i + 1], maskExtent[2 * i + 1]);
-  //  }
+  int effectiveExtent[6] = { 0 };
+  for (int i = 0; i < 3; ++i)
+    {
+    effectiveExtent[2 * i] = std::max(binaryExtent[2 * i], maskExtent[2 * i]);
+    effectiveExtent[2 * i + 1] = std::min(binaryExtent[2 * i + 1], maskExtent[2 * i + 1]);
+    }
 
-  //// Return with failure if effective input extent is empty
-  //if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
-  //  {
-  //  return false;
-  //  }
+  // No labels in mask if effective extent is emptyy
+  if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
+    {
+    return false;
+    }
 
-  //vtkNew<vtkOrientedImageData> referenceImage;
-  //referenceImage->SetExtent(effectiveExtent);
-  //referenceImage->CopyDirections(maskLabelmap);
+  vtkNew<vtkOrientedImageData> referenceImage;
+  referenceImage->ShallowCopy(maskLabelmap);
+  referenceImage->SetExtent(effectiveExtent);
 
-  //vtkNew<vtkOrientedImageData> resampledBinaryLabelmap;
-  //vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(binaryLabelmap, referenceImage, resampledBinaryLabelmap, false, true);
-  //vtkSmartPointer<vtkOrientedImageData> resampledMask = vtkSmartPointer<vtkOrientedImageData>::New();
-  //vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, referenceImage, resampledMask, false, true);
-
-  vtkSmartPointer<vtkOrientedImageData> resampledMask = vtkSmartPointer<vtkOrientedImageData>::New();
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, binaryLabelmap, resampledMask);
+  vtkNew<vtkOrientedImageData> resampledBinaryLabelmap;
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(binaryLabelmap, referenceImage, resampledBinaryLabelmap);
+  vtkNew<vtkOrientedImageData> resampledMask;
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, referenceImage, resampledMask);
 
   bool valueFound = false;
   switch (binaryLabelmap->GetScalarType())
     {
     vtkTemplateMacro((IsLabelInMaskGeneric<VTK_TT>(
-      binaryLabelmap,
+      resampledBinaryLabelmap,
       resampledMask,
       0.0,
       valueFound)));

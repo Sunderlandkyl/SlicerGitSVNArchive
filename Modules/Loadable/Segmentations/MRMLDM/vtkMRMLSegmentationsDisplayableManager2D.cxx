@@ -284,7 +284,7 @@ public:
     vtkMTimeType SliceIntersectionUpdatedTime;
     };
 
-  typedef std::map<vtkWeakPointer<vtkDataObject>, Pipeline*> PipelineMapType; // first: segment ID; second: display pipeline
+  typedef std::map<vtkSmartPointer<vtkDataObject>, Pipeline*> PipelineMapType; // first: segment ID; second: display pipeline
   typedef std::map < vtkMRMLSegmentationDisplayNode*, PipelineMapType > PipelinesCacheType;
   PipelinesCacheType DisplayPipelines;
 
@@ -1009,8 +1009,8 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       double colorInvisible[4] = { 0,0,0,0 };
 
 
-      vtkNew<vtkPiecewiseFunction> outlineOpacityFunction;
-      vtkNew<vtkPiecewiseFunction> fillOpacityFunction;
+      vtkSmartPointer<vtkPiecewiseFunction> outlineOpacityFunction = vtkSmartPointer<vtkPiecewiseFunction>::New();
+      vtkSmartPointer<vtkPiecewiseFunction> fillOpacityFunction = vtkSmartPointer<vtkPiecewiseFunction>::New();
 
       if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
         {
@@ -1805,15 +1805,13 @@ void vtkMRMLSegmentationsDisplayableManager2D::GetVisibleSegmentsForPosition(dou
           std::string segmentID;
           for (int i = 0; i < segmentation->GetNumberOfSegments(); ++i)
             {
-            vtkSegment* segment = segmentation->GetNthSegment(0);
+            vtkSegment* segment = segmentation->GetNthSegment(i);
             if (pipelineIt->first == segment->GetRepresentation(displayNode->GetDisplayRepresentationName2D()))
               {
               segmentID = segmentation->GetSegmentIdBySegment(segment);
               break;
               }
             }
-
-          // TODO: Make more efficient (Map from segment ID to data object?)
           if (!segmentID.empty())
             {
             segmentIDsAtPosition.insert(segmentID);
