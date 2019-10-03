@@ -1133,7 +1133,7 @@ def arrayFromGridTransformModified(gridTransformNode):
 
 def arrayFromSegment(segmentationNode, segmentId):
   """Return voxel array of a segment's binary labelmap representation as numpy array.
-  Voxels values are not copied.
+  Voxels values are copied.
   If binary labelmap is the master representation then voxel values in the volume node can be modified
   by changing values in the numpy array. After all modifications has been completed, call:
   segmentationNode.GetSegmentation().GetSegment(segmentID).Modified()
@@ -1142,7 +1142,8 @@ def arrayFromSegment(segmentationNode, segmentId):
     therefore values in the array may be changed, but the array must not be reallocated.
     See :py:meth:`arrayFromVolume` for details.
   """
-  vimage = segmentationNode.GetBinaryLabelmapRepresentation(segmentId)
+  vimage = slicer.vtkOrientedImageData()
+  segmentationNode.GetBinaryLabelmapRepresentation(segmentId, vimage)
   nshape = tuple(reversed(vimage.GetDimensions()))
   import vtk.util.numpy_support
   narray = vtk.util.numpy_support.vtk_to_numpy(vimage.GetPointData().GetScalars()).reshape(nshape)

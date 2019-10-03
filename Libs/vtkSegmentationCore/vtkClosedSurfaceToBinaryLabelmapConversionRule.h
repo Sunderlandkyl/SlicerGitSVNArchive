@@ -43,6 +43,7 @@ public:
   /// then automatic oversampling is calculated.
   static const std::string GetOversamplingFactorParameterName() { return "Oversampling factor"; };
   static const std::string GetCropToReferenceImageGeometryParameterName() { return "Crop to reference image geometry"; };
+  static const std::string GetCollapseLabelmapsParameterName() { return "Collapse labelmaps"; };
 
 public:
   static vtkClosedSurfaceToBinaryLabelmapConversionRule* New();
@@ -59,8 +60,9 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
-  /// Update the target representation based on the source representation
-  bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
+  /// Perform postprocesing steps on the output
+  /// Collapses the segments to as few labelmaps as is possible
+  bool PostConvert(vtkSegmentation* segmentation) override;
 
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;
@@ -77,6 +79,9 @@ public:
   vtkSetMacro(UseOutputImageDataGeometry, bool);
 
 protected:
+  /// Update the target representation based on the source representation
+  bool ConvertInternal(vtkSegment* segment) override;
+
   /// Calculate actual geometry of the output labelmap volume by verifying that the reference image geometry
   /// encompasses the input surface model, and extending it to the proper directions if necessary.
   /// \param closedSurfacePolyData Input closed surface poly data to convert

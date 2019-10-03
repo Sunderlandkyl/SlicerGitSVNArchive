@@ -54,8 +54,8 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
-  /// Update the target representation based on the source representation
-  bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation) override;
+  bool PreConvert(vtkSegmentation* vtkNotUsed(segmentation)) override { return true; };
+  bool PostConvert(vtkSegmentation* vtkNotUsed(segmentation)) override { return true; };
 
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;
@@ -70,6 +70,9 @@ public:
   const char* GetTargetRepresentationName() override { return vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName(); };
 
 protected:
+  /// Update the target representation based on the source representation
+  bool ConvertInternal(vtkSegment* segment) override;
+
   /// This function adds a border around the image that contains the paddingConstant value
   /// \param FractionalLabelMap The image that is being padded
   /// \param paddingConstant The value that is used to fill the new voxels

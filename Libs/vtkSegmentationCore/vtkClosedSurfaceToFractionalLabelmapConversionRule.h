@@ -58,8 +58,8 @@ public:
   /// Note: Need to take ownership of the created object! For example using vtkSmartPointer<vtkDataObject>::Take
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
-  /// Update the target representation based on the source representation
-  bool Convert(vtkDataObject* sourceRepresentation, vtkDataObject* targetRepresentation)  override;
+  bool PreConvert(vtkSegmentation* vtkNotUsed(segmentation)) override { return true; };
+  bool PostConvert(vtkSegmentation* vtkNotUsed(segmentation)) override { return true; };
 
   /// Get the cost of the conversion.
   unsigned int GetConversionCost(vtkDataObject* sourceRepresentation=nullptr, vtkDataObject* targetRepresentation=nullptr) override;
@@ -78,6 +78,9 @@ protected:
   int NumberOfOffsets;
 
 protected:
+  /// Update the target representation based on the source representation
+  bool ConvertInternal(vtkSegment* segment)  override;
+
   vtkClosedSurfaceToFractionalLabelmapConversionRule();
   ~vtkClosedSurfaceToFractionalLabelmapConversionRule() override;
   void operator=(const vtkClosedSurfaceToFractionalLabelmapConversionRule&);

@@ -293,7 +293,7 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
       segmentID = segmentIDs.GetValue(index)
       previewSegment = previewNode.GetSegmentation().GetSegment(segmentID)
       previewSegmentLabelmap = previewSegment.GetRepresentation(vtkSegmentationCore.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName())
-      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(previewSegmentLabelmap, segmentationNode, segmentID)
+      self.scriptedEffect.modifySegmentByLabelmap(segmentID, previewSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
       if segmentationDisplayNode is not None and self.isBackgroundLabelmap(previewSegmentLabelmap):
         # Automatically hide result segments that are background (all eight corners are non-zero)
         segmentationDisplayNode.SetSegmentVisibility(segmentID, False)
@@ -473,7 +473,7 @@ class AbstractScriptedSegmentEditorAutoCompleteEffect(AbstractScriptedSegmentEdi
         color = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
         newSegment.SetColor(color)
         previewNode.GetSegmentation().AddSegment(newSegment, segmentID)
-      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, previewNode, segmentID)
+      self.scriptedEffect.modifySegmentByLabelmap(previewNode, segmentID, newSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
       # Automatically hide result segments that are background (all eight corners are non-zero)
       previewNode.GetDisplayNode().SetSegmentVisibility3D(segmentID, not self.isBackgroundLabelmap(newSegmentLabelmap))

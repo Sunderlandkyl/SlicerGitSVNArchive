@@ -205,9 +205,8 @@ public:
 
   /// Get a segment as binary labelmap.
   /// If representation does not exist yet then call CreateBinaryLabelmapRepresentation() before.
-  /// If binary labelmap is the master representation then the returned object can be modified, and
-  /// all other representations will be automatically updated.
-  virtual vtkOrientedImageData* GetBinaryLabelmapRepresentation(const std::string segmentId);
+  /// The returned object will not be modified by, and will not modify the segmentation.
+  virtual void GetBinaryLabelmapRepresentation(const std::string segmentId, vtkOrientedImageData* outputBinaryLabelmap);
 
   /// Generate closed surface representation for all segments.
   /// Useful for 3D visualization.
@@ -218,9 +217,8 @@ public:
 
   /// Get a segment as binary labelmap.
   /// If representation does not exist yet then call CreateClosedSurfaceRepresentation() before.
-  /// If closed surface is the master representation then the returned object can be modified, and
-  /// all other representations will be automatically updated.
-  virtual vtkPolyData* GetClosedSurfaceRepresentation(const std::string segmentId);
+  /// The returned object will not be modified by, and will not modify the segmentation.
+  virtual void GetClosedSurfaceRepresentation(const std::string segmentId, vtkPolyData* outputClosedSurface);
 
   /// Add new segment from a closed surface.
   /// \return Segment ID of the new segment. Empty string if an error occurred.
