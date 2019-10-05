@@ -1142,9 +1142,7 @@ def arrayFromSegment(segmentationNode, segmentId):
     therefore values in the array may be changed, but the array must not be reallocated.
     See :py:meth:`arrayFromVolume` for details.
   """
-  import slicer
-  vimage = slicer.vtkOrientedImageData()
-  segmentationNode.GetBinaryLabelmapRepresentation(segmentId, vimage)
+  vimage = segmentationNode.GetOriginalBinaryLabelmapRepresentation(segmentId)
   nshape = tuple(reversed(vimage.GetDimensions()))
   import vtk.util.numpy_support
   narray = vtk.util.numpy_support.vtk_to_numpy(vimage.GetPointData().GetScalars()).reshape(nshape)

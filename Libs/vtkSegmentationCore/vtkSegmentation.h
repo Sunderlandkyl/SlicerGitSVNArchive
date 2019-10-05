@@ -108,8 +108,6 @@ public:
     ContainedRepresentationNamesModified,
     /// Invoked if segment IDs order is changed. Not called when a segment is added or removed.
     SegmentsOrderModified,
-    /// Invoked when content the data object of a representation is changed.
-    SegmentRepresentationObjectChanged,
     };
 
   enum

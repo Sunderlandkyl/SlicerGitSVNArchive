@@ -242,7 +242,6 @@ void qMRMLSegmentsModel::setSegmentationNode(vtkMRMLSegmentationNode* segmentati
     d->SegmentationNode->AddObserver(vtkSegmentation::SegmentModified, d->CallBack, -10.0);
     d->SegmentationNode->AddObserver(vtkSegmentation::SegmentsOrderModified, d->CallBack, -15.0);
     d->SegmentationNode->AddObserver(vtkMRMLDisplayableNode::DisplayModifiedEvent, d->CallBack, -15.0);
-    d->SegmentationNode->AddObserver(vtkSegmentation::SegmentRepresentationObjectChanged, d->CallBack, -15);
     }
 }
 
@@ -763,7 +762,6 @@ void qMRMLSegmentsModel::onEvent(
       break;
     case vtkSegmentation::SegmentRemoved:
         model->onSegmentRemoved(segmentID);
-        model->updateItemsFromColumnIndex(model->layerColumn());
       break;
     case vtkSegmentation::SegmentModified:
       if (!segmentID.isEmpty())
@@ -774,9 +772,6 @@ void qMRMLSegmentsModel::onEvent(
         {
         model->updateFromSegments();
         }
-      break;
-    case vtkSegmentation::SegmentRepresentationObjectChanged:
-      model->updateItemsFromColumnIndex(model->layerColumn());
       break;
     case vtkSegmentation::SegmentsOrderModified:
       model->onSegmentOrderModified();
@@ -808,6 +803,7 @@ void qMRMLSegmentsModel::onSegmentAdded(QString segmentID)
       }
     d->insertSegment(currentSegmentID.c_str());
     }
+  this->updateItemsFromColumnIndex(this->layerColumn());
 }
 
 //------------------------------------------------------------------------------
@@ -833,18 +829,21 @@ void qMRMLSegmentsModel::onSegmentRemoved(QString removedSegmentID)
       this->removeRow(index.row());
       }
     }
+  this->updateItemsFromColumnIndex(this->layerColumn());
 }
 
 //------------------------------------------------------------------------------
 void qMRMLSegmentsModel::onSegmentModified(QString segmentID)
 {
   this->updateItemsFromSegmentID(segmentID);
+  this->updateItemsFromColumnIndex(this->layerColumn());
 }
 
 //------------------------------------------------------------------------------
 void qMRMLSegmentsModel::onSegmentOrderModified()
 {
   this->reorderItems();
+  this->updateItemsFromColumnIndex(this->layerColumn());
 }
 
 //------------------------------------------------------------------------------

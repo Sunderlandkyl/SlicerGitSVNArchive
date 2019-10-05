@@ -268,7 +268,6 @@ bool vtkSegment::AddRepresentation(std::string name, vtkDataObject* representati
     return false;
     }
   this->Representations[name] = representation; // Representations stores the pointer in a smart pointer, which makes sure the object is not deleted
-  this->InvokeEvent(vtkSegment::RepresentationObjectChanged);
   this->Modified();
   return true;
 }
@@ -282,7 +281,6 @@ bool vtkSegment::RemoveRepresentation(std::string name)
     return false;
     }
   this->Representations.erase(name);
-  this->InvokeEvent(vtkSegment::RepresentationObjectChanged);
   this->Modified();
   return true;
 }
@@ -307,7 +305,6 @@ void vtkSegment::RemoveAllRepresentations(std::string exceptionRepresentationNam
     }
   if (modified)
     {
-    this->InvokeEvent(vtkSegment::RepresentationObjectChanged);
     this->Modified();
     }
 }

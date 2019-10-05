@@ -221,8 +221,6 @@ void vtkMRMLSegmentationNode::SetAndObserveSegmentation(vtkSegmentation* segment
       this->Segmentation, vtkSegmentation::RepresentationModified, this, this->SegmentationModifiedCallbackCommand);
     vtkEventBroker::GetInstance()->AddObservation(
       this->Segmentation, vtkSegmentation::SegmentsOrderModified, this, this->SegmentationModifiedCallbackCommand);
-    vtkEventBroker::GetInstance()->AddObservation(
-      this->Segmentation, vtkSegmentation::SegmentRepresentationObjectChanged, this, this->SegmentationModifiedCallbackCommand);
   }
 }
 
@@ -269,10 +267,6 @@ void vtkMRMLSegmentationNode::SegmentationModifiedCallback(vtkObject* vtkNotUsed
       self->InvokeCustomModifiedEvent(eid, callData);
       break;
     case vtkSegmentation::SegmentsOrderModified:
-      self->StorableModifiedTime.Modified();
-      self->InvokeCustomModifiedEvent(eid);
-      break;
-    case vtkSegmentation::SegmentRepresentationObjectChanged:
       self->StorableModifiedTime.Modified();
       self->InvokeCustomModifiedEvent(eid);
       break;
@@ -915,6 +909,22 @@ void vtkMRMLSegmentationNode::GetBinaryLabelmapRepresentation(const std::string 
 }
 
 //---------------------------------------------------------------------------
+vtkOrientedImageData* vtkMRMLSegmentationNode::GetOriginalBinaryLabelmapRepresentation(const std::string segmentId)
+{
+  if (!this->Segmentation)
+    {
+    vtkErrorMacro("GetBinaryLabelmapRepresentation: Invalid segmentation");
+    return nullptr;
+    }
+  vtkSegment* segment = this->Segmentation->GetSegment(segmentId);
+  if (!segment)
+    {
+    vtkErrorMacro("GetBinaryLabelmapRepresentation: Invalid segment");
+    return nullptr;
+    }
+  return vtkOrientedImageData::SafeDownCast(segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+}
+//---------------------------------------------------------------------------
 bool vtkMRMLSegmentationNode::CreateClosedSurfaceRepresentation()
 {
   if (!this->Segmentation)
@@ -951,6 +961,23 @@ void vtkMRMLSegmentationNode::GetClosedSurfaceRepresentation(const std::string s
     return;
     }
   outputClosedSurface->DeepCopy(segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName()));
+}
+
+//---------------------------------------------------------------------------
+vtkPolyData* vtkMRMLSegmentationNode::GetOriginalClosedSurfaceRepresentation(const std::string segmentId)
+{
+  if (!this->Segmentation)
+    {
+    vtkErrorMacro("GetClosedSurfaceRepresentation: Invalid segmentation");
+    return nullptr;
+    }
+  vtkSegment* segment = this->Segmentation->GetSegment(segmentId);
+  if (!segment)
+    {
+    vtkErrorMacro("GetClosedSurfaceRepresentation: Invalid segment");
+    return nullptr;
+    }
+  return vtkPolyData::SafeDownCast(segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName()));
 }
 
 //---------------------------------------------------------------------------

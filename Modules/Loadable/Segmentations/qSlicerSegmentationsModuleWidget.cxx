@@ -396,7 +396,7 @@ void qSlicerSegmentationsModuleWidget::onSegmentationNodeChanged(vtkMRMLNode* no
   qvtkReconnect( d->SegmentationNode, segmentationNode, vtkSegmentation::MasterRepresentationModified, this, SLOT(updateWidgetFromMRML()) );
   qvtkReconnect( d->SegmentationNode, segmentationNode, vtkMRMLNode::ReferenceAddedEvent, this, SLOT(onSegmentationNodeReferenceChanged()) );
   qvtkReconnect( d->SegmentationNode, segmentationNode, vtkMRMLNode::ReferenceModifiedEvent, this, SLOT(onSegmentationNodeReferenceChanged()) );
-  qvtkReconnect(d->SegmentationNode, segmentationNode, vtkSegmentation::SegmentRepresentationObjectChanged, this, SLOT(updateLayerWidgets()));
+  qvtkReconnect(d->SegmentationNode, segmentationNode, vtkSegmentation::SegmentModified, this, SLOT(updateLayerWidgets()) );
 
   d->SegmentationNode = segmentationNode;
   d->SegmentationDisplayNodeWidget->setSegmentationNode(segmentationNode);
@@ -566,7 +566,6 @@ void qSlicerSegmentationsModuleWidget::collapseLabelmapLayers()
   MRMLNodeModifyBlocker blocker(d->SegmentationNode);
   bool safeCollapse = !d->checkBox_OverwriteSegments->isChecked();
   d->SegmentationNode->GetSegmentation()->CollapseBinaryLabelmaps(safeCollapse);
-  this->updateLayerWidgets();
 }
 
 //-----------------------------------------------------------------------------

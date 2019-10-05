@@ -299,15 +299,10 @@ bool vtkSegmentation::SetSegmentModifiedEnabled(bool enabled)
         {
         segmentIt->second->AddObserver(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
         }
-      if (!segmentIt->second->HasObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand))
-        {
-        segmentIt->second->AddObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
-        }
       }
     else
       {
       segmentIt->second->RemoveObservers(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
-      segmentIt->second->RemoveObservers(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
       }
     }
   this->SegmentModifiedEnabled = enabled;
@@ -365,10 +360,6 @@ bool vtkSegmentation::AddSegment(vtkSegment* segment, std::string segmentId/*=""
   if (this->SegmentModifiedEnabled && !segment->HasObserver(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand))
     {
     segment->AddObserver(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
-    }
-  if (this->SegmentModifiedEnabled && !segment->HasObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand))
-    {
-    segment->AddObserver(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
     }
 
   bool representationsCreated = true;
@@ -607,7 +598,6 @@ void vtkSegmentation::RemoveSegment(SegmentMap::iterator segmentIt)
 
   // Remove observation of segment modified event
   segmentIt->second.GetPointer()->RemoveObservers(vtkCommand::ModifiedEvent, this->SegmentCallbackCommand);
-  segmentIt->second.GetPointer()->RemoveObservers(vtkSegment::RepresentationObjectChanged, this->SegmentCallbackCommand);
 
   // Remove observation of master representation of removed segment
   vtkDataObject* masterRepresentation = segmentIt->second->GetRepresentation(this->MasterRepresentationName);
@@ -673,10 +663,6 @@ void vtkSegmentation::OnSegmentModified(vtkObject* caller,
   if (eid == vtkCommand::ModifiedEvent)
     {
     self->InvokeEvent(vtkSegmentation::SegmentModified, (void*)(segmentIdChars));
-    }
-  else if (eid = vtkSegment::RepresentationObjectChanged)
-    {
-    self->InvokeEvent(vtkSegmentation::SegmentRepresentationObjectChanged, (void*)(segmentIdChars));
     }
 }
 

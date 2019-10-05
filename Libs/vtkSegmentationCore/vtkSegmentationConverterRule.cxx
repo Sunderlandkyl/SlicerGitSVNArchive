@@ -62,6 +62,7 @@ bool vtkSegmentationConverterRule::CreateTargetRepresentation(vtkSegment* segmen
       this->ConstructRepresentationObjectByRepresentation(this->GetTargetRepresentationName()));
     segment->AddRepresentation(this->GetTargetRepresentationName(), targetRepresentation);
     }
+  return true;
 }
 
 //----------------------------------------------------------------------------

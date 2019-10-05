@@ -47,11 +47,6 @@ class vtkSegmentationCore_EXPORT vtkSegment : public vtkObject
   typedef std::map<std::string, vtkSmartPointer<vtkDataObject> > RepresentationMap;
 
 public:
-  enum
-  {
-    /// Invoked when content of the master representation in a segment is changed.
-    RepresentationObjectChanged = 72100,
-  };
 
   static const double SEGMENT_COLOR_INVALID[3];
 
