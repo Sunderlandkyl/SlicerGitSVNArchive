@@ -49,7 +49,7 @@ vtkSegmentationConverterRule* vtkSegmentationConverterRule::Clone()
 }
 
 //----------------------------------------------------------------------------
-bool vtkSegmentationConverterRule::Convert(vtkSegment* segment)
+bool vtkSegmentationConverterRule::CreateTargetRepresentation(vtkSegment* segment)
 {
   // Get target representation
   vtkSmartPointer<vtkDataObject> targetRepresentation = segment->GetRepresentation(
@@ -62,7 +62,6 @@ bool vtkSegmentationConverterRule::Convert(vtkSegment* segment)
       this->ConstructRepresentationObjectByRepresentation(this->GetTargetRepresentationName()));
     segment->AddRepresentation(this->GetTargetRepresentationName(), targetRepresentation);
     }
-  return this->ConvertInternal(segment);
 }
 
 //----------------------------------------------------------------------------

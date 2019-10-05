@@ -46,6 +46,8 @@ public:
   /// Conversion parameter: compute surface normals
   static const std::string GetComputeSurfaceNormalsParameterName() { return "Compute surface normals"; };
   /// Conversion parameter: joint smoothing
+  /// If joint smoothing is enabled, surfaces will be created and smoothed as one vtkPolyData.
+  /// Joint smoothing converts all segments in shared labelmap together, reducing smoothing artifacts.
   static const std::string GetJointSmoothingParameterName() { return "Joint smoothing"; };
 
 public:
@@ -64,7 +66,10 @@ public:
   vtkDataObject* ConstructRepresentationObjectByClass(std::string className) override;
 
   /// Perform the actual binary labelmap to closed surface conversion
-  bool CreateClosedSurface(vtkOrientedImageData* inputImage, vtkPolyData* outputPolydata, std::vector<double> values);
+  bool CreateClosedSurface(vtkOrientedImageData* inputImage, vtkPolyData* outputPolydata, std::vector<int> values);
+
+  /// Update the target representation based on the source representation
+  bool Convert(vtkSegment* segment) override;
 
   /// Perform postprocesing steps on the output
   /// Clears the joint smoothing cache
@@ -83,8 +88,6 @@ public:
   const char* GetTargetRepresentationName() override { return vtkSegmentationConverter::GetSegmentationClosedSurfaceRepresentationName(); };
 
 protected:
-  /// Update the target representation based on the source representation
-  bool ConvertInternal(vtkSegment* segment) override;
 
   /// If input labelmap has non-background border voxels, then those regions remain open in the output closed surface.
   /// This function checks whether this is the case.
@@ -97,7 +100,8 @@ protected:
 
 protected:
   /// Cache for storing merged closed surfaces that have been joint smoothed
-  std::map<vtkDataObject*, vtkSmartPointer<vtkPolyData> > JointSmoothCache;
+  /// The key used is the binary labelmap representation, which maps to the vtkPolyData containing surfaces for all segments in the segmentation
+  std::map<vtkOrientedImageData*, vtkSmartPointer<vtkPolyData> > JointSmoothCache;
 
 };
 

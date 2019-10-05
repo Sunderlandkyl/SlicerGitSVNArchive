@@ -673,14 +673,14 @@ bool vtkMRMLSegmentationNode::GenerateEditMask(vtkOrientedImageData* maskImage, 
 
   if (maskSegmentIDs.empty())
     {
-    // If we passed empty segment list to GenerateMergedLabelmap then it would use all segment IDs,
+    // If we passed empty segment list to GenerateSharedLabelmap then it would use all segment IDs,
     // instead of filling the volume with a single value. Therefore, we need to handle this special case separately here.
     maskImage->AllocateScalars(VTK_UNSIGNED_CHAR, 1);
     vtkOrientedImageDataResample::FillImage(maskImage, paintInsideSegments ? 1 : 0);
     }
   else
     {
-    maskImage->AllocateScalars(VTK_SHORT, 1); // Change scalar type from unsigned int back to short for merged labelmap generation
+    maskImage->AllocateScalars(VTK_SHORT, 1); // Change scalar type from unsigned int back to short for shared labelmap generation
     this->GenerateMergedLabelmap(maskImage, vtkSegmentation::EXTENT_UNION_OF_SEGMENTS, referenceGeometry, maskSegmentIDs);
 
     vtkNew<vtkImageThreshold> threshold;

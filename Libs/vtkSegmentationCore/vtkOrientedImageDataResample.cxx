@@ -1372,8 +1372,8 @@ template <class ImageScalarType, class MaskScalarType>
 void GetValuesInMaskGeneric2(
   vtkOrientedImageData* binaryLabelmap,
   vtkOrientedImageData* resampledMask,
-  double maskThreshold,
-  std::set<double> &foundValues)
+  int maskThreshold,
+  std::set<int> &foundValues)
 {
   int extent[6] = { 0, -1, 0, -1, 0, -1 };
   resampledMask->GetExtent(extent);
@@ -1402,8 +1402,8 @@ template <class ImageScalarType>
 void GetValuesInMaskGeneric(
   vtkOrientedImageData* binaryLabelmap,
   vtkOrientedImageData* resampledMask,
-  double maskThreshold,
-  std::set<double> &foundValues)
+  int maskThreshold,
+  std::set<int> &foundValues)
 {
   switch (resampledMask->GetScalarType())
     {
@@ -1418,8 +1418,8 @@ void GetValuesInMaskGeneric(
 }
 
 //-----------------------------------------------------------------------------
-void vtkOrientedImageDataResample::GetValuesInMask(
-  vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap, double maskThreshold, std::vector<double>& values)
+void vtkOrientedImageDataResample::GetLabelValuesInMask(
+  vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* mask, int maskThreshold, std::vector<int>& values)
 {
   values.clear();
 
@@ -1427,7 +1427,7 @@ void vtkOrientedImageDataResample::GetValuesInMask(
   binaryLabelmap->GetExtent(binaryExtent);
 
   int maskExtent[6] = { 0 };
-  maskLabelmap->GetExtent(maskExtent);
+  mask->GetExtent(maskExtent);
 
   int effectiveExtent[6] = { 0 };
   for (int i = 0; i < 3; ++i)
@@ -1443,15 +1443,15 @@ void vtkOrientedImageDataResample::GetValuesInMask(
     }
 
   vtkNew<vtkOrientedImageData> referenceImage;
-  referenceImage->ShallowCopy(maskLabelmap);
+  referenceImage->ShallowCopy(mask);
   referenceImage->SetExtent(effectiveExtent);
 
   vtkNew<vtkOrientedImageData> resampledBinaryLabelmap;
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(binaryLabelmap, referenceImage, resampledBinaryLabelmap);
   vtkNew<vtkOrientedImageData> resampledMask;
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, referenceImage, resampledMask);
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(mask, referenceImage, resampledMask);
 
-  std::set<double> foundValues;
+  std::set<int> foundValues;
   switch (binaryLabelmap->GetScalarType())
     {
     vtkTemplateMacro((GetValuesInMaskGeneric<VTK_TT>(
@@ -1472,16 +1472,16 @@ void vtkOrientedImageDataResample::GetValuesInMask(
 
 //----------------------------------------------------------------------------
 template <class ImageScalarType, class MaskScalarType>
-void IsLabelInMaskGeneric2(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap,
-  double maskThreshold, bool &inMask)
+void IsLabelInMaskGeneric2(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* mask,
+  int maskThreshold, bool &inMask)
 {
   int extent[6] = { 0, -1, 0, -1, 0, -1 };
-  maskLabelmap->GetExtent(extent);
+  mask->GetExtent(extent);
 
   inMask = false;
 
   ImageScalarType* binaryLabelmapPointer = (ImageScalarType*)binaryLabelmap->GetScalarPointer();
-  MaskScalarType* maskPointer = (MaskScalarType*)maskLabelmap->GetScalarPointer();
+  MaskScalarType* maskPointer = (MaskScalarType*)mask->GetScalarPointer();
   for (int k = extent[4]; k <= extent[5]; ++k)
     {
     for (int j = extent[2]; j <= extent[3]; ++j)
@@ -1502,14 +1502,14 @@ void IsLabelInMaskGeneric2(vtkOrientedImageData* binaryLabelmap, vtkOrientedImag
 
 //----------------------------------------------------------------------------
 template <class ImageScalarType>
-void IsLabelInMaskGeneric(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap,
-  double maskThreshold, bool &inMask)
+void IsLabelInMaskGeneric(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* mask,
+  int maskThreshold, bool &inMask)
 {
-  switch (maskLabelmap->GetScalarType())
+  switch (mask->GetScalarType())
     {
     vtkTemplateMacro((IsLabelInMaskGeneric2<ImageScalarType, VTK_TT>(
       binaryLabelmap,
-      maskLabelmap,
+      mask,
       maskThreshold,
       inMask)));
     default:
@@ -1519,13 +1519,13 @@ void IsLabelInMaskGeneric(vtkOrientedImageData* binaryLabelmap, vtkOrientedImage
 
 //-----------------------------------------------------------------------------
 bool vtkOrientedImageDataResample::IsLabelInMask(
-  vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap)
+  vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* mask, int maskThreshold)
 {
   int binaryExtent[6] = { 0 };
   binaryLabelmap->GetExtent(binaryExtent);
 
   int maskExtent[6] = { 0 };
-  maskLabelmap->GetExtent(maskExtent);
+  mask->GetExtent(maskExtent);
 
   int effectiveExtent[6] = { 0 };
   for (int i = 0; i < 3; ++i)
@@ -1541,13 +1541,13 @@ bool vtkOrientedImageDataResample::IsLabelInMask(
     }
 
   vtkNew<vtkOrientedImageData> referenceImage;
-  referenceImage->ShallowCopy(maskLabelmap);
+  referenceImage->ShallowCopy(mask);
   referenceImage->SetExtent(effectiveExtent);
 
   vtkNew<vtkOrientedImageData> resampledBinaryLabelmap;
   vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(binaryLabelmap, referenceImage, resampledBinaryLabelmap);
   vtkNew<vtkOrientedImageData> resampledMask;
-  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(maskLabelmap, referenceImage, resampledMask);
+  vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(mask, referenceImage, resampledMask);
 
   bool valueFound = false;
   switch (binaryLabelmap->GetScalarType())
@@ -1555,7 +1555,7 @@ bool vtkOrientedImageDataResample::IsLabelInMask(
     vtkTemplateMacro((IsLabelInMaskGeneric<VTK_TT>(
       resampledBinaryLabelmap,
       resampledMask,
-      0.0,
+      maskThreshold,
       valueFound)));
     default:
       vtkGenericWarningMacro("vtkOrientedImageDataResample::IsLabelInMask: Unknown ScalarType");
@@ -1567,13 +1567,21 @@ bool vtkOrientedImageDataResample::IsLabelInMask(
 //----------------------------------------------------------------------------
 void vtkOrientedImageDataResample::CastImageForValue(vtkOrientedImageData* image, double value)
 {
-  if (image && value > image->GetScalarTypeMax())
-  {
-    vtkNew<vtkImageCast> imageCast;
-    imageCast->SetInputData(image);
-    int scalarType = image->GetScalarType();
-    bool typeIsSigned = false;
-    switch (scalarType)
+  if (!image)
+    {
+    return;
+    }
+
+  if (value >= image->GetScalarTypeMin() && value <= image->GetScalarTypeMax())
+    {
+
+    }
+
+  vtkNew<vtkImageCast> imageCast;
+  imageCast->SetInputData(image);
+  int scalarType = image->GetScalarType();
+  bool typeIsSigned = false;
+  switch (scalarType)
     {
     case VTK_CHAR:
       typeIsSigned = (bool)VTK_TYPE_CHAR_IS_SIGNED;
@@ -1594,50 +1602,49 @@ void vtkOrientedImageDataResample::CastImageForValue(vtkOrientedImageData* image
       break;
     }
 
-    if (typeIsSigned)
+  if (typeIsSigned)
     {
-      if (value > VTK_FLOAT_MAX || value < VTK_FLOAT_MIN)
+    if (value > VTK_FLOAT_MAX || value < VTK_FLOAT_MIN)
       {
-        scalarType = VTK_DOUBLE;
+      scalarType = VTK_DOUBLE;
       }
-      else if (value > VTK_LONG_MAX || value < VTK_LONG_MIN)
+    else if (value > VTK_LONG_MAX || value < VTK_LONG_MIN)
       {
-        scalarType = VTK_FLOAT;
+      scalarType = VTK_FLOAT;
       }
-      else if (value > VTK_INT_MAX || value < VTK_INT_MIN)
+    else if (value > VTK_INT_MAX || value < VTK_INT_MIN)
       {
-        scalarType = VTK_LONG;
+      scalarType = VTK_LONG;
       }
-      else if (value > VTK_SHORT_MAX || value < VTK_SHORT_MIN)
+    else if (value > VTK_SHORT_MAX || value < VTK_SHORT_MIN)
       {
-        scalarType = VTK_SHORT;
+      scalarType = VTK_SHORT;
       }
     }
-    else
+  else
     {
-      if (value > VTK_FLOAT_MAX)
+    if (value > VTK_FLOAT_MAX)
       {
-        scalarType = VTK_DOUBLE;
+      scalarType = VTK_DOUBLE;
       }
-      else if (value > VTK_UNSIGNED_LONG_MAX)
+    else if (value > VTK_UNSIGNED_LONG_MAX)
       {
-        scalarType = VTK_FLOAT;
+      scalarType = VTK_FLOAT;
       }
-      else if (value > VTK_UNSIGNED_INT_MAX)
+    else if (value > VTK_UNSIGNED_INT_MAX)
       {
-        scalarType = VTK_UNSIGNED_LONG;
+      scalarType = VTK_UNSIGNED_LONG;
       }
-      else if (value > VTK_UNSIGNED_SHORT_MAX)
+    else if (value > VTK_UNSIGNED_SHORT_MAX)
       {
-        scalarType = VTK_UNSIGNED_INT;
+      scalarType = VTK_UNSIGNED_INT;
       }
-      else if (value > VTK_UNSIGNED_CHAR_MAX)
+    else if (value > VTK_UNSIGNED_CHAR_MAX)
       {
-        scalarType = VTK_UNSIGNED_SHORT;
+      scalarType = VTK_UNSIGNED_SHORT;
       }
     }
-    imageCast->SetOutputScalarType(scalarType);
-    imageCast->Update();
-    image->vtkImageData::ShallowCopy(imageCast->GetOutput());
-  }
+  imageCast->SetOutputScalarType(scalarType);
+  imageCast->Update();
+  image->vtkImageData::ShallowCopy(imageCast->GetOutput());
 }

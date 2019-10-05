@@ -57,6 +57,8 @@ public: \
     std::string vtkNotUsed(representationName))  override { return nullptr; }; \
   virtual vtkDataObject* ConstructRepresentationObjectByClass( \
     std::string vtkNotUsed(className)) override { return nullptr; }; \
+  virtual bool Convert( \
+    vtkSegment* vtkNotUsed(segment)) override { return true; } \
   virtual unsigned int GetConversionCost( \
     vtkDataObject* sourceRepresentation=nullptr, \
     vtkDataObject* targetRepresentation=nullptr)  override \
@@ -68,9 +70,6 @@ public: \
   virtual const char* GetName() override { return "Rep " #from " to Rep " #to; } \
   virtual const char* GetSourceRepresentationName() override { return "Rep" #from ; }  \
   virtual const char* GetTargetRepresentationName()  override { return "Rep" #to ; } \
-protected: \
-  virtual bool ConvertInternal( \
-    vtkSegment* vtkNotUsed(segment)) override { return true; } \
 }; \
 vtkSegmentationConverterRuleNewMacro(vtkRep##from##ToRep##to##Rule);
 

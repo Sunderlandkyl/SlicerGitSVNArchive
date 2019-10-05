@@ -134,8 +134,10 @@ vtkDataObject* vtkBinaryLabelmapToClosedSurfaceConversionRule::ConstructRepresen
 }
 
 //----------------------------------------------------------------------------
-bool vtkBinaryLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment* segment)
+bool vtkBinaryLabelmapToClosedSurfaceConversionRule::Convert(vtkSegment* segment)
 {
+  this->CreateTargetRepresentation(segment);
+
   vtkDataObject* sourceRepresentation = segment->GetRepresentation(this->GetSourceRepresentationName());
   vtkDataObject* targetRepresentation = segment->GetRepresentation(this->GetTargetRepresentationName());
 
@@ -159,7 +161,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment*
 
   if (jointSmoothing > 0 && smoothingFactor > 0)
     {
-    if (this->JointSmoothCache.find(sourceRepresentation) == this->JointSmoothCache.end())
+    if (this->JointSmoothCache.find(orientedBinaryLabelmap) == this->JointSmoothCache.end())
       {
       double* scalarRange = orientedBinaryLabelmap->GetScalarRange();
       int lowLabel = (int)(floor(scalarRange[0]));
@@ -172,27 +174,27 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment*
       imageAccumulate->SetComponentSpacing(1, 1, 1);
       imageAccumulate->SetComponentExtent(lowLabel, highLabel, 0, 0, 0, 0);
       imageAccumulate->Update();
-      double minimum = imageAccumulate->GetMin()[0];
-      double maximum = imageAccumulate->GetMax()[0];
+      int minimum = (int)imageAccumulate->GetMin()[0];
+      int maximum = (int)imageAccumulate->GetMax()[0];
 
-      std::vector<double> values;
-      for (double i = lowLabel; i <= highLabel; ++i)
+      std::vector<int> labelValues;
+      for (int labelValue = lowLabel; labelValue <= highLabel; ++labelValue)
         {
         // Add a new threshold for every level in the labelmap
-        double numberOfVoxels = imageAccumulate->GetOutput()->GetPointData()->GetScalars()->GetTuple1((vtkIdType)i- lowLabel);
+        double numberOfVoxels = imageAccumulate->GetOutput()->GetPointData()->GetScalars()->GetTuple1((int)labelValue - lowLabel);
         if (numberOfVoxels > 0.0)
           {
-          values.push_back(i);
+          labelValues.push_back(labelValue);
           }
         }
 
       vtkSmartPointer<vtkPolyData> jointSmoothedSurface = vtkSmartPointer<vtkPolyData>::New();
-      this->CreateClosedSurface(orientedBinaryLabelmap, jointSmoothedSurface, values);
-      this->JointSmoothCache[sourceRepresentation] = jointSmoothedSurface;
+      this->CreateClosedSurface(orientedBinaryLabelmap, jointSmoothedSurface, labelValues);
+      this->JointSmoothCache[orientedBinaryLabelmap] = jointSmoothedSurface;
       }
 
-    vtkDataObject* mergedSurface = this->JointSmoothCache[sourceRepresentation];
-    if (!mergedSurface)
+    vtkDataObject* sharedSurface = this->JointSmoothCache[orientedBinaryLabelmap];
+    if (!sharedSurface)
       {
       vtkErrorMacro("Convert: Could not find cached surface");
       return false;
@@ -205,7 +207,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment*
     selection->AddThreshold(segment->GetLabelValue(), segment->GetLabelValue());
 
     vtkNew<vtkExtractSelection> threshold;
-    threshold->SetInputData(mergedSurface);
+    threshold->SetInputData(sharedSurface);
     threshold->SetSelectionConnection(selection->GetOutputPort());
 
     vtkNew<vtkGeometryFilter> geometry;
@@ -217,8 +219,8 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment*
     }
   else
     {
-    std::vector<double> value = { segment->GetLabelValue() };
-    this->CreateClosedSurface(orientedBinaryLabelmap, closedSurfacePolyData, value);
+    std::vector<int> labelValue = { segment->GetLabelValue() };
+    this->CreateClosedSurface(orientedBinaryLabelmap, closedSurfacePolyData, labelValue);
     }
 
   return true;
@@ -226,7 +228,7 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment*
 
 //----------------------------------------------------------------------------
 bool vtkBinaryLabelmapToClosedSurfaceConversionRule::CreateClosedSurface(vtkOrientedImageData* orientedBinaryLabelmap,
-  vtkPolyData* closedSurfacePolyData, std::vector<double> values)
+  vtkPolyData* closedSurfacePolyData, std::vector<int> labelValues)
 {
   if (!closedSurfacePolyData)
     {
@@ -296,12 +298,12 @@ bool vtkBinaryLabelmapToClosedSurfaceConversionRule::CreateClosedSurface(vtkOrie
   marchingCubes->SetInputData(binaryLabelmapWithIdentityGeometry);
   marchingCubes->ComputeGradientsOff();
   marchingCubes->ComputeNormalsOff(); // While computing normals is faster using the flying edges filter,
-  // it results in incorrect normals in meshes from merged labelmaps marchingCubes->ComputeScalarsOn();
+  // it results in incorrect normals in meshes from shared labelmaps marchingCubes->ComputeScalarsOn();
 
   int valueIndex = 0;
-  for (double value : values)
+  for (vtkIdType labelValue : labelValues)
     {
-    marchingCubes->SetValue(valueIndex, value);
+    marchingCubes->SetValue(valueIndex, labelValue);
     ++valueIndex;
     }
 

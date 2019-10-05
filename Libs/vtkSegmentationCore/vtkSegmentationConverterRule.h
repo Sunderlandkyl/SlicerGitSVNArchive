@@ -90,7 +90,7 @@ public:
   /// Update the target representation based on the source representation
   /// Initializes the target representation and calls ConvertInternal
   /// \sa ConvertInternal
-  bool Convert(vtkSegment* segment);
+  virtual bool Convert(vtkSegment* segment) = 0;
 
   /// Perform post-conversion steps across the specified segments in the segmentation
   /// This step should be unneccessary if only converting a single segment
@@ -134,7 +134,7 @@ public:
 
 protected:
   /// Update the target representation based on the source representation
-  virtual bool ConvertInternal(vtkSegment* segment) = 0;
+  virtual bool CreateTargetRepresentation(vtkSegment* segment);
 
   vtkSegmentationConverterRule();
   ~vtkSegmentationConverterRule() override;
@@ -148,6 +148,10 @@ protected:
   /// custom value, but for new segmentations, it is initially the default.
   ConversionParameterListType ConversionParameters;
 
+  /// Used when calling createTargetRepresentation
+  /// If true, replaces the target representation of the segment with a new object, even if one already exists
+  /// If false, will only create a target representation if one already doesn't exist.
+  /// False by default.
   bool ReplaceTargetRepresentation;
 
   friend class vtkSegmentationConverter;

@@ -306,55 +306,7 @@ public:
   /// Invalidate (remove) non-master representations in all the segments if this segmentation node
   void InvalidateNonMasterRepresentations();
 
-// Merged labelmap utility functions
-
-  /// Returns true if the binary labelmap representation is merged
-  bool IsBinaryLabelmapMerged(std::string segmentID);
-
-  /// Gets the segment IDs that are merged with the specified segment
-  /// \param originalSegment Specified segment
-  /// \param representationName Representation to check for merged segment IDs
-  /// \param mergedSegmentIds Output segment IDs
-  /// \param includeOriginalSegmentId If true, the original segment ID is included in the output
-  void GetMergedSegmentIDsForRepresentation(vtkSegment* originalSegment, std::string representationName,
-    std::vector<std::string>& mergedSegmentIds, bool includeOriginalSegmentId);
-
-  /// Gets the segment IDs that are merged with the specified segment
-  /// \param originalSegmentId ID of the specified segment
-  /// \param representationName Representation to check for merged segment IDs
-  /// \param mergedSegmentIds Output segment IDs
-  /// \param includeOriginalSegmentId If true, the original segment ID is included in the output
-  void GetMergedSegmentIDsForRepresentation(std::string originalSegmentId, std::string representationName,
-    std::vector<std::string>& mergedSegmentIds, bool includeOriginalSegmentId);
-
-  /// Gets the segment IDs that are merged with the specified segment binary labelmap
-  /// \param originalSegment Specified segment
-  /// \param mergedSegmentIds Output segment IDs
-  /// \param includeOriginalSegmentId If true, the original segment ID is included in the output
-  void GetMergedBinaryLabelmapSegmentIDs(vtkSegment* originalSegment, std::vector<std::string> &mergedSegmentIds,
-    bool includeOriginalSegmentId);
-
-  /// Gets the segment IDs that are merged with the specified segment binary labelmap
-  /// \param originalSegmentId ID of the specified segment
-  /// \param mergedSegmentIds Output segment IDs
-  /// \param includeOriginalSegmentId If true, the original segment ID is included in the output
-  void GetMergedBinaryLabelmapSegmentIDs(std::string originalSegmentId, std::vector<std::string> &mergedSegmentIds,
-    bool includeOriginalSegmentId);
-
-  /// Gets a unique merged labelmap value for the specified segment
-  /// Compares all of the other segments that are merged with the specified segmentId to determine the a unique
-  /// labelmap value
-  int GetUniqueValueForMergedLabelmap(std::string segmentId);
-
-  /// Gets a unique merged labelmap value for the specified labelmap
-  /// Returns labelmap->GetScalarRange()[1] + 1
-  int GetUniqueValueForMergedLabelmap(vtkOrientedImageData* labelmap);
-
-  /// Merges the specified segments into the same merged labelmap
-  /// This method can cause segments to overwrite each other during during merge.
-  /// Segments with a higher index will overwrite segments with a lower index.
-  /// If no segment IDs are specified, then all segments will be merged
-  void MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds);
+  /// Merged labelmap functions
 
 #ifndef __VTK_WRAP__
   /// Create a merged labelmap from the segment IDs
@@ -363,15 +315,50 @@ public:
     const std::vector<std::string>& segmentIDs = std::vector<std::string>());
 #endif // __VTK_WRAP__
 
-  /// Moves an existing segment from a merged labelmap into a separate labelmap containing only the specified segment
+ /// Shared labelmap utility functions
+
+  /// Returns true if the binary labelmap representation is shared
+  bool IsSharedBinaryLabelmap(std::string segmentID);
+
+  /// Gets the segment IDs that are shared with the specified segment
+  /// \param originalSegmentId ID of the specified segment
+  /// \param representationName Representation to check for shared segment IDs
+  /// \param sharedSegmentIds Output segment IDs
+  /// \param includeOriginalSegmentId If true, the original segment ID is included in the output
+  void GetSegmentIDsSharingRepresentation(std::string originalSegmentId, std::string representationName,
+    std::vector<std::string>& sharedSegmentIds, bool includeOriginalSegmentId=true);
+
+  /// Gets the segment IDs that are shared with the specified segment binary labelmap
+  /// \param originalSegmentId ID of the specified segment
+  /// \param sharedSegmentIds Output segment IDs
+  /// \param includeOriginalSegmentId If true, the original segment ID is included in the output
+  void GetSegmentIDsSharingBinaryLabelmapRepresentation(std::string originalSegmentId, std::vector<std::string> &sharedSegmentIds,
+    bool includeOriginalSegmentId=true);
+
+  /// Gets a unique shared labelmap value for the specified segment
+  /// Compares all of the other segments that are shared with the specified segmentId to determine the a unique
+  /// labelmap value
+  int GetUniqueLabelValueForSharedLabelmap(std::string segmentId);
+
+  /// Gets a unique shared labelmap value for the specified labelmap
+  /// Returns labelmap->GetScalarRange()[1] + 1
+  int GetUniqueLabelValueForSharedLabelmap(vtkOrientedImageData* labelmap);
+
+  /// Merges the specified segments into the same shared labelmap
+  /// This method can cause segments to overwrite each other during during merge.
+  /// Segments with a higher index will overwrite segments with a lower index.
+  /// If no segment IDs are specified, then all segments will be shared
+  void MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds);
+
+  /// Moves an existing segment from a shared labelmap into a separate labelmap containing only the specified segment
   void SeparateSegmentLabelmap(std::string segmentId);
 
   /// Clears the segment representation.
-  /// If the segment is in a merged labelmap, it will be erased from the labelmap.
+  /// If the segment is in a shared labelmap, it will be erased from the labelmap.
   /// Otherwise, the vtkDataObject will be initialized.
   void ClearSegment(std::string segmentId);
 
-  /// Merged representation layer functions
+  /// Shared representation layer functions
 
   /// Get the number of unique vtkDataObject that are used for a particular representation type
   /// If representationName is not specified, it will be set to the master representation name
@@ -399,10 +386,10 @@ public:
 
   /// Reduce the binary labelmap representation to as few layers as possible.
   /// If true, then the layers will not be overwritten by each other.
-  /// If safeMerge is false, then the layers can overwrite each other, but the result is guaranteed to have one layer
-  /// \param safeMerge If true, then the layers will not be overwritten by each other, if false then the layers can
+  /// If forceToSingleLayer is false, then the layers can overwrite each other, but the result is guaranteed to have one layer
+  /// \param forceToSingleLayer If true, then the layers will not be overwritten by each other, if false then the layers can
   ///   overwrite each other, but the result is guaranteed to have one layer
-  void CollapseBinaryLabelmaps(bool safeMerge = true);
+  void CollapseBinaryLabelmaps(bool forceToSingleLayer = true);
 
   // Conversion related methods
 

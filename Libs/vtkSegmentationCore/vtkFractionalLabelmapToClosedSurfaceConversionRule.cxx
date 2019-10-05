@@ -103,8 +103,10 @@ vtkDataObject* vtkFractionalLabelmapToClosedSurfaceConversionRule::ConstructRepr
 }
 
 //----------------------------------------------------------------------------
-bool vtkFractionalLabelmapToClosedSurfaceConversionRule::ConvertInternal(vtkSegment* segment)
+bool vtkFractionalLabelmapToClosedSurfaceConversionRule::Convert(vtkSegment* segment)
 {
+  this->CreateTargetRepresentation(segment);
+
   vtkDataObject* sourceRepresentation = segment->GetRepresentation(this->GetSourceRepresentationName());
   vtkDataObject* targetRepresentation = segment->GetRepresentation(this->GetTargetRepresentationName());
 

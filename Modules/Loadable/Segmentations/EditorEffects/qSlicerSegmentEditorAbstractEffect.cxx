@@ -225,7 +225,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
   this->modifySelectedSegmentByLabelmap(modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
 }
 
-
 //-----------------------------------------------------------------------------
 void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmap,
   ModificationMode modificationMode, QList<int> extent, bool bypassMasking/*=false*/)
@@ -243,52 +242,9 @@ void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrie
 void qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap(vtkOrientedImageData* modifierLabelmap,
   ModificationMode modificationMode, const int modificationExtent[6], bool bypassMasking/*=false*/)
 {
-  this->modifySegmentByLabelmap(
+  this->modifySegmentByLabelmap(this->parameterSetNode()->GetSegmentationNode(),
     this->parameterSetNode()->GetSelectedSegmentID() ? this->parameterSetNode()->GetSelectedSegmentID() : "",
     modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(const char* segmentID, vtkOrientedImageData* modifierLabelmap,
-  ModificationMode modificationMode, bool bypassMasking/*=false*/)
-{
-  int modificationExtent[6] = { 0, -1, 0, -1, 0, -1 };
-  this->modifySegmentByLabelmap(segmentID, modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(const char* segmentID, vtkOrientedImageData* modifierLabelmap,
-  ModificationMode modificationMode, QList<int> extent, bool bypassMasking/*=false*/)
-{
-  if (extent.size() != 6)
-  {
-    qCritical() << Q_FUNC_INFO << " failed: extent must have 6 int values";
-    return;
-  }
-  int modificationExtent[6] = { extent[0], extent[1], extent[2], extent[3], extent[4], extent[5] };
-  this->modifySegmentByLabelmap(segmentID, modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(const char* segmentID, vtkOrientedImageData* modifierLabelmapInput,
-  ModificationMode modificationMode, const int modificationExtent[6], bool bypassMasking/*=false*/)
-{
-  Q_D(qSlicerSegmentEditorAbstractEffect);
-  vtkMRMLSegmentationNode* segmentationNode = d->ParameterSetNode->GetSegmentationNode();
-  this->modifySegmentByLabelmap(segmentationNode, segmentID, modifierLabelmapInput, modificationMode, modificationExtent, bypassMasking);
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmentationNode* segmentationNode, const char* segmentID,
-  vtkOrientedImageData* modifierLabelmap, ModificationMode modificationMode, QList<int> extent, bool bypassMasking/*=false*/)
-{
-  if (extent.size() != 6)
-  {
-    qCritical() << Q_FUNC_INFO << " failed: extent must have 6 int values";
-    return;
-  }
-  int modificationExtent[6] = { extent[0], extent[1], extent[2], extent[3], extent[4], extent[5] };
-  this->modifySegmentByLabelmap(segmentationNode, segmentID, modifierLabelmap, modificationMode, modificationExtent, bypassMasking);
 }
 
 //-----------------------------------------------------------------------------
@@ -407,8 +363,6 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
     extent = nullptr;
     }
 
-  // TODO: composite modifierLabelmap with threshold mask
-
   std::vector<std::string> allSegmentIDs;
   segmentationNode->GetSegmentation()->GetSegmentIDs(allSegmentIDs);
   // remove selected segment, that is already handled
@@ -447,29 +401,29 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
     }
 
   vtkSegment* segment = segmentationNode->GetSegmentation()->GetSegment(segmentID);
-  std::vector<std::string> mergedSegmentIds;
-  segmentationNode->GetSegmentation()->GetMergedBinaryLabelmapSegmentIDs(segment, mergedSegmentIds, false);
+  std::vector<std::string> sharedSegmentIDs;
+  segmentationNode->GetSegmentation()->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentID, sharedSegmentIDs, false);
 
-  std::vector<std::string> mergedSegmentsUnderModifier;
-  vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, segmentID, modifierLabelmapInput, mergedSegmentsUnderModifier, 0.0, false);
-  std::vector<std::string> mergedSegmentIDToSeparate;
-  for (std::string mergedSegmentId : mergedSegmentsUnderModifier)
+  std::vector<std::string> sharedSegmentsUnderModifier;
+  vtkSlicerSegmentationsModuleLogic::GetSegmentIDsInMask(segmentationNode, segmentID, modifierLabelmapInput, sharedSegmentsUnderModifier, 0.0, false);
+  std::vector<std::string> sharedSegmentIDToSeparate;
+  for (std::string sharedSegmentID : sharedSegmentsUnderModifier)
     {
-    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId);
+    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), sharedSegmentID);
     if (foundOverwriteIDIt == segmentIDsToOverwrite.end())
       {
-      mergedSegmentIDToSeparate.push_back(mergedSegmentId);
+      sharedSegmentIDToSeparate.push_back(sharedSegmentID);
       }
     }
 
-  if (!mergedSegmentIDToSeparate.empty())
+  if (!sharedSegmentIDToSeparate.empty())
     {
     segmentationNode->GetSegmentation()->SeparateSegmentLabelmap(segmentationNode->GetSegmentation()->GetSegmentIdBySegment(segment));
     }
 
-  for (std::string mergedSegmentId : mergedSegmentIds)
+  for (std::string sharedSegmentID : sharedSegmentIDs)
     {
-    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId);
+    std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), sharedSegmentID);
     if (foundOverwriteIDIt != segmentIDsToOverwrite.end())
       {
       segmentIDsToOverwrite.erase(foundOverwriteIDIt);
@@ -567,28 +521,28 @@ void qSlicerSegmentEditorAbstractEffect::modifySegmentByLabelmap(vtkMRMLSegmenta
 
       vtkOrientedImageData* currentLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);
 
-      std::vector<std::string> dontOverwriteIds;
-      std::vector<std::string> currentMergedIds;
-      segmentationNode->GetSegmentation()->GetMergedBinaryLabelmapSegmentIDs(currentSegmentID, currentMergedIds, true);
-      for (std::string mergedSegmentId : currentMergedIds)
+      std::vector<std::string> dontOverwriteIDs;
+      std::vector<std::string> currentSharedIDs;
+      segmentationNode->GetSegmentation()->GetSegmentIDsSharingBinaryLabelmapRepresentation(currentSegmentID, currentSharedIDs, true);
+      for (std::string sharedSegmentID : currentSharedIDs)
         {
-        if (std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), mergedSegmentId) == segmentIDsToOverwrite.end())
+        if (std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), sharedSegmentID) == segmentIDsToOverwrite.end())
           {
-          dontOverwriteIds.push_back(mergedSegmentId);
+          dontOverwriteIDs.push_back(sharedSegmentID);
           }
         }
 
       vtkSmartPointer<vtkOrientedImageData> invertedModifierLabelmap2 = invertedModifierLabelmap;
-      if (dontOverwriteIds.size() > 0)
+      if (dontOverwriteIDs.size() > 0)
         {
         invertedModifierLabelmap2 = vtkSmartPointer<vtkOrientedImageData>::New();
         invertedModifierLabelmap2->DeepCopy(invertedModifierLabelmap);
 
         vtkNew<vtkOrientedImageData> maskImage;
         maskImage->CopyDirections(currentLabelmap);
-        for (std::string dontOverwriteId : dontOverwriteIds)
+        for (std::string dontOverwriteID : dontOverwriteIDs)
           {
-          vtkSegment* dontOverwriteSegment = segmentationNode->GetSegmentation()->GetSegment(dontOverwriteId);
+          vtkSegment* dontOverwriteSegment = segmentationNode->GetSegmentation()->GetSegment(dontOverwriteID);
           vtkNew<vtkImageThreshold> threshold;
           threshold->SetInputData(currentLabelmap);
           threshold->ThresholdBetween(dontOverwriteSegment->GetLabelValue(), dontOverwriteSegment->GetLabelValue());

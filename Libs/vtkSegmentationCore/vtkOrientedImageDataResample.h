@@ -164,17 +164,17 @@ public:
   ///   mask is non zero
   static bool ApplyImageMask(vtkOrientedImageData* input, vtkOrientedImageData* mask, double fillValue, bool notMask = false);
 
-  /// Get the labelmap values contained within the mask
+  /// Get the values contained in the labelmap under the mask
   /// \param binaryLabelmap Input image to get values from
   /// \param maskLabelmap Mask image to get values under
-  /// \param Threshold value for the mask. Values above this threshold are considered to be inside the mask
+  /// \param Threshold value for the mask. Values above this threshold are considered to be under the mask
   /// \param values The values found in the binary labelmap underneath the mask
-  static void GetValuesInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap, double maskThreshold, std::vector<double> &values);
+  static void GetLabelValuesInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* mask, int maskThreshold, std::vector<int> &labelValues);
 
-  /// Determine if there is a non-zero value in the labelmap underneath the mask
+  /// Determine if there is a non-zero value in the labelmap under the mask
   /// \param binaryLabelmap Input image to get values from
   /// \param maskLabelmap Mask image to get values under
-  static bool IsLabelInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* maskLabelmap);
+  static bool IsLabelInMask(vtkOrientedImageData* binaryLabelmap, vtkOrientedImageData* mask, int maskThreshold);
 
   /// Cast the data type of the image to be able to contain the specified value
   /// \param image Image to convert

@@ -50,6 +50,8 @@
 #include <functional>
 #include <sstream>
 
+const int DEFAULT_LABEL_VALUE = 1;
+
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSegmentation);
 
@@ -156,7 +158,7 @@ void vtkSegmentation::DeepCopy(vtkSegmentation* aSegmentation)
     vtkSmartPointer<vtkSegment> segment = vtkSmartPointer<vtkSegment>::New();
     segment->DeepCopy(aSegmentation->Segments[*segmentIdIt]);
 
-    // Check to see if we have already added a segment that used the same vtkDataObject (i.e. merged)
+    // Check to see if we have already added a segment that used the same vtkDataObject (i.e. shared)
     vtkDataObject* originalRepresentation = aSegmentation->Segments[*segmentIdIt]->GetRepresentation(this->GetMasterRepresentationName());
     if (copiedDataObjects.find(originalRepresentation) == copiedDataObjects.end())
       {
@@ -396,8 +398,8 @@ bool vtkSegmentation::AddSegment(vtkSegment* segment, std::string segmentId/*=""
       reprIt != requiredRepresentationNames.end(); ++reprIt)
       {
       vtkSmartPointer<vtkDataObject> emptyRepresentation;
-      bool isMergedLabelmap = false;
-      int mergedLabelmapValue = -1;
+      bool isSharedLabelmap = false;
+      int sharedLabelmapValue = -1;
       if (this->GetMasterRepresentationName() == vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName())
         {
         for (std::deque<std::string>::iterator segmentIDIt = this->SegmentIds.begin(); segmentIDIt != this->SegmentIds.end(); ++segmentIDIt)
@@ -405,8 +407,8 @@ bool vtkSegmentation::AddSegment(vtkSegment* segment, std::string segmentId/*=""
           emptyRepresentation = segment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName());
           if (emptyRepresentation)
             {
-            isMergedLabelmap = true;
-            mergedLabelmapValue = 1;
+            isSharedLabelmap = true;
+            sharedLabelmapValue = 1;
             break;
             }
           }
@@ -937,7 +939,7 @@ void vtkSegmentation::ApplyLinearTransform(vtkAbstractTransform* transform)
     return;
     }
 
-  // Apply transform on reference image geometry conversion parameter (to preserve validity of merged labelmap)
+  // Apply transform on reference image geometry conversion parameter (to preserve validity of shared labelmap)
   this->Converter->ApplyTransformOnReferenceImageGeometry(transform);
 
   // Apply linear transform for each segment:
@@ -985,7 +987,7 @@ void vtkSegmentation::ApplyNonLinearTransform(vtkAbstractTransform* transform)
     vtkWarningMacro("ApplyNonLinearTransform: Linear input transform is detected in function that should only handle non-linear transforms!");
     }
 
-  // Apply transform on reference image geometry conversion parameter (to preserve validity of merged labelmap)
+  // Apply transform on reference image geometry conversion parameter (to preserve validity of shared labelmap)
   this->Converter->ApplyTransformOnReferenceImageGeometry(transform);
 
   // Harden transform on master representation (both image data and poly data) for each segment individually
@@ -1314,19 +1316,20 @@ void vtkSegmentation::InvalidateNonMasterRepresentations()
 }
 
 //---------------------------------------------------------------------------
-bool vtkSegmentation::IsBinaryLabelmapMerged(std::string segmentID)
+bool vtkSegmentation::IsSharedBinaryLabelmap(std::string segmentId)
 {
-  std::vector<std::string> mergedLabelmapSegmentIDs;
-  vtkSegment* segment = this->GetSegment(segmentID);
-  this->GetMergedBinaryLabelmapSegmentIDs(segment, mergedLabelmapSegmentIDs, false);
-  return mergedLabelmapSegmentIDs.empty();
+  std::vector<std::string> sharedLabelmapSegmentIds;
+    this->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentId, sharedLabelmapSegmentIds, false);
+  return sharedLabelmapSegmentIds.empty();
 }
 
 //---------------------------------------------------------------------------
-void vtkSegmentation::GetMergedSegmentIDsForRepresentation(vtkSegment* originalSegment, std::string representationName,
-  std::vector<std::string>& mergedSegmentIds, bool includeOriginalSegmentId)
+void vtkSegmentation::GetSegmentIDsSharingRepresentation(std::string originalSegmentId, std::string representationName,
+  std::vector<std::string>& sharedSegmentIds, bool includeOriginalSegmentId/*=true*/)
 {
-  mergedSegmentIds.clear();
+  sharedSegmentIds.clear();
+
+  vtkSegment* originalSegment = this->GetSegment(originalSegmentId);
   if (!originalSegment)
     {
     return;
@@ -1349,40 +1352,24 @@ void vtkSegmentation::GetMergedSegmentIDsForRepresentation(vtkSegment* originalS
     vtkDataObject* binaryLabelmap = currentSegment->GetRepresentation(representationName);
     if (originalBinaryLabelmap == binaryLabelmap)
       {
-      mergedSegmentIds.push_back(segmentPair.first);
+      sharedSegmentIds.push_back(segmentPair.first);
       }
     }
 }
 
 //---------------------------------------------------------------------------
-void vtkSegmentation::GetMergedSegmentIDsForRepresentation(std::string originalSegmentId, std::string representationName,
-  std::vector<std::string>& mergedSegmentIds, bool includeOriginalSegmentId)
+void vtkSegmentation::GetSegmentIDsSharingBinaryLabelmapRepresentation(std::string originalSegmentId, std::vector<std::string>& sharedSegmentIds,
+  bool includeOriginalSegmentId/*=true*/)
 {
-  vtkSegment* originalSegment = this->GetSegment(originalSegmentId);
-  this->GetMergedSegmentIDsForRepresentation(originalSegment, representationName, mergedSegmentIds, includeOriginalSegmentId);
-}
-
-//---------------------------------------------------------------------------
-void vtkSegmentation::GetMergedBinaryLabelmapSegmentIDs(std::string originalSegmentId, std::vector<std::string> &mergedSegmentIds,
-  bool includeOriginalSegmentId)
-{
-  vtkSegment* originalSegment = this->GetSegment(originalSegmentId);
-  this->GetMergedBinaryLabelmapSegmentIDs(originalSegment, mergedSegmentIds, includeOriginalSegmentId);
-}
-
-//---------------------------------------------------------------------------
-void vtkSegmentation::GetMergedBinaryLabelmapSegmentIDs(vtkSegment* originalSegment, std::vector<std::string> &mergedSegmentIds,
-  bool includeOriginalSegmentId)
-{
-  this->GetMergedSegmentIDsForRepresentation(originalSegment, vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), mergedSegmentIds,
-    includeOriginalSegmentId);
+  this->GetSegmentIDsSharingRepresentation(originalSegmentId, vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), sharedSegmentIds,
+    includeOriginalSegmentId/*=true*/);
 }
 
 //---------------------------------------------------------------------------
 void vtkSegmentation::MergeSegmentLabelmaps(std::vector<std::string> mergeSegmentIds)
 {
-  vtkNew<vtkOrientedImageData> mergedLabelmapRepresentation;
-  this->GenerateMergedLabelmap(mergedLabelmapRepresentation, EXTENT_UNION_OF_EFFECTIVE_SEGMENTS, nullptr, mergeSegmentIds);
+  vtkNew<vtkOrientedImageData> sharedLabelmapRepresentation;
+  this->GenerateMergedLabelmap(sharedLabelmapRepresentation, EXTENT_UNION_OF_EFFECTIVE_SEGMENTS, nullptr, mergeSegmentIds);
 
   int value = 0;
   for (std::string segmentId : mergeSegmentIds)
@@ -1390,63 +1377,63 @@ void vtkSegmentation::MergeSegmentLabelmaps(std::vector<std::string> mergeSegmen
     vtkSegment* segment = this->GetSegment(segmentId);
     ++value;
     segment->SetLabelValue(value);
-    segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), mergedLabelmapRepresentation);
+    segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), sharedLabelmapRepresentation);
     }
 }
 
 //---------------------------------------------------------------------------
 bool vtkSegmentation::GenerateMergedLabelmap(
-  vtkOrientedImageData* mergedImageData,
+  vtkOrientedImageData* sharedImageData,
   int extentComputationMode,
-  vtkOrientedImageData* mergedLabelmapGeometry/*=nullptr*/,
+  vtkOrientedImageData* sharedLabelmapGeometry/*=nullptr*/,
   const std::vector<std::string>& segmentIDs/*=std::vector<std::string>()*/
 )
 {
-  if (!mergedImageData)
+  if (!sharedImageData)
     {
-    vtkErrorMacro("GenerateMergedLabelmap: Invalid image data");
+    vtkErrorMacro("GenerateSharedLabelmap: Invalid image data");
     return false;
     }
 
   if (!this->ContainsRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()))
     {
-    vtkErrorMacro("GenerateMergedLabelmap: Segmentation does not contain binary labelmap representation");
+    vtkErrorMacro("GenerateSharedLabelmap: Segmentation does not contain binary labelmap representation");
     return false;
     }
 
   // If segment IDs list is empty then include all segments
-  std::vector<std::string> mergedSegmentIDs;
+  std::vector<std::string> sharedSegmentIDs;
   if (segmentIDs.empty())
     {
-    this->GetSegmentIDs(mergedSegmentIDs);
+    this->GetSegmentIDs(sharedSegmentIDs);
     }
   else
     {
-    mergedSegmentIDs = segmentIDs;
+    sharedSegmentIDs = segmentIDs;
     }
 
-  // Determine common labelmap geometry that will be used for the merged labelmap
-  vtkSmartPointer<vtkMatrix4x4> mergedImageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
+  // Determine common labelmap geometry that will be used for the shared labelmap
+  vtkSmartPointer<vtkMatrix4x4> sharedImageToWorldMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
   vtkSmartPointer<vtkOrientedImageData> commonGeometryImage;
-  if (mergedLabelmapGeometry)
+  if (sharedLabelmapGeometry)
     {
-    // Use merged labelmap geometry if provided
-    commonGeometryImage = mergedLabelmapGeometry;
-    mergedLabelmapGeometry->GetImageToWorldMatrix(mergedImageToWorldMatrix);
+    // Use shared labelmap geometry if provided
+    commonGeometryImage = sharedLabelmapGeometry;
+    sharedLabelmapGeometry->GetImageToWorldMatrix(sharedImageToWorldMatrix);
     }
   else
     {
     commonGeometryImage = vtkSmartPointer<vtkOrientedImageData>::New();
-    std::string commonGeometryString = this->DetermineCommonLabelmapGeometry(extentComputationMode, mergedSegmentIDs);
+    std::string commonGeometryString = this->DetermineCommonLabelmapGeometry(extentComputationMode, sharedSegmentIDs);
     if (commonGeometryString.empty())
       {
       // This can occur if there are only empty segments in the segmentation
-      mergedImageToWorldMatrix->Identity();
+      sharedImageToWorldMatrix->Identity();
       return true;
       }
     vtkSegmentationConverter::DeserializeImageGeometry(commonGeometryString, commonGeometryImage, false);
     }
-  commonGeometryImage->GetImageToWorldMatrix(mergedImageToWorldMatrix);
+  commonGeometryImage->GetImageToWorldMatrix(sharedImageToWorldMatrix);
   int referenceDimensions[3] = { 0,0,0 };
   commonGeometryImage->GetDimensions(referenceDimensions);
   int referenceExtent[6] = { 0,-1,0,-1,0,-1 };
@@ -1454,30 +1441,30 @@ bool vtkSegmentation::GenerateMergedLabelmap(
 
   // Allocate image data if empty or if reference extent changed
   int imageDataExtent[6] = { 0,-1,0,-1,0,-1 };
-  mergedImageData->GetExtent(imageDataExtent);
-  if (mergedImageData->GetScalarType() != VTK_SHORT
+  sharedImageData->GetExtent(imageDataExtent);
+  if (sharedImageData->GetScalarType() != VTK_SHORT
     || imageDataExtent[0] != referenceExtent[0] || imageDataExtent[1] != referenceExtent[1] || imageDataExtent[2] != referenceExtent[2]
     || imageDataExtent[3] != referenceExtent[3] || imageDataExtent[4] != referenceExtent[4] || imageDataExtent[5] != referenceExtent[5])
     {
-    if (mergedImageData->GetPointData()->GetScalars() && mergedImageData->GetScalarType() != VTK_SHORT)
+    if (sharedImageData->GetPointData()->GetScalars() && sharedImageData->GetScalarType() != VTK_SHORT)
       {
-      vtkWarningMacro("GenerateMergedLabelmap: Merged image data scalar type is not short. Allocating using short.");
+      vtkWarningMacro("GenerateSharedLabelmap: Shared image data scalar type is not short. Allocating using short.");
       }
-    mergedImageData->SetExtent(referenceExtent);
-    mergedImageData->AllocateScalars(VTK_SHORT, 1);
+    sharedImageData->SetExtent(referenceExtent);
+    sharedImageData->AllocateScalars(VTK_SHORT, 1);
     }
-  mergedImageData->SetImageToWorldMatrix(mergedImageToWorldMatrix);
+  sharedImageData->SetImageToWorldMatrix(sharedImageToWorldMatrix);
 
   // Paint the image data background first
-  short* mergedImagePtr = (short*)mergedImageData->GetScalarPointerForExtent(referenceExtent);
-  if (!mergedImagePtr)
+  short* sharedImagePtr = (short*)sharedImageData->GetScalarPointerForExtent(referenceExtent);
+  if (!sharedImagePtr)
     {
     // Setting the extent may invoke this function again via ImageDataModified, in which case the pointer is nullptr
     return false;
     }
 
   const short backgroundColorIndex = 0;
-  vtkOrientedImageDataResample::FillImage(mergedImageData, backgroundColorIndex);
+  vtkOrientedImageDataResample::FillImage(sharedImageData, backgroundColorIndex);
 
   // Skip the rest if there are no segments
   if (this->GetNumberOfSegments() == 0)
@@ -1485,15 +1472,15 @@ bool vtkSegmentation::GenerateMergedLabelmap(
     return true;
     }
 
-  // Create merged labelmap
+  // Create shared labelmap
   short colorIndex = backgroundColorIndex + 1;
-  for (std::vector<std::string>::iterator segmentIdIt = mergedSegmentIDs.begin(); segmentIdIt != mergedSegmentIDs.end(); ++segmentIdIt, ++colorIndex)
+  for (std::vector<std::string>::iterator segmentIdIt = sharedSegmentIDs.begin(); segmentIdIt != sharedSegmentIDs.end(); ++segmentIdIt, ++colorIndex)
     {
     std::string currentSegmentId = *segmentIdIt;
     vtkSegment* currentSegment = this->GetSegment(currentSegmentId);
     if (!currentSegment)
       {
-      vtkWarningMacro("GenerateMergedLabelmap: Segment not found: " << currentSegmentId);
+      vtkWarningMacro("GenerateSharedLabelmap: Segment not found: " << currentSegmentId);
       continue;
       }
 
@@ -1517,7 +1504,7 @@ bool vtkSegmentation::GenerateMergedLabelmap(
 
       // Resample segment labelmap for merging
       if (!vtkOrientedImageDataResample::ResampleOrientedImageToReferenceGeometry(
-        representationBinaryLabelmap, mergedImageToWorldMatrix, resampledBinaryLabelmap))
+        representationBinaryLabelmap, sharedImageToWorldMatrix, resampledBinaryLabelmap))
         {
         continue;
         }
@@ -1537,9 +1524,9 @@ bool vtkSegmentation::GenerateMergedLabelmap(
     thresholdedLabelmap->CopyDirections(binaryLabelmap);
     binaryLabelmap = thresholdedLabelmap;
 
-    // Copy image data voxels into merged labelmap with the proper color index
+    // Copy image data voxels into shared labelmap with the proper color index
     vtkOrientedImageDataResample::ModifyImage(
-      mergedImageData,
+      sharedImageData,
       binaryLabelmap,
       vtkOrientedImageDataResample::OPERATION_MASKING,
       nullptr,
@@ -1559,9 +1546,9 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     return;
     }
 
-  std::vector<std::string> mergedSegmentIDs;
-  this->GetMergedBinaryLabelmapSegmentIDs(segment, mergedSegmentIDs, false);
-  if (mergedSegmentIDs.empty())
+  std::vector<std::string> sharedSegmentIDs;
+  this->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentId, sharedSegmentIDs, false);
+  if (sharedSegmentIDs.empty())
     {
     return;
     }
@@ -1574,7 +1561,7 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     threshold->SetInputData(labelmap);
     threshold->ThresholdBetween(segment->GetLabelValue(), segment->GetLabelValue());
     threshold->SetOutValue(0);
-    threshold->SetInValue(1);
+    threshold->SetInValue(DEFAULT_LABEL_VALUE);
     threshold->Update();
 
     vtkSmartPointer<vtkOrientedImageData> tempImage = vtkSmartPointer<vtkOrientedImageData>::New();
@@ -1590,9 +1577,8 @@ void vtkSegmentation::SeparateSegmentLabelmap(std::string segmentId)
     thresholdErase->ReplaceOutOff();
     thresholdErase->Update();
     labelmap->ShallowCopy(thresholdErase->GetOutput());
-
     }
-  segment->SetLabelValue(1);
+  segment->SetLabelValue(DEFAULT_LABEL_VALUE);
 
   this->Modified();
   this->InvokeEvent(vtkSegmentation::MasterRepresentationModified, this);
@@ -1614,9 +1600,9 @@ void vtkSegmentation::ClearSegment(std::string segmentId)
     return;
     }
 
-  std::vector<std::string> mergedSegmentIDs;
-  this->GetMergedBinaryLabelmapSegmentIDs(segmentId, mergedSegmentIDs, false);
-  if (this->GetMasterRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName() && !mergedSegmentIDs.empty())
+  std::vector<std::string> sharedSegmentIDs;
+  this->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentId, sharedSegmentIDs, false);
+  if (this->GetMasterRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName() && !sharedSegmentIDs.empty())
     {
     vtkOrientedImageData* binaryLablemap = vtkOrientedImageData::SafeDownCast(masterRepresentation);
     if (binaryLablemap)
@@ -1639,43 +1625,43 @@ void vtkSegmentation::ClearSegment(std::string segmentId)
 }
 
 //---------------------------------------------------------------------------
-int vtkSegmentation::GetUniqueValueForMergedLabelmap(std::string segmentId)
+int vtkSegmentation::GetUniqueLabelValueForSharedLabelmap(std::string segmentId)
 {
-  std::vector<std::string> mergedLabelmapIds;
-  this->GetMergedBinaryLabelmapSegmentIDs(segmentId, mergedLabelmapIds, true);
+  std::vector<std::string> sharedLabelmapIds;
+  this->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentId, sharedLabelmapIds, true);
 
-  std::set<int> values;
-  for (std::string currentSegmentId : mergedLabelmapIds)
+  std::set<int> labelValues;
+  for (std::string currentSegmentId : sharedLabelmapIds)
     {
     vtkSegment* segment = this->GetSegment(currentSegmentId);
-    values.insert(segment->GetLabelValue());
+    labelValues.insert(segment->GetLabelValue());
     }
 
-  int value = 1;
-  while (values.find(value) != values.end())
+  int labelValue = 1;
+  while (labelValues.find(labelValue) != labelValues.end())
     {
-    ++value;
+    ++labelValue;
     }
-  return value;
+  return labelValue;
 }
 
 //---------------------------------------------------------------------------
-int vtkSegmentation::GetUniqueValueForMergedLabelmap(vtkOrientedImageData* labelmap)
+int vtkSegmentation::GetUniqueLabelValueForSharedLabelmap(vtkOrientedImageData* labelmap)
 {
   if (!labelmap)
     {
-    return 1;
+    return DEFAULT_LABEL_VALUE;
     }
 
   int* extent = labelmap->GetExtent();
   if (extent[1] < extent[0] || extent[3] < extent[2] || extent[5] < extent[4])
     {
-    return 1;
+    return DEFAULT_LABEL_VALUE;
     }
 
   double* scalarRange = labelmap->GetScalarRange();
-  double highLabel = scalarRange[1];
-  return highLabel + 1.0;
+  int highLabel = (int)scalarRange[1];
+  return highLabel + 1;
 }
 
 //---------------------------------------------------------------------------
@@ -1822,24 +1808,24 @@ std::string vtkSegmentation::AddEmptySegment(std::string segmentId/*=""*/, std::
 
   if (this->MasterRepresentationName == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())
     {
-    std::string mergedSegmentId;
-    int numberOfMergedSegments = 0;
+    std::string sharedSegmentId;
+    int numberOfSharedSegments = 0;
     if (this->SegmentIds.size() > 0)
       {
-      // Add the empty segment to the first merged labelmap.
+      // Add the empty segment to the first shared labelmap.
       // This is faster when adding a large number of empty segments, but there is likely a heuristic that would provide a better layer to merge into.
-      mergedSegmentId = this->SegmentIds[0];
+      sharedSegmentId = this->SegmentIds[0];
       }
 
-    if (!mergedSegmentId.empty())
+    if (!sharedSegmentId.empty())
       {
-      vtkSegment* mergedSegment = this->GetSegment(mergedSegmentId);
-      vtkDataObject* dataObject = mergedSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
-      double mergedValue = this->GetUniqueValueForMergedLabelmap(mergedSegmentId);
-      segment->SetLabelValue(mergedValue);
+      vtkSegment* sharedSegment = this->GetSegment(sharedSegmentId);
+      vtkDataObject* dataObject = sharedSegment->GetRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName());
+      double sharedValue = this->GetUniqueLabelValueForSharedLabelmap(sharedSegmentId);
+      segment->SetLabelValue(sharedValue);
       segment->AddRepresentation(vtkSegmentationConverter::GetBinaryLabelmapRepresentationName(), dataObject);
-      vtkOrientedImageData* mergedLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);
-      vtkOrientedImageDataResample::CastImageForValue(mergedLabelmap, mergedValue);
+      vtkOrientedImageData* sharedLabelmap = vtkOrientedImageData::SafeDownCast(dataObject);
+      vtkOrientedImageDataResample::CastImageForValue(sharedLabelmap, sharedValue);
       }
     }
 
@@ -1951,20 +1937,20 @@ void vtkSegmentation::DetermineCommonLabelmapExtent(int commonGeometryExtent[6],
 std::string vtkSegmentation::DetermineCommonLabelmapGeometry(int extentComputationMode, const std::vector<std::string>& segmentIDs/*=std::vector<std::string>()*/)
 {
   // If segment IDs list is empty then include all segments
-  std::vector<std::string> mergedSegmentIDs;
+  std::vector<std::string> sharedSegmentIDs;
   if (segmentIDs.empty())
     {
-    this->GetSegmentIDs(mergedSegmentIDs);
+    this->GetSegmentIDs(sharedSegmentIDs);
     }
   else
     {
-    mergedSegmentIDs = segmentIDs;
+    sharedSegmentIDs = segmentIDs;
     }
 
   // Get highest resolution reference geometry available in segments
   vtkOrientedImageData* highestResolutionLabelmap = nullptr;
   double lowestSpacing[3] = {1, 1, 1}; // We'll multiply the spacings together to get the voxel size
-  for (std::vector<std::string>::iterator segmentIt = mergedSegmentIDs.begin(); segmentIt != mergedSegmentIDs.end(); ++segmentIt)
+  for (std::vector<std::string>::iterator segmentIt = sharedSegmentIDs.begin(); segmentIt != sharedSegmentIDs.end(); ++segmentIt)
     {
     vtkSegment* currentSegment = this->GetSegment(*segmentIt);
     if (!currentSegment)
@@ -2018,7 +2004,7 @@ std::string vtkSegmentation::DetermineCommonLabelmapGeometry(int extentComputati
     {
     // Determine extent that contains all segments
     int commonGeometryExtent[6] = { 0, -1, 0, -1, 0, -1 };
-    this->DetermineCommonLabelmapExtent(commonGeometryExtent, commonGeometryImage, mergedSegmentIDs,
+    this->DetermineCommonLabelmapExtent(commonGeometryExtent, commonGeometryImage, sharedSegmentIDs,
       extentComputationMode == EXTENT_UNION_OF_EFFECTIVE_SEGMENTS || extentComputationMode == EXTENT_UNION_OF_EFFECTIVE_SEGMENTS_PADDED,
       extentComputationMode == EXTENT_UNION_OF_SEGMENTS_PADDED || extentComputationMode == EXTENT_UNION_OF_EFFECTIVE_SEGMENTS_PADDED);
     commonGeometryImage->SetExtent(commonGeometryExtent);
@@ -2042,14 +2028,14 @@ void vtkSegmentation::DetermineCommonLabelmapExtent(int commonGeometryExtent[6],
   const std::vector<std::string>& segmentIDs/*=std::vector<std::string>()*/, bool computeEffectiveExtent /*=false*/, bool addPadding /*=false*/)
 {
   // If segment IDs list is empty then include all segments
-  std::vector<std::string> mergedSegmentIDs;
+  std::vector<std::string> sharedSegmentIDs;
   if (segmentIDs.empty())
     {
-    this->GetSegmentIDs(mergedSegmentIDs);
+    this->GetSegmentIDs(sharedSegmentIDs);
     }
   else
     {
-    mergedSegmentIDs = segmentIDs;
+    sharedSegmentIDs = segmentIDs;
     }
 
   // Determine extent that contains all segments
@@ -2059,7 +2045,7 @@ void vtkSegmentation::DetermineCommonLabelmapExtent(int commonGeometryExtent[6],
   commonGeometryExtent[3] = -1;
   commonGeometryExtent[4] = 0;
   commonGeometryExtent[5] = -1;
-  for (std::vector<std::string>::iterator segmentIt = mergedSegmentIDs.begin(); segmentIt != mergedSegmentIDs.end(); ++segmentIt)
+  for (std::vector<std::string>::iterator segmentIt = sharedSegmentIDs.begin(); segmentIt != sharedSegmentIDs.end(); ++segmentIt)
     {
     vtkSegment* currentSegment = this->GetSegment(*segmentIt);
     if (!currentSegment)
@@ -2308,7 +2294,7 @@ std::vector<std::string> vtkSegmentation::GetSegmentIDsForDataObject(vtkDataObje
 }
 
 //----------------------------------------------------------------------------
-void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
+void vtkSegmentation::CollapseBinaryLabelmaps(bool forceToSingleLayer/*=true*/)
 {
   std::string labelmapRepresentationName = vtkSegmentationConverter::GetBinaryLabelmapRepresentationName();
   int numberOfLayers = this->GetNumberOfLayers(labelmapRepresentationName);
@@ -2318,7 +2304,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
     return;
     }
 
-  if (!safeMerge)
+  if (!forceToSingleLayer)
     {
     // If the merge is unsafe, segments can be overwritten.
     std::vector<std::string> segmentIds;
@@ -2377,7 +2363,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
         vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(thresholdedLabelmap, referenceImage, thresholdedLabelmap);
         }
 
-      bool merged = false;
+      bool shared = false;
       int layerCount = 0;
       for (LayerType newLayer : newLayers)
         {
@@ -2385,18 +2371,18 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
         bool safeToMerge = true;
         if (currentLabelmap)
           {
-          safeToMerge = !vtkOrientedImageDataResample::IsLabelInMask(newLayerLabelmap, thresholdedLabelmap);
+          safeToMerge = !vtkOrientedImageDataResample::IsLabelInMask(newLayerLabelmap, thresholdedLabelmap, 0);
           }
 
         if (safeToMerge)
           {
-          merged = true;
-          double value = this->GetUniqueValueForMergedLabelmap(newLayerLabelmap);
+          shared = true;
+          double value = this->GetUniqueLabelValueForSharedLabelmap(newLayerLabelmap);
           for (std::string layerSegmentID : newLayer.second)
             {
-            // The unique value only checks the existing scalars in the labelmap. If there are merged labelmaps in the
+            // The unique value only checks the existing scalars in the labelmap. If there are shared labelmaps in the
             // new layer that do not have filled voxels in the labelmap, then the result of
-            // GetUniqueValueForMergedLabelmap may not be unique. Compare the label value of all of the segments in the
+            // GetUniqueLabelValueForSharedLabelmap may not be unique. Compare the label value of all of the segments in the
             // new layer to make sure the value is unique.
             double existingValue = newLabelmapValues[layerSegmentID];
             value = std::max(value, existingValue + 1);
@@ -2422,7 +2408,7 @@ void vtkSegmentation::CollapseBinaryLabelmaps(bool safeMerge/*=true*/)
           }
         ++layerCount;
         }
-      if (!merged)
+      if (!shared)
         {
         newLayers.push_back(std::make_pair(thresholdedLabelmap, std::vector<std::string>({ currentSegmentId })));
         newLabelmapValues[currentSegmentId] = 1;

@@ -205,7 +205,7 @@ public:
 
   /// Get a segment as binary labelmap.
   /// If representation does not exist yet then call CreateBinaryLabelmapRepresentation() before.
-  /// The returned object will not be modified by, and will not modify the segmentation.
+  /// This function returns a copy of the segment binary labelmap.
   virtual void GetBinaryLabelmapRepresentation(const std::string segmentId, vtkOrientedImageData* outputBinaryLabelmap);
 
   /// Generate closed surface representation for all segments.
@@ -217,7 +217,7 @@ public:
 
   /// Get a segment as binary labelmap.
   /// If representation does not exist yet then call CreateClosedSurfaceRepresentation() before.
-  /// The returned object will not be modified by, and will not modify the segmentation.
+  /// This function returns a copy of the segment closed surface.
   virtual void GetClosedSurfaceRepresentation(const std::string segmentId, vtkPolyData* outputClosedSurface);
 
   /// Add new segment from a closed surface.

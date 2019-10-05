@@ -785,7 +785,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
     Pipeline* pipeline = pipelineIt->second;
 
     vtkDataObject* dataObject = pipelineIt->first;
-    std::vector<std::string> mergedSegmentIds = segmentation->GetSegmentIDsForDataObject(dataObject, displayNode->GetDisplayRepresentationName2D());
+    std::vector<std::string> sharedSegmentIds = segmentation->GetSegmentIDsForDataObject(dataObject, displayNode->GetDisplayRepresentationName2D());
 
     // Get representation to display
     vtkPolyData* polyData = vtkPolyData::SafeDownCast(dataObject);
@@ -801,7 +801,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       }
 
     bool pipelineVisiblity = false;
-    for (std::string segmentId : mergedSegmentIds)
+    for (std::string segmentId : sharedSegmentIds)
       {
       pipelineVisiblity |= this->IsSegmentVisibleInCurrentSlice(displayNode, pipeline, segmentId);
       }
@@ -819,7 +819,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
     if (polyData)
       {
       // Get visibility
-      std::string segmentID = mergedSegmentIds[0];
+      std::string segmentID = sharedSegmentIds[0];
 
       vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
       displayNode->GetSegmentDisplayProperties(segmentID, properties);
@@ -939,7 +939,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
 
       bool outlineVisible = false;
       bool fillVisible = false;
-      for (std::string segmentId : mergedSegmentIds)
+      for (std::string segmentId : sharedSegmentIds)
         {
         vtkMRMLSegmentationDisplayNode::SegmentDisplayProperties properties;
         displayNode->GetSegmentDisplayProperties(segmentId, properties);
@@ -985,7 +985,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
       int minLabelmapValue = VTK_INT_MAX;
       int maxLabelmapValue = VTK_INT_MIN;
 
-      for (std::string segmentId : mergedSegmentIds)
+      for (std::string segmentId : sharedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
         int labelmapValue = segment->GetLabelValue();
@@ -1009,7 +1009,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         fillOpacityFunction->AddPoint(0, 0);
         }
 
-      for (std::string segmentId : mergedSegmentIds)
+      for (std::string segmentId : sharedSegmentIds)
         {
         vtkSegment* segment = segmentation->GetSegment(segmentId);
         int labelmapValue = segment->GetLabelValue();

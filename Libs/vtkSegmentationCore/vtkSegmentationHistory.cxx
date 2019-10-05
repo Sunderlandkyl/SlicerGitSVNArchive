@@ -143,7 +143,7 @@ bool vtkSegmentationHistory::SaveState()
         }
       }
     vtkSmartPointer<vtkSegment> segmentClone = vtkSmartPointer<vtkSegment>::New();
-    // If the same object (i.e. merged labelmap) has already been copied into previous segmentation, then point to that
+    // If the same object (i.e. shared labelmap) has already been copied into previous segmentation, then point to that
     // object instead.
     vtkDataObject* masterRepresentation = segment->GetRepresentation(this->Segmentation->GetMasterRepresentationName());
     if (savedObjects.find(masterRepresentation) == savedObjects.end())

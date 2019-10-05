@@ -42,7 +42,7 @@ int CreateCubeLabelmap(vtkOrientedImageData* imageData, int extent[6]);
 
 void SetReferenceGeometry(vtkSegmentation*);
 
-bool TestMergedLabelmapConversion()
+bool TestSharedLabelmapConversion()
 {
   // Generate sphere models
   vtkNew<vtkPolyData> spherePolyData1;
@@ -101,27 +101,27 @@ bool TestMergedLabelmapConversion()
     return false;
     }
 
-  std::vector<std::string> mergedSegmentIDs;
-  segmentation->GetMergedBinaryLabelmapSegmentIDs(segmentation->GetSegmentIdBySegment(sphereSegment1), mergedSegmentIDs, true);
-  if (mergedSegmentIDs.size() != 2)
+  std::vector<std::string> sharedSegmentIDs;
+  segmentation->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentation->GetSegmentIdBySegment(sphereSegment1), sharedSegmentIDs, true);
+  if (sharedSegmentIDs.size() != 2)
     {
-    std::cerr << __LINE__ << ": Invalid number of merged labelmaps for segment " << sphereSegment1->GetName()
-      << ": " << mergedSegmentIDs.size() << " should be 2" << std::endl;
+    std::cerr << __LINE__ << ": Invalid number of shared labelmaps for segment " << sphereSegment1->GetName()
+      << ": " << sharedSegmentIDs.size() << " should be 2" << std::endl;
     return false;
     }
 
-  segmentation->GetMergedBinaryLabelmapSegmentIDs(segmentation->GetSegmentIdBySegment(sphereSegment2), mergedSegmentIDs, true);
-  if (mergedSegmentIDs.size() != 1)
+  segmentation->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentation->GetSegmentIdBySegment(sphereSegment2), sharedSegmentIDs, true);
+  if (sharedSegmentIDs.size() != 1)
     {
-    std::cerr << __LINE__ << ": Invalid number of merged labelmaps for segment " << sphereSegment2->GetName()
-      << ": " << mergedSegmentIDs.size() << " should be 1" << std::endl;
+    std::cerr << __LINE__ << ": Invalid number of shared labelmaps for segment " << sphereSegment2->GetName()
+      << ": " << sharedSegmentIDs.size() << " should be 1" << std::endl;
     return false;
     }
 
   return true;
 }
 
-bool TestMergedLabelmapCollapse()
+bool TestSharedLabelmapCollapse()
 {
   vtkNew<vtkOrientedImageData> cubeImage1;
   int extent1[6] = { 0, 2, 0, 2, 0, 2 };
@@ -267,7 +267,7 @@ bool TestMergedLabelmapCollapse()
 }
 
 //----------------------------------------------------------------------------
-bool TestMergedLabelmapCasting()
+bool TestSharedLabelmapCasting()
 {
   vtkNew<vtkOrientedImageData> labelmap;
   labelmap->SetDimensions(1, 1, 1);
@@ -323,17 +323,17 @@ int vtkSegmentationTest2(int vtkNotUsed(argc), char* vtkNotUsed(argv)[])
   vtkSegmentationConverterFactory::GetInstance()->RegisterConverterRule(
     vtkSmartPointer<vtkClosedSurfaceToBinaryLabelmapConversionRule>::New() );
 
-  if (!TestMergedLabelmapConversion())
+  if (!TestSharedLabelmapConversion())
     {
     return EXIT_FAILURE;
     }
 
-  if (!TestMergedLabelmapCollapse())
+  if (!TestSharedLabelmapCollapse())
     {
     return EXIT_FAILURE;
     }
 
-  if (!TestMergedLabelmapCasting())
+  if (!TestSharedLabelmapCasting())
     {
     return EXIT_FAILURE;
     }

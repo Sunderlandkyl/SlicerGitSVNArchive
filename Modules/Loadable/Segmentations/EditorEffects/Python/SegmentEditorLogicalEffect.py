@@ -168,7 +168,7 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
     inverter.SetOutputScalarType(vtk.VTK_UNSIGNED_CHAR)
     inverter.Update()
 
-    invertedModifierLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+    invertedModifierLabelmap = slicer.vtkOrientedImageData()
     invertedModifierLabelmap.ShallowCopy(inverter.GetOutput())
     imageToWorldMatrix = vtk.vtkMatrix4x4()
     modifierLabelmap.GetImageToWorldMatrix(imageToWorldMatrix)
@@ -200,7 +200,7 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
         logging.error("Operation {0} requires a selected modifier segment".format(operation))
         return
       modifierSegment = segmentation.GetSegment(modifierSegmentID)
-      modifierSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+      modifierSegmentLabelmap = slicer.vtkOrientedImageData()
       segmentationNode.GetBinaryLabelmapRepresentation(modifierSegmentID, modifierSegmentLabelmap)
 
       # Get common geometry
@@ -209,13 +209,13 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
       if not commonGeometryString:
         logging.info("Logical operation skipped: all segments are empty")
         return
-      commonGeometryImage = vtkSegmentationCore.vtkOrientedImageData()
+      commonGeometryImage = slicer.vtkOrientedImageData()
       vtkSegmentationCore.vtkSegmentationConverter.DeserializeImageGeometry(commonGeometryString, commonGeometryImage, False)
 
       # Make sure modifier segment has correct geometry
       # (if modifier segment has been just copied over from another segment then its geometry may be different)
       if not vtkSegmentationCore.vtkOrientedImageDataResample.DoGeometriesMatch(commonGeometryImage, modifierSegmentLabelmap):
-        modifierSegmentLabelmap_CommonGeometry = vtkSegmentationCore.vtkOrientedImageData()
+        modifierSegmentLabelmap_CommonGeometry = slicer.vtkOrientedImageData()
         vtkSegmentationCore.vtkOrientedImageDataResample.ResampleOrientedImageToReferenceOrientedImage(
           modifierSegmentLabelmap, commonGeometryImage, modifierSegmentLabelmap_CommonGeometry,
           False, # nearest neighbor interpolation,
@@ -234,7 +234,7 @@ class SegmentEditorLogicalEffect(AbstractScriptedSegmentEditorEffect):
             modifierSegmentLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeRemove, bypassMasking)
       elif operation == LOGICAL_INTERSECT:
         selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
-        intersectionLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+        intersectionLabelmap = slicer.vtkOrientedImageData()
         vtkSegmentationCore.vtkOrientedImageDataResample.MergeImage(
           selectedSegmentLabelmap, modifierSegmentLabelmap, intersectionLabelmap,
           vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MINIMUM, selectedSegmentLabelmap.GetExtent())

@@ -6,6 +6,12 @@ from slicer.ScriptedLoadableModule import *
 
 import vtkSegmentationCore
 
+'''
+This class tests the shared labelmap behavior.
+Edting segments with overwrite should keep all segments on the same labelmap.
+Editing segments with overlap should split segments to separate layers.
+Shared segment modification behavior is controlled through qSlicerSegmentEditorAbstractEffect::modifySelectedSegmentByLabelmap().
+'''
 
 class SegmentationsModuleTest2(unittest.TestCase):
 
@@ -29,7 +35,7 @@ class SegmentationsModuleTest2(unittest.TestCase):
     self.TestSection_SetupPathsAndNames()
     self.TestSection_RetrieveInputData()
     self.TestSection_SetupScene()
-    self.TestSection_TestMergedLabelmapMultipleLayerEditing()
+    self.TestSection_TestSharedLabelmapMultipleLayerEditing()
     logging.info('Test finished')
 
   #------------------------------------------------------------------------------
@@ -97,7 +103,7 @@ class SegmentationsModuleTest2(unittest.TestCase):
     self.assertIsNotNone(self.segmentation)
 
   #------------------------------------------------------------------------------
-  def TestSection_TestMergedLabelmapMultipleLayerEditing(self):
+  def TestSection_TestSharedLabelmapMultipleLayerEditing(self):
 
     self.segmentation.RemoveAllSegments()
     self.segmentation.AddEmptySegment("Segment_1")

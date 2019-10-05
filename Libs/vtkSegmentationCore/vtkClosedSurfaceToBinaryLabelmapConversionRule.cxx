@@ -69,8 +69,8 @@ vtkClosedSurfaceToBinaryLabelmapConversionRule::vtkClosedSurfaceToBinaryLabelmap
     " 1 = created labelmap extent will be within reference image extent.");
   // Collapse labelmaps parameter
   this->ConversionParameters[GetCollapseLabelmapsParameterName()] = std::make_pair("1",
-    "Merge the labelmaps into as few merged labelmaps as possible"
-    " 1 = created labelmaps will be merged if possible without overwriting each other.");
+    "Merge the labelmaps into as few shared labelmaps as possible"
+    " 1 = created labelmaps will be shared if possible without overwriting each other.");
 }
 
 //----------------------------------------------------------------------------
@@ -121,8 +121,10 @@ vtkDataObject* vtkClosedSurfaceToBinaryLabelmapConversionRule::ConstructRepresen
 }
 
 //----------------------------------------------------------------------------
-bool vtkClosedSurfaceToBinaryLabelmapConversionRule::ConvertInternal(vtkSegment* segment)
+bool vtkClosedSurfaceToBinaryLabelmapConversionRule::Convert(vtkSegment* segment)
 {
+  this->CreateTargetRepresentation(segment);
+
   // Check validity of source and target representation objects
   vtkPolyData* closedSurfacePolyData = vtkPolyData::SafeDownCast(segment->GetRepresentation(this->GetSourceRepresentationName()));
   if (!closedSurfacePolyData)

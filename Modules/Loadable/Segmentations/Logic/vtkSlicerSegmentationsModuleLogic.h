@@ -313,7 +313,7 @@ public:
   /// Master representation must be binary labelmap! Master representation changed event is disabled to prevent deletion of all
   /// other representation in all segments. The other representations in the given segment are re-converted. The extent of the
   /// segment binary labelmap is shrunk to the effective extent. Display update is triggered.
-  /// \param mergeMode Determines if the labelmap should replace the segment, or combined with a maximum or minimum operation.
+  /// \param mergeMode Determines if the labelmap should replace the segment, combined with a maximum or minimum operation, or set under the mask.
   /// \param extent If extent is specified then only that extent of the labelmap is used.
   enum
     {
