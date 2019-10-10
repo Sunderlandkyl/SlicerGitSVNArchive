@@ -31,6 +31,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.timer.connect('timeout()', self.preview)
 
     self.previewPipelines = {}
+    self.histogramPipelines = {}
     self.setupPreviewDisplay()
 
   def clone(self):
@@ -67,6 +68,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     # Clear preview pipeline and stop timer
     self.clearPreviewDisplay()
+    self.clearHistogramDisplay()
     self.timer.stop()
 
   def setCurrentSegmentTransparent(self):
@@ -178,7 +180,68 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     autoThresholdFrame.addWidget(self.selectPreviousAutoThresholdButton)
     autoThresholdFrame.addWidget(self.selectNextAutoThresholdButton)
     autoThresholdFrame.addWidget(self.setAutoThresholdButton)
-    self.scriptedEffect.addLabeledOptionsWidget("Automatic threshold:", autoThresholdFrame)
+
+    autoThresholdGroupBox = ctk.ctkCollapsibleGroupBox()
+    autoThresholdGroupBox.setTitle("Automatic threshold")
+    autoThresholdGroupBox.setLayout(autoThresholdFrame)
+    autoThresholdGroupBox.collapsed = True
+    self.scriptedEffect.addOptionsWidget(autoThresholdGroupBox)
+
+    histogramItemFrame = qt.QHBoxLayout()
+
+    #self.lineROIButton = qt.QPushButton()
+    #self.lineROIButton.setText("Line")
+    #histogramItemFrame.addWidget(self.lineROIButton)
+
+    #self.boxROIButton = qt.QPushButton()
+    #self.boxROIButton.setText("Box")
+    #histogramItemFrame.addWidget(self.boxROIButton)
+
+    #self.circleROIButton = qt.QPushButton()
+    #self.circleROIButton.setText("Circle")
+    #histogramItemFrame.addWidget(self.circleROIButton)
+
+    self.lowerHistogramButton = qt.QPushButton()
+    self.lowerHistogramButton.setText("Lower")
+    self.lowerHistogramButton.setCheckable(True)
+    self.lowerHistogramButton.checked = False
+    self.lowerHistogramButton.clicked.connect(self.setHistogramToLower)
+    histogramItemFrame.addWidget(self.lowerHistogramButton)
+
+    self.upperHistogramButton = qt.QPushButton()
+    self.upperHistogramButton.setText("Upper")
+    self.upperHistogramButton.setCheckable(True)
+    self.upperHistogramButton.checked = True
+    self.upperHistogramButton.clicked.connect(self.setHistogramToUpper)
+    histogramItemFrame.addWidget(self.upperHistogramButton)
+
+    self.buttonGroup = qt.QButtonGroup()
+    self.buttonGroup.addButton(self.lowerHistogramButton)
+    self.buttonGroup.addButton(self.upperHistogramButton)
+    self.buttonGroup.setExclusive(True)
+
+    self.histogramView = ctk.ctkTransferFunctionView()
+    histogramItemFrame.addWidget(self.histogramView)
+    scene = self.histogramView.scene()
+
+    self.histogram = ctk.ctkVTKHistogram()
+    #dataArray = self.imageStencil.GetOutput().GetPointData().GetScalars()
+    #self.histogram.setDataArray(dataArray)
+
+    self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
+    self.histogramBars.barWidth = 1.0
+    scene.addItem(self.histogramBars)
+
+
+
+    histogramFrame = qt.QVBoxLayout()
+    histogramFrame.addLayout(histogramItemFrame)
+
+    histogramGroupBox = ctk.ctkCollapsibleGroupBox()
+    histogramGroupBox.setTitle("Local histogram")
+    histogramGroupBox.setLayout(histogramFrame)
+    histogramGroupBox.collapsed = True
+    self.scriptedEffect.addOptionsWidget(histogramGroupBox)
 
     self.useForPaintButton = qt.QPushButton("Use for masking")
     self.useForPaintButton.setToolTip("Use specified intensity range for masking and switch to Paint effect.")
@@ -217,12 +280,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
   def layoutChanged(self):
     self.setupPreviewDisplay()
-
-  def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
-    return False # For the sake of example
-
-  def processViewNodeEvents(self, callerViewNode, eventId, viewWidget):
-    pass # For the sake of example
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("MinimumThreshold", 0.)
@@ -379,6 +436,11 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       self.scriptedEffect.removeActor2D(sliceWidget, pipeline.actor)
     self.previewPipelines = {}
 
+  def clearHistogramDisplay(self):
+    for sliceWidget, pipeline in self.histogramPipelines.items():
+      self.scriptedEffect.removeActor2D(sliceWidget, pipeline.actor)
+    self.histogramPipelines = {}
+
   def setupPreviewDisplay(self):
     # Clear previous pipelines before setting up the new ones
     self.clearPreviewDisplay()
@@ -444,6 +506,78 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     if self.previewState <= 0:
       self.previewStep = 1
 
+  def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
+    abortEvent = False
+
+    # Only allow for slice views
+    if viewWidget.className() != "qMRMLSliceWidget":
+      return abortEvent
+
+    # Clicking in a view should remove all previous pipelines
+    if eventId == vtk.vtkCommand.LeftButtonPressEvent:
+      self.clearHistogramDisplay()
+
+    pipeline = self.pipelineForWidget(viewWidget)
+    if pipeline is None:
+      return abortEvent
+
+    xy = callerInteractor.GetEventPosition()
+    ras = self.xyToRas(xy, viewWidget)
+
+    if eventId == vtk.vtkCommand.LeftButtonPressEvent:
+      pipeline.state = HISTOGRAM_STATE_MOVING
+      pipeline.setPoint1(ras)
+      pipeline.setPoint2(ras)
+    elif eventId == vtk.vtkCommand.LeftButtonReleaseEvent:
+      pipeline.state = HISTOGRAM_STATE_PLACED
+      pipeline.updateHistogram()
+    elif eventId == vtk.vtkCommand.MouseMoveEvent:
+      if pipeline.state == HISTOGRAM_STATE_MOVING:
+        pipeline.setPoint2(ras)
+    else:
+      pass
+
+    pipeline.updateBrushModel()
+    return abortEvent
+
+  def pipelineForWidget(self, sliceWidget):
+    if sliceWidget in self.histogramPipelines:
+      return self.histogramPipelines[sliceWidget]
+
+    # Create pipeline if does not yet exist
+    pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget)
+    if self.lowerHistogramButton.checked:
+      pipeline.mode = MODE_SET_LOWER
+    else:
+      pipeline.mode = MODE_SET_UPPER
+
+    # Add actor
+    renderer = self.scriptedEffect.renderer(sliceWidget)
+    if renderer is None:
+      logging.error("pipelineForWidget: Failed to get renderer!")
+      return None
+    self.scriptedEffect.addActor2D(sliceWidget, pipeline.actor)
+
+    self.histogramPipelines[sliceWidget] = pipeline
+    return pipeline
+
+  def processViewNodeEvents(self, callerViewNode, eventId, viewWidget):
+    pipeline = self.pipelineForWidget(viewWidget)
+    if pipeline is not None:
+      pipeline.updateBrushModel()
+
+  def setHistogramToUpper(self):
+    for sliceWidget, pipeline in self.histogramPipelines.items():
+      pipeline.mode = MODE_SET_UPPER
+      if pipeline.state == HISTOGRAM_STATE_PLACED:
+        pipeline.updateHistogram()
+
+  def setHistogramToLower(self):
+    for sliceWidget, pipeline in self.histogramPipelines.items():
+      pipeline.mode = MODE_SET_LOWER
+      if pipeline.state == HISTOGRAM_STATE_PLACED:
+        pipeline.updateHistogram()
+
 #
 # PreviewPipeline
 #
@@ -479,6 +613,208 @@ class PreviewPipeline(object):
     # Setup pipeline
     self.colorMapper.SetInputConnection(self.thresholdFilter.GetOutputPort())
     self.mapper.SetInputConnection(self.colorMapper.GetOutputPort())
+
+###
+
+#
+# Histogram threshold
+#
+class HistogramPipeline(object):
+
+  def __init__(self, thresholdEffect, scriptedEffect, sliceWidget):
+    self.thresholdEffect = thresholdEffect
+    self.scriptedEffect = scriptedEffect
+    self.sliceWidget = sliceWidget
+    self.type = HISTOGRAM_TYPE_CIRCLE
+    self.state = HISTOGRAM_STATE_OFF
+    self.mode = MODE_SET_UPPER
+
+    self.point1 = [0,0,0]
+    self.point2 = [0,0,0]
+
+    self.brushCylinderSource = vtk.vtkCylinderSource()
+    self.brushCylinderSource.SetRadius(0.0)
+    self.brushCylinderSource.SetResolution(32)
+
+    self.brushCubeSource = vtk.vtkCubeSource()
+
+    # Actor setup
+
+    self.slicePlane = vtk.vtkPlane()
+
+    self.brushToWorldOriginTransform = vtk.vtkTransform()
+
+    self.brushToWorldOriginTransformer = vtk.vtkTransformPolyDataFilter()
+    self.brushToWorldOriginTransformer.SetTransform(self.brushToWorldOriginTransform)
+    self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
+
+    self.normalFilter = vtk.vtkPolyDataNormals()
+    self.normalFilter.AutoOrientNormalsOn()
+    self.normalFilter.SetInputConnection(self.brushToWorldOriginTransformer.GetOutputPort())
+
+    self.worldOriginToWorldTransform = vtk.vtkTransform()
+
+    self.worldOriginToWorldTransformer = vtk.vtkTransformPolyDataFilter ()
+    self.worldOriginToWorldTransformer.SetTransform(self.worldOriginToWorldTransform)
+    self.worldOriginToWorldTransformer.SetInputConnection(self.normalFilter.GetOutputPort())
+
+    self.cutter = vtk.vtkCutter()
+    self.cutter.SetCutFunction(self.slicePlane)
+    self.cutter.SetInputConnection(self.worldOriginToWorldTransformer.GetOutputPort())
+
+    self.worldToSliceTransform = vtk.vtkTransform()
+
+    self.worldToSliceTransformer = vtk.vtkTransformPolyDataFilter ()
+    self.worldToSliceTransformer.SetTransform(self.worldToSliceTransform)
+    self.worldToSliceTransformer.SetInputConnection(self.cutter.GetOutputPort())
+
+    self.mapper = vtk.vtkPolyDataMapper2D()
+    self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
+
+    self.actor = vtk.vtkActor2D()
+    self.actor.SetMapper(self.mapper)
+    actorProperty = self.actor.GetProperty()
+    actorProperty.SetColor(1,1,0)
+    actorProperty.SetLineWidth(1)
+
+    # Stencil setup
+    self.stencil = vtk.vtkPolyDataToImageStencil()
+    self.stencil.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
+
+    self.imageStencil = vtk.vtkImageStencil()
+    self.imageStencil.SetInputConnection(2, self.stencil.GetOutputPort())
+    self.imageStencil.SetBackgroundValue(0)
+
+    # Histogram setup
+    sliceLogic = sliceWidget.sliceLogic()
+    backgroundLogic = sliceLogic.GetBackgroundLayer()
+
+    self.imageAccumulate = vtk.vtkImageAccumulate()
+    self.imageAccumulate.SetInputConnection(1, self.stencil.GetOutputPort())
+
+  def setPoint1(self, ras):
+    self.point1 = ras
+    self.updateBrushModel()
+
+  def setPoint2(self, ras):
+    self.point2 = ras
+    self.updateBrushModel()
+    self.updateHistogram()
+
+  def updateBrushModel(self):
+
+    center = [0,0,0]
+    if self.type == HISTOGRAM_TYPE_CIRCLE:
+      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
+
+      #sliceSpacingMm = self.scriptedEffect.sliceSpacing(viewWidget)
+      #self.brushCylinderSource.SetHeight(sliceSpacingMm)
+
+      point1Topoint2 = [0,0,0]
+      vtk.vtkMath.Subtract(self.point1, self.point2, point1Topoint2)
+      radius = vtk.vtkMath.Normalize(point1Topoint2)
+      self.brushCylinderSource.SetRadius(radius)
+      center = self.point1
+    elif self.type == HISTOGRAM_TYPE_BOX:
+      length = [0,0,0]
+      for i in range(3):
+        center[i] = -1.0 * (self.point1[i] + self.point2[i]) / 2.0
+        length[i] = abs(self.point1[i] - self.point2[i])
+
+      self.brushCubeSource.SetXLength(length[0])
+      self.brushCubeSource.SetYLength(length[1])
+      self.brushCubeSource.SetZLength(length[2])
+      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCubeSource.GetOutputPort())
+
+    self.worldOriginToWorldTransform.Identity()
+    self.worldOriginToWorldTransform.Translate(center)
+
+    # Update slice cutting plane position and orientation
+    sliceXyToRas = self.sliceWidget.sliceLogic().GetSliceNode().GetXYToRAS()
+    self.slicePlane.SetNormal(sliceXyToRas.GetElement(0,2),sliceXyToRas.GetElement(1,2),sliceXyToRas.GetElement(2,2))
+    self.slicePlane.SetOrigin(sliceXyToRas.GetElement(0,3),sliceXyToRas.GetElement(1,3),sliceXyToRas.GetElement(2,3))
+
+    rasToSliceXy = vtk.vtkMatrix4x4()
+    vtk.vtkMatrix4x4.Invert(sliceXyToRas, rasToSliceXy)
+    self.worldToSliceTransform.SetMatrix(rasToSliceXy)
+
+    # brush is rotated to the slice widget plane
+    brushToWorldOriginTransformMatrix = vtk.vtkMatrix4x4()
+    brushToWorldOriginTransformMatrix.DeepCopy(self.sliceWidget.sliceLogic().GetSliceNode().GetSliceToRAS())
+    brushToWorldOriginTransformMatrix.SetElement(0,3, 0)
+    brushToWorldOriginTransformMatrix.SetElement(1,3, 0)
+    brushToWorldOriginTransformMatrix.SetElement(2,3, 0)
+
+    self.brushToWorldOriginTransform.Identity()
+    self.brushToWorldOriginTransform.Concatenate(brushToWorldOriginTransformMatrix)
+    self.brushToWorldOriginTransform.RotateX(90) # cylinder's long axis is the Y axis, we need to rotate it to Z axis
+
+    self.sliceWidget.sliceView().scheduleRender()
+
+  def updateHistogram(self):
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+
+    #point1XY = self.thresholdEffect.rasToXy(self.point1, self.sliceWidget)
+    #self.worldOriginToModifierLabelmapIjkTransform.Identity()
+    #self.worldOriginToModifierLabelmapIjkTransform.Translate(point1XY[0], point1XY[1], 0)
+
+    sliceLogic = self.sliceWidget.sliceLogic()
+    backgroundLogic = sliceLogic.GetBackgroundLayer()
+    self.imageAccumulate.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
+    self.imageAccumulate.Update()
+
+    if self.mode == MODE_SET_UPPER:
+      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMean()[0])
+      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
+    elif self.mode == MODE_SET_LOWER:
+      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
+      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMean()[0])
+
+    #self.histogram = vtk.vtkColorTransferFunction()
+    #self.function = ctk.ctkVTKColorTransferFunction()
+    #self.function.setColorTransferFunction(self.histogram)
+
+    self.imageStencil.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
+    self.imageStencil.Update()
+    dataArray = self.imageStencil.GetOutput().GetPointData().GetScalars()
+    self.thresholdEffect.histogram.setDataArray(dataArray)
+
+    maxBinCount = 1000
+    range = dataArray.GetRange()
+    binCount = range[1] - range[0] + 1
+    if binCount > maxBinCount:
+      binCount = maxBinCount
+
+    if binCount < 1:
+      binCount = 1
+    self.thresholdEffect.histogram.numberOfBins = binCount
+    self.thresholdEffect.histogram.build()
+
+    ##extent = self.imageAccumulate.GetComponentExtent()
+    ##for i in range(extent[1] - extent[0] + 1):
+    ##  value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
+    ##  self.histogram.AddRGBPoint(i,value,value,value)
+
+    #scene = self.thresholdEffect.histogramView.scene()
+    #if self.thresholdEffect.histogramBars is None:
+    #   self.thresholdEffect.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
+    ##self.thresholdEffect.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
+    ##self.thresholdEffect.histogramBars.setBarWidth(1.)
+    #scene.addItem(self.thresholdEffect.histogramBars)
+
+    #print("_________________________________")
+    #print(scalarRange)
+    #print("Min: " +  str(self.imageAccumulate.GetMin()[0]))
+    #print("Mean: " + str(self.imageAccumulate.GetMean()[0]))
+    #print("Max: " +  str(self.imageAccumulate.GetMax()[0]))
+
+HISTOGRAM_TYPE_CIRCLE = 'CIRCLE'
+HISTOGRAM_TYPE_BOX = 'BOX'
+HISTOGRAM_TYPE_LINE = 'LINE'
+
+HISTOGRAM_STATE_OFF = 'OFF'
+HISTOGRAM_STATE_MOVING = 'MOVING'
+HISTOGRAM_STATE_PLACED = 'PLACED'
 
 ###
 
