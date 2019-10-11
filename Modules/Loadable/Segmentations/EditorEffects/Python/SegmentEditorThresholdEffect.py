@@ -224,15 +224,13 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     histogramItemFrame.addWidget(self.histogramView)
     scene = self.histogramView.scene()
 
-    self.histogram = ctk.ctkVTKHistogram()
-    #dataArray = self.imageStencil.GetOutput().GetPointData().GetScalars()
-    #self.histogram.setDataArray(dataArray)
+    #self.histogram = ctk.ctkVTKHistogram()
+    #self.histogram = ctk.ctkVTKLookupTable()
+    self.histogram = ctk.ctkVTKPiecewiseFunction()
 
     self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
     self.histogramBars.barWidth = 1.0
     scene.addItem(self.histogramBars)
-
-
 
     histogramFrame = qt.QVBoxLayout()
     histogramFrame.addLayout(histogramItemFrame)
@@ -754,13 +752,24 @@ class HistogramPipeline(object):
   def updateHistogram(self):
     masterImageData = self.scriptedEffect.masterVolumeImageData()
 
+    scalarRange = masterImageData.GetScalarRange()
+
     #point1XY = self.thresholdEffect.rasToXy(self.point1, self.sliceWidget)
     #self.worldOriginToModifierLabelmapIjkTransform.Identity()
     #self.worldOriginToModifierLabelmapIjkTransform.Translate(point1XY[0], point1XY[1], 0)
 
+    maxNumberOfBins = 1000
+    numberOfBins = int(scalarRange[1] - scalarRange[0]) + 1
+    if numberOfBins > maxNumberOfBins:
+      numberOfBins = maxNumberOfBins
+    binSpacing = (scalarRange[1] - scalarRange[0] + 1) / numberOfBins
+
     sliceLogic = self.sliceWidget.sliceLogic()
     backgroundLogic = sliceLogic.GetBackgroundLayer()
     self.imageAccumulate.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
+    self.imageAccumulate.SetComponentExtent(0, numberOfBins - 1, 0, 0, 0, 0)
+    self.imageAccumulate.SetComponentSpacing(binSpacing, binSpacing, binSpacing)
+    self.imageAccumulate.SetComponentOrigin(scalarRange[0], scalarRange[0], scalarRange[0])
     self.imageAccumulate.Update()
 
     if self.mode == MODE_SET_UPPER:
@@ -770,43 +779,48 @@ class HistogramPipeline(object):
       self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
       self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMean()[0])
 
-    #self.histogram = vtk.vtkColorTransferFunction()
-    #self.function = ctk.ctkVTKColorTransferFunction()
-    #self.function.setColorTransferFunction(self.histogram)
-
     self.imageStencil.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
     self.imageStencil.Update()
-    dataArray = self.imageStencil.GetOutput().GetPointData().GetScalars()
-    self.thresholdEffect.histogram.setDataArray(dataArray)
+    #dataArray = self.imageStencil.GetOutput().GetPointData().GetScalars()
+    #self.thresholdEffect.histogram.setDataArray(dataArray)
 
-    maxBinCount = 1000
-    range = dataArray.GetRange()
-    binCount = range[1] - range[0] + 1
-    if binCount > maxBinCount:
-      binCount = maxBinCount
+    #maxBinCount = 1000
+    #scalarRange = dataArray.GetRange()
+    #binCount = scalarRange[1] - scalarRange[0] + 1
+    #if binCount > maxBinCount:
+    #  binCount = maxBinCount
 
-    if binCount < 1:
-      binCount = 1
-    self.thresholdEffect.histogram.numberOfBins = binCount
-    self.thresholdEffect.histogram.build()
+    #if binCount < 1:
+    #  binCount = 1
+    #self.thresholdEffect.histogram.numberOfBins = binCount
+    #self.thresholdEffect.histogram.build()
 
-    ##extent = self.imageAccumulate.GetComponentExtent()
-    ##for i in range(extent[1] - extent[0] + 1):
-    ##  value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
-    ##  self.histogram.AddRGBPoint(i,value,value,value)
+    #extent = self.imageAccumulate.GetOutput().GetExtent()
+    #tableSize = extent[1] - extent[0] + 1
+    #tableSize = int(scalarRange[1] - scalarRange[0] + 1)
+    tableSize = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetNumberOfTuples()
+    #lookupTable = vtk.vtkLookupTable()
+    #lookupTable.SetNumberOfTableValues(tableSize)
+    #lookupTable.SetRange(scalarRange)
+    #for i in range(tableSize):
+    #  value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
+    #  value = 1.0*i/tableSize
+    #  lookupTable.SetTableValue(i, value, value, value)
+    #self.thresholdEffect.histogram.setLookupTable(lookupTable)
 
-    #scene = self.thresholdEffect.histogramView.scene()
-    #if self.thresholdEffect.histogramBars is None:
-    #   self.thresholdEffect.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
-    ##self.thresholdEffect.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
-    ##self.thresholdEffect.histogramBars.setBarWidth(1.)
-    #scene.addItem(self.thresholdEffect.histogramBars)
+    piecewiseFunction = vtk.vtkPiecewiseFunction()
+    for i in range(tableSize):
+      value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
+      piecewiseFunction.AddPoint(i + scalarRange[0], value)
+    self.thresholdEffect.histogram.setPiecewiseFunction(piecewiseFunction)
 
-    #print("_________________________________")
-    #print(scalarRange)
-    #print("Min: " +  str(self.imageAccumulate.GetMin()[0]))
-    #print("Mean: " + str(self.imageAccumulate.GetMean()[0]))
-    #print("Max: " +  str(self.imageAccumulate.GetMax()[0]))
+    print("_________________________________")
+    print(tableSize)
+    print(binSpacing)
+    print(numberOfBins)
+    print("Min: " +  str(self.imageAccumulate.GetMin()[0]))
+    print("Mean: " + str(self.imageAccumulate.GetMean()[0]))
+    print("Max: " +  str(self.imageAccumulate.GetMax()[0]))
 
 HISTOGRAM_TYPE_CIRCLE = 'CIRCLE'
 HISTOGRAM_TYPE_BOX = 'BOX'
