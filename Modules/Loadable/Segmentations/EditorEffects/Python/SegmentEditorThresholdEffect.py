@@ -187,8 +187,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     autoThresholdGroupBox.collapsed = True
     self.scriptedEffect.addOptionsWidget(autoThresholdGroupBox)
 
-    histogramItemFrame = qt.QHBoxLayout()
-
     #self.lineROIButton = qt.QPushButton()
     #self.lineROIButton.setText("Line")
     #histogramItemFrame.addWidget(self.lineROIButton)
@@ -200,6 +198,24 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     #self.circleROIButton = qt.QPushButton()
     #self.circleROIButton.setText("Circle")
     #histogramItemFrame.addWidget(self.circleROIButton)
+
+    histogramFrame = qt.QVBoxLayout()
+
+    self.histogramView = ctk.ctkTransferFunctionView()
+    histogramFrame.addWidget(self.histogramView)
+    scene = self.histogramView.scene()
+
+    self.imageReslice = vtk.vtkImageReslice()
+
+    self.histogram = ctk.ctkVTKPiecewiseFunction()
+
+    self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
+    self.histogramBars.barWidth = 1.0
+    self.histogramBars.logMode = self.histogramBars.NoLog
+    scene.addItem(self.histogramBars)
+
+    histogramItemFrame = qt.QHBoxLayout()
+    histogramFrame.addLayout(histogramItemFrame)
 
     self.lowerHistogramButton = qt.QPushButton()
     self.lowerHistogramButton.setText("Lower")
@@ -219,21 +235,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.buttonGroup.addButton(self.lowerHistogramButton)
     self.buttonGroup.addButton(self.upperHistogramButton)
     self.buttonGroup.setExclusive(True)
-
-    self.histogramView = ctk.ctkTransferFunctionView()
-    histogramItemFrame.addWidget(self.histogramView)
-    scene = self.histogramView.scene()
-
-    #self.histogram = ctk.ctkVTKHistogram()
-    #self.histogram = ctk.ctkVTKLookupTable()
-    self.histogram = ctk.ctkVTKPiecewiseFunction()
-
-    self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogram)
-    self.histogramBars.barWidth = 1.0
-    scene.addItem(self.histogramBars)
-
-    histogramFrame = qt.QVBoxLayout()
-    histogramFrame.addLayout(histogramItemFrame)
 
     histogramGroupBox = ctk.ctkCollapsibleGroupBox()
     histogramGroupBox.setTitle("Local histogram")
@@ -480,6 +481,8 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       logging.error("preview: Invalid segmentation display node!")
       color = [0.5,0.5,0.5]
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+    if segmentID is None:
+      return
 
     # Make sure we keep the currently selected segment hidden (the user may have changed selection)
     if segmentID != self.previewedSegmentID:
@@ -506,6 +509,10 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
   def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
     abortEvent = False
+
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    if masterImageData is None:
+      return abortEvent
 
     # Only allow for slice views
     if viewWidget.className() != "qMRMLSliceWidget":
@@ -679,10 +686,6 @@ class HistogramPipeline(object):
     self.stencil = vtk.vtkPolyDataToImageStencil()
     self.stencil.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
 
-    self.imageStencil = vtk.vtkImageStencil()
-    self.imageStencil.SetInputConnection(2, self.stencil.GetOutputPort())
-    self.imageStencil.SetBackgroundValue(0)
-
     # Histogram setup
     sliceLogic = sliceWidget.sliceLogic()
     backgroundLogic = sliceLogic.GetBackgroundLayer()
@@ -705,12 +708,12 @@ class HistogramPipeline(object):
     if self.type == HISTOGRAM_TYPE_CIRCLE:
       self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
 
-      #sliceSpacingMm = self.scriptedEffect.sliceSpacing(viewWidget)
-      #self.brushCylinderSource.SetHeight(sliceSpacingMm)
+      sliceSpacingMm = self.scriptedEffect.sliceSpacing(self.sliceWidget)
+      self.brushCylinderSource.SetHeight(sliceSpacingMm)
 
-      point1Topoint2 = [0,0,0]
-      vtk.vtkMath.Subtract(self.point1, self.point2, point1Topoint2)
-      radius = vtk.vtkMath.Normalize(point1Topoint2)
+      point1ToPoint2 = [0,0,0]
+      vtk.vtkMath.Subtract(self.point1, self.point2, point1ToPoint2)
+      radius = vtk.vtkMath.Normalize(point1ToPoint2)
       self.brushCylinderSource.SetRadius(radius)
       center = self.point1
     elif self.type == HISTOGRAM_TYPE_BOX:
@@ -751,12 +754,10 @@ class HistogramPipeline(object):
 
   def updateHistogram(self):
     masterImageData = self.scriptedEffect.masterVolumeImageData()
+    if masterImageData is None:
+      return
 
     scalarRange = masterImageData.GetScalarRange()
-
-    #point1XY = self.thresholdEffect.rasToXy(self.point1, self.sliceWidget)
-    #self.worldOriginToModifierLabelmapIjkTransform.Identity()
-    #self.worldOriginToModifierLabelmapIjkTransform.Translate(point1XY[0], point1XY[1], 0)
 
     maxNumberOfBins = 1000
     numberOfBins = int(scalarRange[1] - scalarRange[0]) + 1
@@ -766,6 +767,14 @@ class HistogramPipeline(object):
 
     sliceLogic = self.sliceWidget.sliceLogic()
     backgroundLogic = sliceLogic.GetBackgroundLayer()
+
+    #self.thresholdEffect.imageReslice.SetInputData(masterImageData)
+    #self.thresholdEffect.imageReslice.SetResliceTransform(self.worldOriginToWorldTransform)
+    #self.thresholdEffect.imageReslice.SetOutputExtent(-100, 100, -100, 100, 0, 0)
+    #self.thresholdEffect.imageReslice.SetOutputDimensionality(2)
+    #self.thresholdEffect.imageReslice.Update()
+    #self.imageAccumulate.SetInputConnection(0, self.thresholdEffect.imageReslice.GetOutputPort())
+
     self.imageAccumulate.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
     self.imageAccumulate.SetComponentExtent(0, numberOfBins - 1, 0, 0, 0, 0)
     self.imageAccumulate.SetComponentSpacing(binSpacing, binSpacing, binSpacing)
@@ -779,48 +788,12 @@ class HistogramPipeline(object):
       self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
       self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMean()[0])
 
-    self.imageStencil.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
-    self.imageStencil.Update()
-    #dataArray = self.imageStencil.GetOutput().GetPointData().GetScalars()
-    #self.thresholdEffect.histogram.setDataArray(dataArray)
-
-    #maxBinCount = 1000
-    #scalarRange = dataArray.GetRange()
-    #binCount = scalarRange[1] - scalarRange[0] + 1
-    #if binCount > maxBinCount:
-    #  binCount = maxBinCount
-
-    #if binCount < 1:
-    #  binCount = 1
-    #self.thresholdEffect.histogram.numberOfBins = binCount
-    #self.thresholdEffect.histogram.build()
-
-    #extent = self.imageAccumulate.GetOutput().GetExtent()
-    #tableSize = extent[1] - extent[0] + 1
-    #tableSize = int(scalarRange[1] - scalarRange[0] + 1)
-    tableSize = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetNumberOfTuples()
-    #lookupTable = vtk.vtkLookupTable()
-    #lookupTable.SetNumberOfTableValues(tableSize)
-    #lookupTable.SetRange(scalarRange)
-    #for i in range(tableSize):
-    #  value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
-    #  value = 1.0*i/tableSize
-    #  lookupTable.SetTableValue(i, value, value, value)
-    #self.thresholdEffect.histogram.setLookupTable(lookupTable)
-
     piecewiseFunction = vtk.vtkPiecewiseFunction()
+    tableSize = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetNumberOfTuples()
     for i in range(tableSize):
       value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
       piecewiseFunction.AddPoint(i + scalarRange[0], value)
     self.thresholdEffect.histogram.setPiecewiseFunction(piecewiseFunction)
-
-    print("_________________________________")
-    print(tableSize)
-    print(binSpacing)
-    print(numberOfBins)
-    print("Min: " +  str(self.imageAccumulate.GetMin()[0]))
-    print("Mean: " + str(self.imageAccumulate.GetMean()[0]))
-    print("Max: " +  str(self.imageAccumulate.GetMax()[0]))
 
 HISTOGRAM_TYPE_CIRCLE = 'CIRCLE'
 HISTOGRAM_TYPE_BOX = 'BOX'
