@@ -187,25 +187,37 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     autoThresholdGroupBox.collapsed = True
     self.scriptedEffect.addOptionsWidget(autoThresholdGroupBox)
 
+    histogramFrame = qt.QVBoxLayout()
+
+    histogramBrushFrame = qt.QHBoxLayout()
+    histogramFrame.addLayout(histogramBrushFrame)
+
     #self.lineROIButton = qt.QPushButton()
     #self.lineROIButton.setText("Line")
-    #histogramItemFrame.addWidget(self.lineROIButton)
+    #histogramBrushFrame.addWidget(self.lineROIButton)
 
-    #self.boxROIButton = qt.QPushButton()
-    #self.boxROIButton.setText("Box")
-    #histogramItemFrame.addWidget(self.boxROIButton)
+    self.boxROIButton = qt.QPushButton()
+    self.boxROIButton.setText("Box")
+    self.boxROIButton.setCheckable(True)
+    self.boxROIButton.checked = False
+    self.boxROIButton.clicked.connect(self.setBrushToBox)
+    histogramBrushFrame.addWidget(self.boxROIButton)
 
-    #self.circleROIButton = qt.QPushButton()
-    #self.circleROIButton.setText("Circle")
-    #histogramItemFrame.addWidget(self.circleROIButton)
+    self.circleROIButton = qt.QPushButton()
+    self.circleROIButton.setText("Circle")
+    self.circleROIButton.setCheckable(True)
+    self.circleROIButton.checked = True
+    self.circleROIButton.clicked.connect(self.setBrushToCircle)
+    histogramBrushFrame.addWidget(self.circleROIButton)
 
-    histogramFrame = qt.QVBoxLayout()
+    self.histogramBrushButtonGroup = qt.QButtonGroup()
+    self.histogramBrushButtonGroup.addButton(self.boxROIButton)
+    self.histogramBrushButtonGroup.addButton(self.circleROIButton)
+    self.histogramBrushButtonGroup.setExclusive(True)
 
     self.histogramView = ctk.ctkTransferFunctionView()
     histogramFrame.addWidget(self.histogramView)
     scene = self.histogramView.scene()
-
-    self.imageReslice = vtk.vtkImageReslice()
 
     self.histogram = ctk.ctkVTKPiecewiseFunction()
 
@@ -231,10 +243,10 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.upperHistogramButton.clicked.connect(self.setHistogramToUpper)
     histogramItemFrame.addWidget(self.upperHistogramButton)
 
-    self.buttonGroup = qt.QButtonGroup()
-    self.buttonGroup.addButton(self.lowerHistogramButton)
-    self.buttonGroup.addButton(self.upperHistogramButton)
-    self.buttonGroup.setExclusive(True)
+    self.histogramMethodButtonGroup = qt.QButtonGroup()
+    self.histogramMethodButtonGroup.addButton(self.lowerHistogramButton)
+    self.histogramMethodButtonGroup.addButton(self.upperHistogramButton)
+    self.histogramMethodButtonGroup.setExclusive(True)
 
     histogramGroupBox = ctk.ctkCollapsibleGroupBox()
     histogramGroupBox.setTitle("Local histogram")
@@ -550,7 +562,12 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       return self.histogramPipelines[sliceWidget]
 
     # Create pipeline if does not yet exist
-    pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget)
+
+    brushType = HISTOGRAM_TYPE_CIRCLE
+    if self.boxROIButton.checked:
+      brushType = HISTOGRAM_TYPE_BOX
+
+    pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget, brushType)
     if self.lowerHistogramButton.checked:
       pipeline.mode = MODE_SET_LOWER
     else:
@@ -570,6 +587,14 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     pipeline = self.pipelineForWidget(viewWidget)
     if pipeline is not None:
       pipeline.updateBrushModel()
+
+  def setBrushToCircle(self):
+    self.type = HISTOGRAM_TYPE_CIRCLE
+    self.clearHistogramDisplay()
+
+  def setBrushToBox(self):
+    self.type = HISTOGRAM_TYPE_BOX
+    self.clearHistogramDisplay()
 
   def setHistogramToUpper(self):
     for sliceWidget, pipeline in self.histogramPipelines.items():
@@ -626,11 +651,11 @@ class PreviewPipeline(object):
 #
 class HistogramPipeline(object):
 
-  def __init__(self, thresholdEffect, scriptedEffect, sliceWidget):
+  def __init__(self, thresholdEffect, scriptedEffect, sliceWidget, brushMode):
     self.thresholdEffect = thresholdEffect
     self.scriptedEffect = scriptedEffect
     self.sliceWidget = sliceWidget
-    self.type = HISTOGRAM_TYPE_CIRCLE
+    self.type = brushMode
     self.state = HISTOGRAM_STATE_OFF
     self.mode = MODE_SET_UPPER
 
@@ -704,32 +729,6 @@ class HistogramPipeline(object):
 
   def updateBrushModel(self):
 
-    center = [0,0,0]
-    if self.type == HISTOGRAM_TYPE_CIRCLE:
-      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
-
-      sliceSpacingMm = self.scriptedEffect.sliceSpacing(self.sliceWidget)
-      self.brushCylinderSource.SetHeight(sliceSpacingMm)
-
-      point1ToPoint2 = [0,0,0]
-      vtk.vtkMath.Subtract(self.point1, self.point2, point1ToPoint2)
-      radius = vtk.vtkMath.Normalize(point1ToPoint2)
-      self.brushCylinderSource.SetRadius(radius)
-      center = self.point1
-    elif self.type == HISTOGRAM_TYPE_BOX:
-      length = [0,0,0]
-      for i in range(3):
-        center[i] = -1.0 * (self.point1[i] + self.point2[i]) / 2.0
-        length[i] = abs(self.point1[i] - self.point2[i])
-
-      self.brushCubeSource.SetXLength(length[0])
-      self.brushCubeSource.SetYLength(length[1])
-      self.brushCubeSource.SetZLength(length[2])
-      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCubeSource.GetOutputPort())
-
-    self.worldOriginToWorldTransform.Identity()
-    self.worldOriginToWorldTransform.Translate(center)
-
     # Update slice cutting plane position and orientation
     sliceXyToRas = self.sliceWidget.sliceLogic().GetSliceNode().GetXYToRAS()
     self.slicePlane.SetNormal(sliceXyToRas.GetElement(0,2),sliceXyToRas.GetElement(1,2),sliceXyToRas.GetElement(2,2))
@@ -750,6 +749,43 @@ class HistogramPipeline(object):
     self.brushToWorldOriginTransform.Concatenate(brushToWorldOriginTransformMatrix)
     self.brushToWorldOriginTransform.RotateX(90) # cylinder's long axis is the Y axis, we need to rotate it to Z axis
 
+    sliceSpacingMm = self.scriptedEffect.sliceSpacing(self.sliceWidget)
+
+    center = [0,0,0]
+    if self.type == HISTOGRAM_TYPE_CIRCLE:
+      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
+      self.brushCylinderSource.SetHeight(sliceSpacingMm)
+
+      point1ToPoint2 = [0,0,0]
+      vtk.vtkMath.Subtract(self.point1, self.point2, point1ToPoint2)
+      radius = vtk.vtkMath.Normalize(point1ToPoint2)
+      self.brushCylinderSource.SetRadius(radius)
+      self.brushCylinderSource.SetHeight(sliceSpacingMm)
+      center = self.point1
+
+    elif self.type == HISTOGRAM_TYPE_BOX:
+      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCubeSource.GetOutputPort())
+
+      length = [0,0,0]
+      for i in range(3):
+        center[i] = (self.point1[i] + self.point2[i]) / 2.0
+        length[i] = abs(self.point1[i] - self.point2[i])
+
+      xVector = [1,0,0,0]
+      self.brushToWorldOriginTransform.MultiplyPoint(xVector, xVector)
+      zVector = [0,0,1,0]
+      self.brushToWorldOriginTransform.MultiplyPoint(zVector, zVector)
+
+      xLength = abs(xVector[0] * length[0] + xVector[1] * length[1] + xVector[2] * length[2])
+      zLength = abs(zVector[0] * length[0] + zVector[1] * length[1] + zVector[2] * length[2])
+
+      self.brushCubeSource.SetXLength(xLength)
+      self.brushCubeSource.SetZLength(zLength)
+      self.brushCubeSource.SetYLength(sliceSpacingMm)
+
+    self.worldOriginToWorldTransform.Identity()
+    self.worldOriginToWorldTransform.Translate(center)
+
     self.sliceWidget.sliceView().scheduleRender()
 
   def updateHistogram(self):
@@ -767,13 +803,6 @@ class HistogramPipeline(object):
 
     sliceLogic = self.sliceWidget.sliceLogic()
     backgroundLogic = sliceLogic.GetBackgroundLayer()
-
-    #self.thresholdEffect.imageReslice.SetInputData(masterImageData)
-    #self.thresholdEffect.imageReslice.SetResliceTransform(self.worldOriginToWorldTransform)
-    #self.thresholdEffect.imageReslice.SetOutputExtent(-100, 100, -100, 100, 0, 0)
-    #self.thresholdEffect.imageReslice.SetOutputDimensionality(2)
-    #self.thresholdEffect.imageReslice.Update()
-    #self.imageAccumulate.SetInputConnection(0, self.thresholdEffect.imageReslice.GetOutputPort())
 
     self.imageAccumulate.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
     self.imageAccumulate.SetComponentExtent(0, numberOfBins - 1, 0, 0, 0, 0)
