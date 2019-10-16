@@ -662,18 +662,13 @@ class HistogramPipeline(object):
     self.point1 = [0,0,0]
     self.point2 = [0,0,0]
 
+    # Actor setup
     self.brushCylinderSource = vtk.vtkCylinderSource()
-    self.brushCylinderSource.SetRadius(0.0)
     self.brushCylinderSource.SetResolution(32)
 
     self.brushCubeSource = vtk.vtkCubeSource()
 
-    # Actor setup
-
-    self.slicePlane = vtk.vtkPlane()
-
     self.brushToWorldOriginTransform = vtk.vtkTransform()
-
     self.brushToWorldOriginTransformer = vtk.vtkTransformPolyDataFilter()
     self.brushToWorldOriginTransformer.SetTransform(self.brushToWorldOriginTransform)
     self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
@@ -682,24 +677,28 @@ class HistogramPipeline(object):
     self.normalFilter.AutoOrientNormalsOn()
     self.normalFilter.SetInputConnection(self.brushToWorldOriginTransformer.GetOutputPort())
 
+    # Brush to RAS transform
     self.worldOriginToWorldTransform = vtk.vtkTransform()
-
     self.worldOriginToWorldTransformer = vtk.vtkTransformPolyDataFilter ()
     self.worldOriginToWorldTransformer.SetTransform(self.worldOriginToWorldTransform)
     self.worldOriginToWorldTransformer.SetInputConnection(self.normalFilter.GetOutputPort())
 
-    self.cutter = vtk.vtkCutter()
-    self.cutter.SetCutFunction(self.slicePlane)
-    self.cutter.SetInputConnection(self.worldOriginToWorldTransformer.GetOutputPort())
-
+    # RAS to XY transform
     self.worldToSliceTransform = vtk.vtkTransform()
-
     self.worldToSliceTransformer = vtk.vtkTransformPolyDataFilter ()
     self.worldToSliceTransformer.SetTransform(self.worldToSliceTransform)
-    self.worldToSliceTransformer.SetInputConnection(self.cutter.GetOutputPort())
+    self.worldToSliceTransformer.SetInputConnection(self.worldOriginToWorldTransformer.GetOutputPort())
+
+    # Cutting takes place in XY coordinates
+    self.slicePlane = vtk.vtkPlane()
+    self.slicePlane.SetNormal(0, 0, 1)
+    self.slicePlane.SetOrigin(0, 0, 0)
+    self.cutter = vtk.vtkCutter()
+    self.cutter.SetCutFunction(self.slicePlane)
+    self.cutter.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
 
     self.mapper = vtk.vtkPolyDataMapper2D()
-    self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
+    self.mapper.SetInputConnection(self.cutter.GetOutputPort())
 
     self.actor = vtk.vtkActor2D()
     self.actor.SetMapper(self.mapper)
@@ -715,7 +714,16 @@ class HistogramPipeline(object):
     sliceLogic = sliceWidget.sliceLogic()
     backgroundLogic = sliceLogic.GetBackgroundLayer()
 
+    self.reslice = vtk.vtkImageReslice()
+    self.reslice.AutoCropOutputOff()
+    self.reslice.SetOptimization(1)
+    self.reslice.SetOutputOrigin(0, 0, 0)
+    self.reslice.SetOutputSpacing(1, 1, 1)
+    self.reslice.SetOutputDimensionality(3)
+    self.reslice.GenerateStencilOutputOn()
+
     self.imageAccumulate = vtk.vtkImageAccumulate()
+    self.imageAccumulate.SetInputConnection(0, self.reslice.GetOutputPort())
     self.imageAccumulate.SetInputConnection(1, self.stencil.GetOutputPort())
 
   def setPoint1(self, ras):
@@ -724,16 +732,12 @@ class HistogramPipeline(object):
 
   def setPoint2(self, ras):
     self.point2 = ras
-    self.updateBrushModel()
     self.updateHistogram()
 
   def updateBrushModel(self):
 
     # Update slice cutting plane position and orientation
     sliceXyToRas = self.sliceWidget.sliceLogic().GetSliceNode().GetXYToRAS()
-    self.slicePlane.SetNormal(sliceXyToRas.GetElement(0,2),sliceXyToRas.GetElement(1,2),sliceXyToRas.GetElement(2,2))
-    self.slicePlane.SetOrigin(sliceXyToRas.GetElement(0,3),sliceXyToRas.GetElement(1,3),sliceXyToRas.GetElement(2,3))
-
     rasToSliceXy = vtk.vtkMatrix4x4()
     vtk.vtkMatrix4x4.Invert(sliceXyToRas, rasToSliceXy)
     self.worldToSliceTransform.SetMatrix(rasToSliceXy)
@@ -753,15 +757,15 @@ class HistogramPipeline(object):
 
     center = [0,0,0]
     if self.type == HISTOGRAM_TYPE_CIRCLE:
-      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
-      self.brushCylinderSource.SetHeight(sliceSpacingMm)
+      center = self.point1
 
       point1ToPoint2 = [0,0,0]
       vtk.vtkMath.Subtract(self.point1, self.point2, point1ToPoint2)
       radius = vtk.vtkMath.Normalize(point1ToPoint2)
+
+      self.brushToWorldOriginTransformer.SetInputConnection(self.brushCylinderSource.GetOutputPort())
       self.brushCylinderSource.SetRadius(radius)
       self.brushCylinderSource.SetHeight(sliceSpacingMm)
-      center = self.point1
 
     elif self.type == HISTOGRAM_TYPE_BOX:
       self.brushToWorldOriginTransformer.SetInputConnection(self.brushCubeSource.GetOutputPort())
@@ -793,18 +797,35 @@ class HistogramPipeline(object):
     if masterImageData is None:
       return
 
-    scalarRange = masterImageData.GetScalarRange()
+    # Ensure that the brush is in the correct location
+    self.updateBrushModel()
+
+    self.worldToSliceTransformer.Update()
+    brushPolydata = self.worldToSliceTransformer.GetOutput()
+    brushBounds = brushPolydata.GetBounds()
+    brushExtent = [0, -1, 0, -1, 0, -1]
+    for i in range(3):
+      brushExtent[2*i] = vtk.vtkMath.Floor(brushBounds[2*i])
+      brushExtent[2*i+1] = vtk.vtkMath.Ceil(brushBounds[2*i+1])
+    if brushExtent[0] > brushExtent[1] or brushExtent[2] > brushExtent[3] or brushExtent[4] > brushExtent[5]:
+      piecewiseFunction = vtk.vtkPiecewiseFunction() # Empty vtkPiecewiseFunction
+      self.thresholdEffect.histogram.setPiecewiseFunction(piecewiseFunction)
+      return
+
+    sliceLogic = self.sliceWidget.sliceLogic()
+    backgroundLogic = sliceLogic.GetBackgroundLayer()
+    self.reslice.SetInputConnection(backgroundLogic.GetReslice().GetInputConnection(0, 0))
+    self.reslice.SetResliceTransform(backgroundLogic.GetReslice().GetResliceTransform())
+    self.reslice.SetInterpolationMode(backgroundLogic.GetReslice().GetInterpolationMode())
+    self.reslice.SetOutputExtent(brushExtent)
 
     maxNumberOfBins = 1000
+    scalarRange = masterImageData.GetScalarRange()
     numberOfBins = int(scalarRange[1] - scalarRange[0]) + 1
     if numberOfBins > maxNumberOfBins:
       numberOfBins = maxNumberOfBins
     binSpacing = (scalarRange[1] - scalarRange[0] + 1) / numberOfBins
 
-    sliceLogic = self.sliceWidget.sliceLogic()
-    backgroundLogic = sliceLogic.GetBackgroundLayer()
-
-    self.imageAccumulate.SetInputConnection(0, backgroundLogic.GetReslice().GetOutputPort())
     self.imageAccumulate.SetComponentExtent(0, numberOfBins - 1, 0, 0, 0, 0)
     self.imageAccumulate.SetComponentSpacing(binSpacing, binSpacing, binSpacing)
     self.imageAccumulate.SetComponentOrigin(scalarRange[0], scalarRange[0], scalarRange[0])
