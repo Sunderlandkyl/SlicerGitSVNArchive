@@ -34,6 +34,22 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.histogramPipeline = None
     self.setupPreviewDisplay()
 
+    # Histogram stencil setup
+    self.stencil = vtk.vtkPolyDataToImageStencil()
+
+    # Histogram reslice setup
+    self.reslice = vtk.vtkImageReslice()
+    self.reslice.AutoCropOutputOff()
+    self.reslice.SetOptimization(1)
+    self.reslice.SetOutputOrigin(0, 0, 0)
+    self.reslice.SetOutputSpacing(1, 1, 1)
+    self.reslice.SetOutputDimensionality(3)
+    self.reslice.GenerateStencilOutputOn()
+
+    self.imageAccumulate = vtk.vtkImageAccumulate()
+    self.imageAccumulate.SetInputConnection(0, self.reslice.GetOutputPort())
+    self.imageAccumulate.SetInputConnection(1, self.stencil.GetOutputPort())
+
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
     clonedEffect = effects.qSlicerSegmentEditorScriptedEffect(None)
@@ -219,24 +235,10 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     histogramFrame.addWidget(self.histogramView)
     scene = self.histogramView.scene()
 
-    self.selectionFunction = ctk.ctkVTKPiecewiseFunction()
-    self.selectionBars = ctk.ctkTransferFunctionBarsItem(self.selectionFunction)
-    self.selectionBars.barWidth = 0.025
-    self.selectionBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
-    self.selectionBars.barColor = qt.QColor(200, 0, 0)
-    self.selectionBars.setZValue(0);
-    scene.addItem(self.selectionBars)
-
-    self.averageFunction = ctk.ctkVTKPiecewiseFunction()
-    self.averageBars = ctk.ctkTransferFunctionBarsItem(self.averageFunction)
-    self.averageBars.barWidth = 0.04
-    self.averageBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
-    self.averageBars.barColor = qt.QColor(255, 200, 0)
-    self.averageBars.setZValue(-1);
-    scene.addItem(self.averageBars)
-
-    self.histogramFunction = ctk.ctkVTKPiecewiseFunction()
-    self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogramFunction)
+    self.histogramFunction = vtk.vtkPiecewiseFunction()
+    self.histogramFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
+    self.histogramFunctionContainer.setPiecewiseFunction(self.histogramFunction)
+    self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogramFunctionContainer)
     self.histogramBars.barWidth = 1.0
     self.histogramBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
     self.histogramBars.transferFunctionMousePressed.connect(self.onHistogramMouseClick)
@@ -244,6 +246,26 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.histogramBars.transferFunctionMouseReleased.connect(self.onHistogramMouseRelease)
     self.histogramBars.setZValue(1);
     scene.addItem(self.histogramBars)
+
+    self.selectionFunction = vtk.vtkPiecewiseFunction()
+    self.selectionFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
+    self.selectionFunctionContainer.setPiecewiseFunction(self.selectionFunction)
+    self.selectionBars = ctk.ctkTransferFunctionBarsItem(self.selectionFunctionContainer)
+    self.selectionBars.barWidth = 0.025
+    self.selectionBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
+    self.selectionBars.barColor = qt.QColor(200, 0, 0)
+    self.selectionBars.setZValue(0);
+    scene.addItem(self.selectionBars)
+
+    self.averageFunction = vtk.vtkPiecewiseFunction()
+    self.averageFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
+    self.averageFunctionContainer.setPiecewiseFunction(self.averageFunction)
+    self.averageBars = ctk.ctkTransferFunctionBarsItem(self.averageFunctionContainer)
+    self.averageBars.barWidth = 0.04
+    self.averageBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
+    self.averageBars.barColor = qt.QColor(255, 200, 0)
+    self.averageBars.setZValue(-1);
+    scene.addItem(self.averageBars)
 
     histogramItemFrame = qt.QHBoxLayout()
     histogramFrame.addLayout(histogramItemFrame)
@@ -574,16 +596,15 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       self.histogramPipeline.state = HISTOGRAM_STATE_MOVING
       self.histogramPipeline.setPoint1(ras)
       self.histogramPipeline.setPoint2(ras)
+      self.updateHistogram()
     elif eventId == vtk.vtkCommand.LeftButtonReleaseEvent:
       self.histogramPipeline.state = HISTOGRAM_STATE_PLACED
-      self.histogramPipeline.updateHistogram()
     elif eventId == vtk.vtkCommand.MouseMoveEvent:
       if self.histogramPipeline.state == HISTOGRAM_STATE_MOVING:
         self.histogramPipeline.setPoint2(ras)
+        self.updateHistogram()
     else:
       pass
-
-    self.histogramPipeline.updateBrushModel()
     return abortEvent
 
   def createHistogramPipeline(self, sliceWidget):
@@ -597,12 +618,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       logging.error("pipelineForWidget: Failed to get renderer!")
       return None
     self.scriptedEffect.addActor2D(sliceWidget, pipeline.actor)
-    if self.lowerHistogramButton.checked:
-      pipeline.mode = MODE_SET_LOWER
-    elif self.upperHistogramButton.checked:
-      pipeline.mode = MODE_SET_UPPER
-    else:
-      pipeline.mode = MODE_SET_RANGE
     self.histogramPipeline = pipeline
 
   def processViewNodeEvents(self, callerViewNode, eventId, viewWidget):
@@ -610,44 +625,45 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       self.histogramPipeline.updateBrushModel()
 
   def setBrushToCircle(self):
-    self.type = HISTOGRAM_TYPE_CIRCLE
+    self.brushMode = HISTOGRAM_TYPE_CIRCLE
     self.clearHistogramDisplay()
 
   def setBrushToBox(self):
-    self.type = HISTOGRAM_TYPE_BOX
+    self.brushMode = HISTOGRAM_TYPE_BOX
     self.clearHistogramDisplay()
 
   def setHistogramToUpper(self):
     if self.histogramPipeline is None:
       return
-    self.histogramPipeline.mode = MODE_SET_UPPER
-    if self.histogramPipeline.state == HISTOGRAM_STATE_PLACED:
-      self.histogramPipeline.updateHistogram()
+    self.updateHistogram()
 
   def setHistogramToRange(self):
     if self.histogramPipeline is None:
       return
-    self.histogramPipeline.mode = MODE_SET_RANGE
-    if self.histogramPipeline.state == HISTOGRAM_STATE_PLACED:
-      self.histogramPipeline.updateHistogram()
+    self.updateHistogram()
 
   def setHistogramToLower(self):
     if self.histogramPipeline is None:
       return
-    self.histogramPipeline.mode = MODE_SET_LOWER
-    if self.histogramPipeline.state == HISTOGRAM_STATE_PLACED:
-      self.histogramPipeline.updateHistogram()
+    self.updateHistogram()
 
-  def onHistogramMouseClick(self, x, y):
-    self.histogramStartPosition = (x, y)
-    self.histogramEndPosition = (x, y)
+  def onHistogramMouseClick(self, pos, button):
+    self.histogramStartPosition = pos
+    self.histogramEndPosition = pos
+    if (button == qt.Qt.RightButton):
+      self.selectionFunction.RemoveAllPoints()
+      self.averageFunction.RemoveAllPoints()
 
-  def onHistogramMouseMove(self, x, y):
-    self.histogramEndPosition = (x, y)
+  def onHistogramMouseMove(self, pos, button):
+    self.histogramEndPosition = pos
+    if (button == qt.Qt.RightButton):
+      return
     self.updateHistogramMouseThreshold()
 
-  def onHistogramMouseRelease(self, x, y):
-    self.histogramEndPosition = (x, y)
+  def onHistogramMouseRelease(self, pos, button):
+    self.histogramEndPosition = pos
+    if (button == qt.Qt.RightButton):
+      return
     self.updateHistogramMouseThreshold()
 
   def updateHistogramMouseThreshold(self): # TODO: name
@@ -656,8 +672,8 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       return
     scalarRange = masterImageData.GetScalarRange()
 
-    startX = min(scalarRange[1], max(scalarRange[0], self.histogramStartPosition[0]))
-    endX = min(scalarRange[1], max(scalarRange[0], self.histogramEndPosition[0]))
+    startX = min(scalarRange[1], max(scalarRange[0], self.histogramStartPosition.x()))
+    endX = min(scalarRange[1], max(scalarRange[0], self.histogramEndPosition.x()))
 
     minimum = min(startX, endX)
     average = (startX + endX) / 2.0
@@ -676,26 +692,83 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameter("MinimumThreshold", lowerThreshold)
     self.scriptedEffect.setParameter("MaximumThreshold", upperThreshold)
 
-
-
-    selectionFunction = vtk.vtkPiecewiseFunction()
     epsilon = 0.00001
+    self.selectionFunction.RemoveAllPoints()
+    self.selectionFunction.AddPoint(minimum - epsilon, 0.0)
+    self.selectionFunction.AddPoint(minimum, 1.0)
+    self.selectionFunction.AddPoint(minimum + epsilon, 0.0)
+    self.selectionFunction.AddPoint(maximum - epsilon, 0.0)
+    self.selectionFunction.AddPoint(maximum, 1.0)
+    self.selectionFunction.AddPoint(maximum + epsilon, 0.0)
+    self.selectionFunction.AdjustRange(scalarRange)
 
-    selectionFunction.AddPoint(minimum - epsilon, 0.0)
-    selectionFunction.AddPoint(minimum, 1.0)
-    selectionFunction.AddPoint(minimum + epsilon, 0.0)
-    selectionFunction.AddPoint(maximum - epsilon, 0.0)
-    selectionFunction.AddPoint(maximum, 1.0)
-    selectionFunction.AddPoint(maximum + epsilon, 0.0)
-    selectionFunction.AdjustRange(scalarRange)
-    self.selectionFunction.setPiecewiseFunction(selectionFunction)
+    self.averageFunction.RemoveAllPoints()
+    self.averageFunction.AddPoint(average - epsilon, 0.0)
+    self.averageFunction.AddPoint(average, 1.0)
+    self.averageFunction.AddPoint(average + epsilon, 0.0)
+    self.averageFunction.AdjustRange(scalarRange)
 
-    averageFunction = vtk.vtkPiecewiseFunction()
-    averageFunction.AddPoint(average - epsilon, 0.0)
-    averageFunction.AddPoint(average, 1.0)
-    averageFunction.AddPoint(average + epsilon, 0.0)
-    averageFunction.AdjustRange(scalarRange)
-    self.averageFunction.setPiecewiseFunction(averageFunction)
+
+  def updateHistogram(self):
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    if masterImageData is None or self.histogramPipeline is None:
+      self.histogramFunction.RemoveAllPoints()
+      return
+
+    # Ensure that the brush is in the correct location
+    self.histogramPipeline.updateBrushModel()
+
+    self.stencil.SetInputConnection(self.histogramPipeline.worldToSliceTransformer.GetOutputPort())
+
+    self.histogramPipeline.worldToSliceTransformer.Update()
+    brushPolydata = self.histogramPipeline.worldToSliceTransformer.GetOutput()
+    brushBounds = brushPolydata.GetBounds()
+    brushExtent = [0, -1, 0, -1, 0, -1]
+    for i in range(3):
+      brushExtent[2*i] = vtk.vtkMath.Floor(brushBounds[2*i])
+      brushExtent[2*i+1] = vtk.vtkMath.Ceil(brushBounds[2*i+1])
+    if brushExtent[0] > brushExtent[1] or brushExtent[2] > brushExtent[3] or brushExtent[4] > brushExtent[5]:
+      self.histogramFunction.RemoveAllPoints()
+      return
+
+    sliceLogic = self.histogramPipeline.sliceWidget.sliceLogic()
+    backgroundLogic = sliceLogic.GetBackgroundLayer()
+    self.reslice.SetInputConnection(backgroundLogic.GetReslice().GetInputConnection(0, 0))
+    self.reslice.SetResliceTransform(backgroundLogic.GetReslice().GetResliceTransform())
+    self.reslice.SetInterpolationMode(backgroundLogic.GetReslice().GetInterpolationMode())
+    self.reslice.SetOutputExtent(brushExtent)
+
+    maxNumberOfBins = 1000
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    scalarRange = masterImageData.GetScalarRange()
+    numberOfBins = int(scalarRange[1] - scalarRange[0]) + 1
+    if numberOfBins > maxNumberOfBins:
+      numberOfBins = maxNumberOfBins
+    binSpacing = (scalarRange[1] - scalarRange[0] + 1) / numberOfBins
+
+    self.imageAccumulate.SetComponentExtent(0, numberOfBins - 1, 0, 0, 0, 0)
+    self.imageAccumulate.SetComponentSpacing(binSpacing, binSpacing, binSpacing)
+    self.imageAccumulate.SetComponentOrigin(scalarRange[0], scalarRange[0], scalarRange[0])
+
+    self.imageAccumulate.Update()
+
+    self.histogramFunction.RemoveAllPoints()
+    tableSize = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetNumberOfTuples()
+    for i in range(tableSize):
+      value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
+      self.histogramFunction.AddPoint(i + scalarRange[0], value)
+    self.histogramFunction.AdjustRange(scalarRange)
+
+
+    if self.upperHistogramButton.checked:
+      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMean()[0])
+      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
+    elif self.lowerHistogramButton.checked:
+      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
+      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMean()[0])
+    elif self.rangeHistogramButton.checked:
+      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
+      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
 
 #
 # PreviewPipeline
@@ -744,9 +817,8 @@ class HistogramPipeline(object):
     self.thresholdEffect = thresholdEffect
     self.scriptedEffect = scriptedEffect
     self.sliceWidget = sliceWidget
-    self.type = brushMode
+    self.brushMode = brushMode
     self.state = HISTOGRAM_STATE_OFF
-    self.mode = MODE_SET_UPPER
 
     self.point1 = [0,0,0]
     self.point2 = [0,0,0]
@@ -795,33 +867,13 @@ class HistogramPipeline(object):
     actorProperty.SetColor(1,1,0)
     actorProperty.SetLineWidth(1)
 
-    # Stencil setup
-    self.stencil = vtk.vtkPolyDataToImageStencil()
-    self.stencil.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
-
-    # Histogram setup
-    sliceLogic = sliceWidget.sliceLogic()
-    backgroundLogic = sliceLogic.GetBackgroundLayer()
-
-    self.reslice = vtk.vtkImageReslice()
-    self.reslice.AutoCropOutputOff()
-    self.reslice.SetOptimization(1)
-    self.reslice.SetOutputOrigin(0, 0, 0)
-    self.reslice.SetOutputSpacing(1, 1, 1)
-    self.reslice.SetOutputDimensionality(3)
-    self.reslice.GenerateStencilOutputOn()
-
-    self.imageAccumulate = vtk.vtkImageAccumulate()
-    self.imageAccumulate.SetInputConnection(0, self.reslice.GetOutputPort())
-    self.imageAccumulate.SetInputConnection(1, self.stencil.GetOutputPort())
-
   def setPoint1(self, ras):
     self.point1 = ras
     self.updateBrushModel()
 
   def setPoint2(self, ras):
     self.point2 = ras
-    self.updateHistogram()
+    self.updateBrushModel()
 
   def updateBrushModel(self):
 
@@ -845,7 +897,7 @@ class HistogramPipeline(object):
     sliceSpacingMm = self.scriptedEffect.sliceSpacing(self.sliceWidget)
 
     center = [0,0,0]
-    if self.type == HISTOGRAM_TYPE_CIRCLE:
+    if self.brushMode == HISTOGRAM_TYPE_CIRCLE:
       center = self.point1
 
       point1ToPoint2 = [0,0,0]
@@ -856,7 +908,7 @@ class HistogramPipeline(object):
       self.brushCylinderSource.SetRadius(radius)
       self.brushCylinderSource.SetHeight(sliceSpacingMm)
 
-    elif self.type == HISTOGRAM_TYPE_BOX:
+    elif self.brushMode == HISTOGRAM_TYPE_BOX:
       self.brushToWorldOriginTransformer.SetInputConnection(self.brushCubeSource.GetOutputPort())
 
       length = [0,0,0]
@@ -866,78 +918,20 @@ class HistogramPipeline(object):
 
       xVector = [1,0,0,0]
       self.brushToWorldOriginTransform.MultiplyPoint(xVector, xVector)
+      xLength = abs(vtk.vtkMath.Dot(xVector[:3], length))
+      self.brushCubeSource.SetXLength(xLength)
+
       zVector = [0,0,1,0]
       self.brushToWorldOriginTransform.MultiplyPoint(zVector, zVector)
-
-      xLength = abs(xVector[0] * length[0] + xVector[1] * length[1] + xVector[2] * length[2])
-      zLength = abs(zVector[0] * length[0] + zVector[1] * length[1] + zVector[2] * length[2])
-
-      self.brushCubeSource.SetXLength(xLength)
+      zLength = abs(vtk.vtkMath.Dot(zVector[:3], length))
       self.brushCubeSource.SetZLength(zLength)
+
       self.brushCubeSource.SetYLength(sliceSpacingMm)
 
     self.worldOriginToWorldTransform.Identity()
     self.worldOriginToWorldTransform.Translate(center)
 
     self.sliceWidget.sliceView().scheduleRender()
-
-  def updateHistogram(self):
-    masterImageData = self.scriptedEffect.masterVolumeImageData()
-    if masterImageData is None:
-      return
-
-    # Ensure that the brush is in the correct location
-    self.updateBrushModel()
-
-    self.worldToSliceTransformer.Update()
-    brushPolydata = self.worldToSliceTransformer.GetOutput()
-    brushBounds = brushPolydata.GetBounds()
-    brushExtent = [0, -1, 0, -1, 0, -1]
-    for i in range(3):
-      brushExtent[2*i] = vtk.vtkMath.Floor(brushBounds[2*i])
-      brushExtent[2*i+1] = vtk.vtkMath.Ceil(brushBounds[2*i+1])
-    if brushExtent[0] > brushExtent[1] or brushExtent[2] > brushExtent[3] or brushExtent[4] > brushExtent[5]:
-      piecewiseFunction = vtk.vtkPiecewiseFunction() # Empty vtkPiecewiseFunction
-      self.thresholdEffect.histogramFunction.setPiecewiseFunction(piecewiseFunction)
-      return
-
-    sliceLogic = self.sliceWidget.sliceLogic()
-    backgroundLogic = sliceLogic.GetBackgroundLayer()
-    self.reslice.SetInputConnection(backgroundLogic.GetReslice().GetInputConnection(0, 0))
-    self.reslice.SetResliceTransform(backgroundLogic.GetReslice().GetResliceTransform())
-    self.reslice.SetInterpolationMode(backgroundLogic.GetReslice().GetInterpolationMode())
-    self.reslice.SetOutputExtent(brushExtent)
-
-    maxNumberOfBins = 1000
-    scalarRange = masterImageData.GetScalarRange()
-    numberOfBins = int(scalarRange[1] - scalarRange[0]) + 1
-    if numberOfBins > maxNumberOfBins:
-      numberOfBins = maxNumberOfBins
-    binSpacing = (scalarRange[1] - scalarRange[0] + 1) / numberOfBins
-
-    self.imageAccumulate.SetComponentExtent(0, numberOfBins - 1, 0, 0, 0, 0)
-    self.imageAccumulate.SetComponentSpacing(binSpacing, binSpacing, binSpacing)
-    self.imageAccumulate.SetComponentOrigin(scalarRange[0], scalarRange[0], scalarRange[0])
-    self.imageAccumulate.Update()
-
-    piecewiseFunction = vtk.vtkPiecewiseFunction()
-    tableSize = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetNumberOfTuples()
-    for i in range(tableSize):
-      value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
-      piecewiseFunction.AddPoint(i + scalarRange[0], value)
-    piecewiseFunction.AdjustRange(scalarRange)
-    self.thresholdEffect.histogramFunction.setPiecewiseFunction(piecewiseFunction)
-
-    if self.mode == MODE_SET_UPPER:
-      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMean()[0])
-      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
-    elif self.mode == MODE_SET_LOWER:
-      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
-      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMean()[0])
-    elif self.mode == MODE_SET_RANGE:
-      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
-      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
-
 
 HISTOGRAM_TYPE_CIRCLE = 'CIRCLE'
 HISTOGRAM_TYPE_BOX = 'BOX'
@@ -946,8 +940,7 @@ HISTOGRAM_TYPE_LINE = 'LINE'
 HISTOGRAM_STATE_OFF = 'OFF'
 HISTOGRAM_STATE_MOVING = 'MOVING'
 HISTOGRAM_STATE_PLACED = 'PLACED'
-HISTOGRAM_STATE_PLACED = 'SELECTION'
-
+HISTOGRAM_STATE_SELECTED = 'SELECTION'
 ###
 
 METHOD_HUANG = 'HUANG'
