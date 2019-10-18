@@ -50,6 +50,9 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.imageAccumulate.SetInputConnection(0, self.reslice.GetOutputPort())
     self.imageAccumulate.SetInputConnection(1, self.stencil.GetOutputPort())
 
+    self.histogramStartPosition = None
+    self.histogramEndPosition = None
+
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
     clonedEffect = effects.qSlicerSegmentEditorScriptedEffect(None)
@@ -251,7 +254,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.selectionFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
     self.selectionFunctionContainer.setPiecewiseFunction(self.selectionFunction)
     self.selectionBars = ctk.ctkTransferFunctionBarsItem(self.selectionFunctionContainer)
-    self.selectionBars.barWidth = 0.025
+    self.selectionBars.barWidth = 0.03
     self.selectionBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
     self.selectionBars.barColor = qt.QColor(200, 0, 0)
     self.selectionBars.setZValue(0);
@@ -261,7 +264,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.averageFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
     self.averageFunctionContainer.setPiecewiseFunction(self.averageFunction)
     self.averageBars = ctk.ctkTransferFunctionBarsItem(self.averageFunctionContainer)
-    self.averageBars.barWidth = 0.04
+    self.averageBars.barWidth = 0.03
     self.averageBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
     self.averageBars.barColor = qt.QColor(255, 200, 0)
     self.averageBars.setZValue(-1);
@@ -272,29 +275,45 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     self.histogramMethodButtonGroup = qt.QButtonGroup()
 
-    self.lowerHistogramButton = qt.QPushButton()
-    self.lowerHistogramButton.setText("Lower")
-    self.lowerHistogramButton.setCheckable(True)
-    self.lowerHistogramButton.checked = False
-    self.lowerHistogramButton.clicked.connect(self.setHistogramToLower)
-    histogramItemFrame.addWidget(self.lowerHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.lowerHistogramButton)
+    self.minToAverageHistogramButton = qt.QPushButton()
+    self.minToAverageHistogramButton.setText("Minimum to average")
+    self.minToAverageHistogramButton.setCheckable(True)
+    self.minToAverageHistogramButton.checked = False
+    self.minToAverageHistogramButton.clicked.connect(self.updateHistogram)
+    histogramItemFrame.addWidget(self.minToAverageHistogramButton)
+    self.histogramMethodButtonGroup.addButton(self.minToAverageHistogramButton)
 
-    self.rangeHistogramButton = qt.QPushButton()
-    self.rangeHistogramButton.setText("Full range")
-    self.rangeHistogramButton.setCheckable(True)
-    self.rangeHistogramButton.checked = True
-    self.rangeHistogramButton.clicked.connect(self.setHistogramToRange)
-    histogramItemFrame.addWidget(self.rangeHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.rangeHistogramButton)
+    self.lowerToAverageHistogramButton = qt.QPushButton()
+    self.lowerToAverageHistogramButton.setText("Lower to average")
+    self.lowerToAverageHistogramButton.setCheckable(True)
+    self.lowerToAverageHistogramButton.checked = False
+    self.lowerToAverageHistogramButton.clicked.connect(self.updateHistogram)
+    histogramItemFrame.addWidget(self.lowerToAverageHistogramButton)
+    self.histogramMethodButtonGroup.addButton(self.lowerToAverageHistogramButton)
 
-    self.upperHistogramButton = qt.QPushButton()
-    self.upperHistogramButton.setText("Upper")
-    self.upperHistogramButton.setCheckable(True)
-    self.upperHistogramButton.checked = False
-    self.upperHistogramButton.clicked.connect(self.setHistogramToUpper)
-    histogramItemFrame.addWidget(self.upperHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.upperHistogramButton)
+    self.lowerToUpperHistogramButton = qt.QPushButton()
+    self.lowerToUpperHistogramButton.setText("Lower to upper")
+    self.lowerToUpperHistogramButton.setCheckable(True)
+    self.lowerToUpperHistogramButton.checked = True
+    self.lowerToUpperHistogramButton.clicked.connect(self.updateHistogram)
+    histogramItemFrame.addWidget(self.lowerToUpperHistogramButton)
+    self.histogramMethodButtonGroup.addButton(self.lowerToUpperHistogramButton)
+
+    self.averageToUpperHistogramButton = qt.QPushButton()
+    self.averageToUpperHistogramButton.setText("Average to upper")
+    self.averageToUpperHistogramButton.setCheckable(True)
+    self.averageToUpperHistogramButton.checked = False
+    self.averageToUpperHistogramButton.clicked.connect(self.updateHistogram)
+    histogramItemFrame.addWidget(self.averageToUpperHistogramButton)
+    self.histogramMethodButtonGroup.addButton(self.averageToUpperHistogramButton)
+
+    self.averageToMaxHistogramButton = qt.QPushButton()
+    self.averageToMaxHistogramButton.setText("Average to maximum")
+    self.averageToMaxHistogramButton.setCheckable(True)
+    self.averageToMaxHistogramButton.checked = False
+    self.averageToMaxHistogramButton.clicked.connect(self.updateHistogram)
+    histogramItemFrame.addWidget(self.averageToMaxHistogramButton)
+    self.histogramMethodButtonGroup.addButton(self.averageToMaxHistogramButton)
 
     self.histogramMethodButtonGroup.setExclusive(True)
 
@@ -632,82 +651,27 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.brushMode = HISTOGRAM_TYPE_BOX
     self.clearHistogramDisplay()
 
-  def setHistogramToUpper(self):
-    if self.histogramPipeline is None:
-      return
-    self.updateHistogram()
-
-  def setHistogramToRange(self):
-    if self.histogramPipeline is None:
-      return
-    self.updateHistogram()
-
-  def setHistogramToLower(self):
-    if self.histogramPipeline is None:
-      return
-    self.updateHistogram()
-
   def onHistogramMouseClick(self, pos, button):
     self.histogramStartPosition = pos
     self.histogramEndPosition = pos
     if (button == qt.Qt.RightButton):
+      self.histogramStartPosition = None
+      self.histogramEndPosition = None
       self.selectionFunction.RemoveAllPoints()
       self.averageFunction.RemoveAllPoints()
+    self.updateHistogram()
 
   def onHistogramMouseMove(self, pos, button):
     self.histogramEndPosition = pos
     if (button == qt.Qt.RightButton):
       return
-    self.updateHistogramMouseThreshold()
+    self.updateHistogram()
 
   def onHistogramMouseRelease(self, pos, button):
     self.histogramEndPosition = pos
     if (button == qt.Qt.RightButton):
       return
-    self.updateHistogramMouseThreshold()
-
-  def updateHistogramMouseThreshold(self): # TODO: name
-    masterImageData = self.scriptedEffect.masterVolumeImageData()
-    if masterImageData is None:
-      return
-    scalarRange = masterImageData.GetScalarRange()
-
-    startX = min(scalarRange[1], max(scalarRange[0], self.histogramStartPosition.x()))
-    endX = min(scalarRange[1], max(scalarRange[0], self.histogramEndPosition.x()))
-
-    minimum = min(startX, endX)
-    average = (startX + endX) / 2.0
-    maximum = max(startX, endX)
-
-    lowerThreshold = minimum
-    upperThreshold = maximum
-
-    if self.lowerHistogramButton.checked:
-      lowerThreshold = minimum
-      upperThreshold = average
-    elif self.upperHistogramButton.checked:
-      lowerThreshold = average
-      upperThreshold = maximum
-
-    self.scriptedEffect.setParameter("MinimumThreshold", lowerThreshold)
-    self.scriptedEffect.setParameter("MaximumThreshold", upperThreshold)
-
-    epsilon = 0.00001
-    self.selectionFunction.RemoveAllPoints()
-    self.selectionFunction.AddPoint(minimum - epsilon, 0.0)
-    self.selectionFunction.AddPoint(minimum, 1.0)
-    self.selectionFunction.AddPoint(minimum + epsilon, 0.0)
-    self.selectionFunction.AddPoint(maximum - epsilon, 0.0)
-    self.selectionFunction.AddPoint(maximum, 1.0)
-    self.selectionFunction.AddPoint(maximum + epsilon, 0.0)
-    self.selectionFunction.AdjustRange(scalarRange)
-
-    self.averageFunction.RemoveAllPoints()
-    self.averageFunction.AddPoint(average - epsilon, 0.0)
-    self.averageFunction.AddPoint(average, 1.0)
-    self.averageFunction.AddPoint(average + epsilon, 0.0)
-    self.averageFunction.AdjustRange(scalarRange)
-
+    self.updateHistogram()
 
   def updateHistogram(self):
     masterImageData = self.scriptedEffect.masterVolumeImageData()
@@ -756,19 +720,58 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     tableSize = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetNumberOfTuples()
     for i in range(tableSize):
       value = self.imageAccumulate.GetOutput().GetPointData().GetScalars().GetTuple1(i)
-      self.histogramFunction.AddPoint(i + scalarRange[0], value)
+      self.histogramFunction.AddPoint(binSpacing * i + scalarRange[0], value)
     self.histogramFunction.AdjustRange(scalarRange)
 
+    lower  = self.imageAccumulate.GetMin()[0]
+    average = self.imageAccumulate.GetMean()[0]
+    upper = self.imageAccumulate.GetMax()[0]
 
-    if self.upperHistogramButton.checked:
-      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMean()[0])
-      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
-    elif self.lowerHistogramButton.checked:
-      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
-      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMean()[0])
-    elif self.rangeHistogramButton.checked:
-      self.scriptedEffect.setParameter("MinimumThreshold", self.imageAccumulate.GetMin()[0])
-      self.scriptedEffect.setParameter("MaximumThreshold", self.imageAccumulate.GetMax()[0])
+    # If there is a selection, then set the threshold based on that
+    if self.histogramStartPosition is not None and self.histogramEndPosition is not None:
+
+      # Clamp selection based on scalar range
+      startX = min(scalarRange[1], max(scalarRange[0], self.histogramStartPosition.x()))
+      endX = min(scalarRange[1], max(scalarRange[0], self.histogramEndPosition.x()))
+
+      lower = min(startX, endX)
+      average = (startX + endX) / 2.0
+      upper = max(startX, endX)
+
+      epsilon = 0.00001
+      self.selectionFunction.RemoveAllPoints()
+      self.selectionFunction.AddPoint(lower - epsilon, 0.0)
+      self.selectionFunction.AddPoint(lower, 1.0)
+      self.selectionFunction.AddPoint(lower + epsilon, 0.0)
+      self.selectionFunction.AddPoint(upper - epsilon, 0.0)
+      self.selectionFunction.AddPoint(upper, 1.0)
+      self.selectionFunction.AddPoint(upper + epsilon, 0.0)
+      self.selectionFunction.AdjustRange(scalarRange)
+
+      self.averageFunction.RemoveAllPoints()
+      self.averageFunction.AddPoint(average - epsilon, 0.0)
+      self.averageFunction.AddPoint(average, 1.0)
+      self.averageFunction.AddPoint(average + epsilon, 0.0)
+      self.averageFunction.AdjustRange(scalarRange)
+
+    minimumThreshold = lower
+    maximumThreshold = upper
+
+    if self.minToAverageHistogramButton.checked:
+      minimumThreshold = scalarRange[0]
+      maximumThreshold = average
+    if self.lowerToAverageHistogramButton.checked:
+      minimumThreshold = lower
+      maximumThreshold = average
+    elif self.averageToUpperHistogramButton.checked:
+      minimumThreshold = average
+      maximumThreshold = upper
+    elif self.averageToMaxHistogramButton.checked:
+      minimumThreshold = average
+      maximumThreshold = scalarRange[1]
+
+    self.scriptedEffect.setParameter("MinimumThreshold", minimumThreshold)
+    self.scriptedEffect.setParameter("MaximumThreshold", maximumThreshold)
 
 #
 # PreviewPipeline
@@ -940,7 +943,7 @@ HISTOGRAM_TYPE_LINE = 'LINE'
 HISTOGRAM_STATE_OFF = 'OFF'
 HISTOGRAM_STATE_MOVING = 'MOVING'
 HISTOGRAM_STATE_PLACED = 'PLACED'
-HISTOGRAM_STATE_SELECTED = 'SELECTION'
+
 ###
 
 METHOD_HUANG = 'HUANG'
