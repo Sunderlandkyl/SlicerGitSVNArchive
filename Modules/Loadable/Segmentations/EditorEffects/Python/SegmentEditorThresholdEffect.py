@@ -215,24 +215,32 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     #self.lineROIButton.setText("Line")
     #histogramBrushFrame.addWidget(self.lineROIButton)
 
+    self.histogramBrushButtonGroup = qt.QButtonGroup()
+    self.histogramBrushButtonGroup.setExclusive(True)
+
     self.boxROIButton = qt.QPushButton()
     self.boxROIButton.setText("Box")
     self.boxROIButton.setCheckable(True)
     self.boxROIButton.checked = False
-    self.boxROIButton.clicked.connect(self.setBrushToBox)
+    self.boxROIButton.clicked.connect(self.clearHistogramDisplay)
     histogramBrushFrame.addWidget(self.boxROIButton)
+    self.histogramBrushButtonGroup.addButton(self.boxROIButton)
 
     self.circleROIButton = qt.QPushButton()
     self.circleROIButton.setText("Circle")
     self.circleROIButton.setCheckable(True)
     self.circleROIButton.checked = True
-    self.circleROIButton.clicked.connect(self.setBrushToCircle)
+    self.circleROIButton.clicked.connect(self.clearHistogramDisplay)
     histogramBrushFrame.addWidget(self.circleROIButton)
-
-    self.histogramBrushButtonGroup = qt.QButtonGroup()
-    self.histogramBrushButtonGroup.addButton(self.boxROIButton)
     self.histogramBrushButtonGroup.addButton(self.circleROIButton)
-    self.histogramBrushButtonGroup.setExclusive(True)
+
+    self.drawROIButton = qt.QPushButton()
+    self.drawROIButton.setText("Draw")
+    self.drawROIButton.setCheckable(True)
+    self.drawROIButton.checked = False
+    self.drawROIButton.clicked.connect(self.clearHistogramDisplay)
+    histogramBrushFrame.addWidget(self.drawROIButton)
+    self.histogramBrushButtonGroup.addButton(self.drawROIButton)
 
     self.histogramView = ctk.ctkTransferFunctionView()
     histogramFrame.addWidget(self.histogramView)
@@ -615,12 +623,14 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       self.histogramPipeline.state = HISTOGRAM_STATE_MOVING
       self.histogramPipeline.setPoint1(ras)
       self.histogramPipeline.setPoint2(ras)
+      self.histogramPipeline.addPoint(ras)
       self.updateHistogram()
     elif eventId == vtk.vtkCommand.LeftButtonReleaseEvent:
       self.histogramPipeline.state = HISTOGRAM_STATE_PLACED
     elif eventId == vtk.vtkCommand.MouseMoveEvent:
       if self.histogramPipeline.state == HISTOGRAM_STATE_MOVING:
         self.histogramPipeline.setPoint2(ras)
+        self.histogramPipeline.addPoint(ras)
         self.updateHistogram()
     else:
       pass
@@ -630,6 +640,8 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     brushType = HISTOGRAM_TYPE_CIRCLE
     if self.boxROIButton.checked:
       brushType = HISTOGRAM_TYPE_BOX
+    elif self.drawROIButton.checked:
+      brushType = HISTOGRAM_TYPE_DRAW
     pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget, brushType)
     # Add actor
     renderer = self.scriptedEffect.renderer(sliceWidget)
@@ -642,14 +654,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
   def processViewNodeEvents(self, callerViewNode, eventId, viewWidget):
     if self.histogramPipeline is not None:
       self.histogramPipeline.updateBrushModel()
-
-  def setBrushToCircle(self):
-    self.brushMode = HISTOGRAM_TYPE_CIRCLE
-    self.clearHistogramDisplay()
-
-  def setBrushToBox(self):
-    self.brushMode = HISTOGRAM_TYPE_BOX
-    self.clearHistogramDisplay()
 
   def onHistogramMouseClick(self, pos, button):
     self.histogramStartPosition = pos
@@ -861,6 +865,22 @@ class HistogramPipeline(object):
     self.cutter.SetCutFunction(self.slicePlane)
     self.cutter.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
 
+    self.rasPoints = vtk.vtkPoints()
+    self.polyData = vtk.vtkPolyData()
+    self.polyData.SetPoints(self.rasPoints)
+
+    lines = vtk.vtkCellArray()
+    self.polyData.SetLines(lines)
+    idArray = lines.GetData()
+    idArray.Reset()
+    idArray.InsertNextTuple1(0)
+
+    polygons = vtk.vtkCellArray()
+    self.polyData.SetPolys(polygons)
+    idArray = polygons.GetData()
+    idArray.Reset()
+    idArray.InsertNextTuple1(0)
+
     self.mapper = vtk.vtkPolyDataMapper2D()
     self.mapper.SetInputConnection(self.cutter.GetOutputPort())
 
@@ -877,6 +897,17 @@ class HistogramPipeline(object):
   def setPoint2(self, ras):
     self.point2 = ras
     self.updateBrushModel()
+
+  def addPoint(self, ras):
+    p = self.rasPoints.InsertNextPoint(ras)
+    lines = self.polyData.GetLines()
+    idArray = lines.GetData()
+    idArray.InsertNextTuple1(p)
+    idArray.SetTuple1(0, idArray.GetNumberOfTuples()-1)
+    lines.SetNumberOfCells(1)
+    self.rasPoints.Modified()
+    lines.Modified()
+    self.polyData.Modified()
 
   def updateBrushModel(self):
 
@@ -931,13 +962,18 @@ class HistogramPipeline(object):
 
       self.brushCubeSource.SetYLength(sliceSpacingMm)
 
+    elif self.brushMode == HISTOGRAM_TYPE_DRAW:
+      self.worldToSliceTransformer.SetInputData(self.polyData)
+      self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
+
     self.worldOriginToWorldTransform.Identity()
     self.worldOriginToWorldTransform.Translate(center)
 
     self.sliceWidget.sliceView().scheduleRender()
 
-HISTOGRAM_TYPE_CIRCLE = 'CIRCLE'
 HISTOGRAM_TYPE_BOX = 'BOX'
+HISTOGRAM_TYPE_CIRCLE = 'CIRCLE'
+HISTOGRAM_TYPE_DRAW = 'DRAW'
 HISTOGRAM_TYPE_LINE = 'LINE'
 
 HISTOGRAM_STATE_OFF = 'OFF'
