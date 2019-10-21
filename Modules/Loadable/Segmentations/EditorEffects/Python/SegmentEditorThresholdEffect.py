@@ -621,15 +621,12 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     if eventId == vtk.vtkCommand.LeftButtonPressEvent:
       self.histogramPipeline.state = HISTOGRAM_STATE_MOVING
-      self.histogramPipeline.setPoint1(ras)
-      self.histogramPipeline.setPoint2(ras)
       self.histogramPipeline.addPoint(ras)
       self.updateHistogram()
     elif eventId == vtk.vtkCommand.LeftButtonReleaseEvent:
       self.histogramPipeline.state = HISTOGRAM_STATE_PLACED
     elif eventId == vtk.vtkCommand.MouseMoveEvent:
       if self.histogramPipeline.state == HISTOGRAM_STATE_MOVING:
-        self.histogramPipeline.setPoint2(ras)
         self.histogramPipeline.addPoint(ras)
         self.updateHistogram()
     else:
@@ -827,8 +824,8 @@ class HistogramPipeline(object):
     self.brushMode = brushMode
     self.state = HISTOGRAM_STATE_OFF
 
-    self.point1 = [0,0,0]
-    self.point2 = [0,0,0]
+    self.point1 = None
+    self.point2 = None
 
     # Actor setup
     self.brushCylinderSource = vtk.vtkCylinderSource()
@@ -884,6 +881,10 @@ class HistogramPipeline(object):
     self.mapper = vtk.vtkPolyDataMapper2D()
     self.mapper.SetInputConnection(self.cutter.GetOutputPort())
 
+    if self.brushMode == HISTOGRAM_TYPE_DRAW:
+      self.worldToSliceTransformer.SetInputData(self.polyData)
+      self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
+
     self.actor = vtk.vtkActor2D()
     self.actor.SetMapper(self.mapper)
     actorProperty = self.actor.GetProperty()
@@ -899,17 +900,24 @@ class HistogramPipeline(object):
     self.updateBrushModel()
 
   def addPoint(self, ras):
-    p = self.rasPoints.InsertNextPoint(ras)
-    lines = self.polyData.GetLines()
-    idArray = lines.GetData()
-    idArray.InsertNextTuple1(p)
-    idArray.SetTuple1(0, idArray.GetNumberOfTuples()-1)
-    lines.SetNumberOfCells(1)
-    self.rasPoints.Modified()
-    lines.Modified()
-    self.polyData.Modified()
+    if self.brushMode == HISTOGRAM_TYPE_DRAW:
+      p = self.rasPoints.InsertNextPoint(ras)
+      lines = self.polyData.GetLines()
+      idArray = lines.GetData()
+      idArray.InsertNextTuple1(p)
+      idArray.SetTuple1(0, idArray.GetNumberOfTuples()-1)
+      lines.SetNumberOfCells(1)
+      self.rasPoints.Modified()
+      lines.Modified()
+      self.polyData.Modified()
+    else:
+      if self.point1 is None:
+        self.setPoint1(ras)
+      self.setPoint2(ras)
 
   def updateBrushModel(self):
+    if self.brushMode != HISTOGRAM_TYPE_DRAW and (self.point1 is None or self.point2 is None):
+      return
 
     # Update slice cutting plane position and orientation
     sliceXyToRas = self.sliceWidget.sliceLogic().GetSliceNode().GetXYToRAS()
@@ -961,10 +969,6 @@ class HistogramPipeline(object):
       self.brushCubeSource.SetZLength(zLength)
 
       self.brushCubeSource.SetYLength(sliceSpacingMm)
-
-    elif self.brushMode == HISTOGRAM_TYPE_DRAW:
-      self.worldToSliceTransformer.SetInputData(self.polyData)
-      self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
 
     self.worldOriginToWorldTransform.Identity()
     self.worldOriginToWorldTransform.Translate(center)
