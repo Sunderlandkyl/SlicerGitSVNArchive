@@ -211,10 +211,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     histogramBrushFrame = qt.QHBoxLayout()
     histogramFrame.addLayout(histogramBrushFrame)
 
-    #self.lineROIButton = qt.QPushButton()
-    #self.lineROIButton.setText("Line")
-    #histogramBrushFrame.addWidget(self.lineROIButton)
-
     self.histogramBrushButtonGroup = qt.QButtonGroup()
     self.histogramBrushButtonGroup.setExclusive(True)
 
@@ -241,6 +237,14 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.drawROIButton.clicked.connect(self.clearHistogramDisplay)
     histogramBrushFrame.addWidget(self.drawROIButton)
     self.histogramBrushButtonGroup.addButton(self.drawROIButton)
+
+    self.lineROIButton = qt.QPushButton()
+    self.lineROIButton.setText("Line")
+    self.lineROIButton.setCheckable(True)
+    self.lineROIButton.checked = False
+    self.lineROIButton.clicked.connect(self.clearHistogramDisplay)
+    histogramBrushFrame.addWidget(self.lineROIButton)
+    self.histogramBrushButtonGroup.addButton(self.lineROIButton)
 
     self.histogramView = ctk.ctkTransferFunctionView()
     histogramFrame.addWidget(self.histogramView)
@@ -638,6 +642,8 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       brushType = HISTOGRAM_TYPE_BOX
     elif self.drawROIButton.checked:
       brushType = HISTOGRAM_TYPE_DRAW
+    elif self.lineROIButton.checked:
+      brushType = HISTOGRAM_TYPE_LINE
     pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget, brushType)
     self.histogramPipeline = pipeline
 
@@ -826,6 +832,12 @@ class HistogramPipeline(object):
 
     self.brushCubeSource = vtk.vtkCubeSource()
 
+    self.brushLineSource = vtk.vtkLineSource()
+    self.brushTubeSource = vtk.vtkTubeFilter()
+    self.brushTubeSource.SetInputConnection(self.brushLineSource.GetOutputPort())
+    self.brushTubeSource.SetNumberOfSides(50)
+    self.brushTubeSource.SetCapping(True)
+
     self.brushToWorldOriginTransform = vtk.vtkTransform()
     self.brushToWorldOriginTransformer = vtk.vtkTransformPolyDataFilter()
     self.brushToWorldOriginTransformer.SetTransform(self.brushToWorldOriginTransform)
@@ -921,6 +933,8 @@ class HistogramPipeline(object):
       thinActorProperty.SetColor(1,1,0)
       thinActorProperty.SetLineWidth(1)
       self.scriptedEffect.addActor2D(sliceWidget, self.thinActor)
+    elif self.brushMode == HISTOGRAM_TYPE_LINE:
+      self.worldToSliceTransformer.SetInputConnection(self.brushTubeSource.GetOutputPort())
 
   def removeActors(self):
     if self.actor is not None:
@@ -1021,6 +1035,11 @@ class HistogramPipeline(object):
       self.brushCubeSource.SetZLength(zLength)
 
       self.brushCubeSource.SetYLength(sliceSpacingMm)
+
+    elif self.brushMode == HISTOGRAM_TYPE_LINE:
+      self.brushLineSource.SetPoint1(self.point1)
+      self.brushLineSource.SetPoint2(self.point2)
+      self.brushTubeSource.SetRadius(sliceSpacingMm)
 
     self.worldOriginToWorldTransform.Identity()
     self.worldOriginToWorldTransform.Translate(center)
