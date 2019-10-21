@@ -527,8 +527,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
   def clearHistogramDisplay(self):
     if self.histogramPipeline is None:
       return
-    sliceWidget = self.histogramPipeline.sliceWidget
-    self.scriptedEffect.removeActor2D(sliceWidget, self.histogramPipeline.actor)
+    self.histogramPipeline.removeActors()
     self.histogramPipeline = None
 
   def setupPreviewDisplay(self):
@@ -640,12 +639,6 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     elif self.drawROIButton.checked:
       brushType = HISTOGRAM_TYPE_DRAW
     pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget, brushType)
-    # Add actor
-    renderer = self.scriptedEffect.renderer(sliceWidget)
-    if renderer is None:
-      logging.error("pipelineForWidget: Failed to get renderer!")
-      return None
-    self.scriptedEffect.addActor2D(sliceWidget, pipeline.actor)
     self.histogramPipeline = pipeline
 
   def processViewNodeEvents(self, callerViewNode, eventId, viewWidget):
@@ -844,13 +837,13 @@ class HistogramPipeline(object):
 
     # Brush to RAS transform
     self.worldOriginToWorldTransform = vtk.vtkTransform()
-    self.worldOriginToWorldTransformer = vtk.vtkTransformPolyDataFilter ()
+    self.worldOriginToWorldTransformer = vtk.vtkTransformPolyDataFilter()
     self.worldOriginToWorldTransformer.SetTransform(self.worldOriginToWorldTransform)
     self.worldOriginToWorldTransformer.SetInputConnection(self.normalFilter.GetOutputPort())
 
     # RAS to XY transform
     self.worldToSliceTransform = vtk.vtkTransform()
-    self.worldToSliceTransformer = vtk.vtkTransformPolyDataFilter ()
+    self.worldToSliceTransformer = vtk.vtkTransformPolyDataFilter()
     self.worldToSliceTransformer.SetTransform(self.worldToSliceTransform)
     self.worldToSliceTransformer.SetInputConnection(self.worldOriginToWorldTransformer.GetOutputPort())
 
@@ -878,18 +871,62 @@ class HistogramPipeline(object):
     idArray.Reset()
     idArray.InsertNextTuple1(0)
 
+    # Thin line
+    self.thinRASPoints = vtk.vtkPoints()
+    self.thinPolyData = vtk.vtkPolyData()
+    self.thinPolyData.SetPoints(self.rasPoints)
+
+    lines = vtk.vtkCellArray()
+    self.thinPolyData.SetLines(lines)
+    idArray = lines.GetData()
+    idArray.Reset()
+    idArray.InsertNextTuple1(0)
+
+    polygons = vtk.vtkCellArray()
+    self.thinPolyData.SetPolys(polygons)
+    idArray = polygons.GetData()
+    idArray.Reset()
+    idArray.InsertNextTuple1(0)
+
     self.mapper = vtk.vtkPolyDataMapper2D()
     self.mapper.SetInputConnection(self.cutter.GetOutputPort())
 
-    if self.brushMode == HISTOGRAM_TYPE_DRAW:
-      self.worldToSliceTransformer.SetInputData(self.polyData)
-      self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
-
+    # Add actor
     self.actor = vtk.vtkActor2D()
     self.actor.SetMapper(self.mapper)
     actorProperty = self.actor.GetProperty()
     actorProperty.SetColor(1,1,0)
-    actorProperty.SetLineWidth(1)
+    actorProperty.SetLineWidth(2)
+    renderer = self.scriptedEffect.renderer(sliceWidget)
+    if renderer is None:
+      logging.error("pipelineForWidget: Failed to get renderer!")
+      return None
+    self.scriptedEffect.addActor2D(sliceWidget, self.actor)
+
+    self.thinActor = None
+    if self.brushMode == HISTOGRAM_TYPE_DRAW:
+      self.worldToSliceTransformer.SetInputData(self.polyData)
+      self.mapper.SetInputConnection(self.worldToSliceTransformer.GetOutputPort())
+
+      self.thinWorldToSliceTransformer = vtk.vtkTransformPolyDataFilter()
+      self.thinWorldToSliceTransformer.SetInputData(self.thinPolyData)
+      self.thinWorldToSliceTransformer.SetTransform(self.worldToSliceTransform)
+
+      self.thinMapper = vtk.vtkPolyDataMapper2D()
+      self.thinMapper.SetInputConnection(self.thinWorldToSliceTransformer.GetOutputPort())
+
+      self.thinActor = vtk.vtkActor2D()
+      self.thinActor.SetMapper(self.thinMapper)
+      thinActorProperty = self.thinActor.GetProperty()
+      thinActorProperty.SetColor(1,1,0)
+      thinActorProperty.SetLineWidth(1)
+      self.scriptedEffect.addActor2D(sliceWidget, self.thinActor)
+
+  def removeActors(self):
+    if self.actor is not None:
+      self.scriptedEffect.removeActor2D(self.sliceWidget, self.actor)
+    if self.thinActor is not None:
+      self.scriptedEffect.removeActor2D(self.sliceWidget, self.thinActor)
 
   def setPoint1(self, ras):
     self.point1 = ras
@@ -901,15 +938,30 @@ class HistogramPipeline(object):
 
   def addPoint(self, ras):
     if self.brushMode == HISTOGRAM_TYPE_DRAW:
-      p = self.rasPoints.InsertNextPoint(ras)
+      newPoint = self.rasPoints.InsertNextPoint(ras)
       lines = self.polyData.GetLines()
       idArray = lines.GetData()
-      idArray.InsertNextTuple1(p)
+      idArray.InsertNextTuple1(newPoint)
       idArray.SetTuple1(0, idArray.GetNumberOfTuples()-1)
       lines.SetNumberOfCells(1)
       self.rasPoints.Modified()
       lines.Modified()
       self.polyData.Modified()
+
+      if self.rasPoints.GetNumberOfPoints() >= 2:
+        thinLines = self.thinPolyData.GetLines()
+        idArray = thinLines.GetData()
+        idArray.Reset()
+        idArray.InsertNextTuple1(0)
+        idArray.InsertNextTuple1(0)
+        idArray.InsertNextTuple1(newPoint)
+        idArray.SetTuple1(0, idArray.GetNumberOfTuples()-1)
+        thinLines.SetNumberOfCells(1)
+        thinLines.Modified()
+        self.thinPolyData.Modified()
+        thinLines.Modified()
+        self.thinPolyData.Modified()
+
     else:
       if self.point1 is None:
         self.setPoint1(ras)
