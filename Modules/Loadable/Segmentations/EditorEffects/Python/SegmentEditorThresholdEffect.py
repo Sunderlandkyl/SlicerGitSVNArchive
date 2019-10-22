@@ -253,34 +253,43 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     self.histogramFunction = vtk.vtkPiecewiseFunction()
     self.histogramFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
     self.histogramFunctionContainer.setPiecewiseFunction(self.histogramFunction)
-    self.histogramBars = ctk.ctkTransferFunctionBarsItem(self.histogramFunctionContainer)
-    self.histogramBars.barWidth = 1.0
-    self.histogramBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
-    self.histogramBars.transferFunctionMousePressed.connect(self.onHistogramMouseClick)
-    self.histogramBars.transferFunctionMouseMove.connect(self.onHistogramMouseMove)
-    self.histogramBars.transferFunctionMouseReleased.connect(self.onHistogramMouseRelease)
-    self.histogramBars.setZValue(1);
-    scene.addItem(self.histogramBars)
+    self.histogramFunctionItem = ctk.ctkTransferFunctionBarsItem(self.histogramFunctionContainer)
+    self.histogramFunctionItem.barWidth = 1.0
+    self.histogramFunctionItem.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
+    self.histogramFunctionItem.transferFunctionMousePressed.connect(self.onHistogramMouseClick)
+    self.histogramFunctionItem.transferFunctionMouseMove.connect(self.onHistogramMouseMove)
+    self.histogramFunctionItem.transferFunctionMouseReleased.connect(self.onHistogramMouseRelease)
+    self.histogramFunctionItem.setZValue(1)
+    scene.addItem(self.histogramFunctionItem)
 
-    self.selectionFunction = vtk.vtkPiecewiseFunction()
+    self.minMaxFunction = vtk.vtkPiecewiseFunction()
     self.selectionFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
-    self.selectionFunctionContainer.setPiecewiseFunction(self.selectionFunction)
-    self.selectionBars = ctk.ctkTransferFunctionBarsItem(self.selectionFunctionContainer)
-    self.selectionBars.barWidth = 0.03
-    self.selectionBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
-    self.selectionBars.barColor = qt.QColor(200, 0, 0)
-    self.selectionBars.setZValue(0);
-    scene.addItem(self.selectionBars)
+    self.selectionFunctionContainer.setPiecewiseFunction(self.minMaxFunction)
+    self.selectionFunctionItem = ctk.ctkTransferFunctionBarsItem(self.selectionFunctionContainer)
+    self.selectionFunctionItem.barWidth = 0.03
+    self.selectionFunctionItem.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
+    self.selectionFunctionItem.barColor = qt.QColor(200, 0, 0)
+    self.selectionFunctionItem.setZValue(0)
+    scene.addItem(self.selectionFunctionItem)
 
     self.averageFunction = vtk.vtkPiecewiseFunction()
     self.averageFunctionContainer = ctk.ctkVTKPiecewiseFunction(self.scriptedEffect)
     self.averageFunctionContainer.setPiecewiseFunction(self.averageFunction)
-    self.averageBars = ctk.ctkTransferFunctionBarsItem(self.averageFunctionContainer)
-    self.averageBars.barWidth = 0.03
-    self.averageBars.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
-    self.averageBars.barColor = qt.QColor(255, 200, 0)
-    self.averageBars.setZValue(-1);
-    scene.addItem(self.averageBars)
+    self.averageFunctionItem = ctk.ctkTransferFunctionBarsItem(self.averageFunctionContainer)
+    self.averageFunctionItem.barWidth = 0.03
+    self.averageFunctionItem.logMode = ctk.ctkTransferFunctionBarsItem.NoLog
+    self.averageFunctionItem.barColor = qt.QColor(225, 150, 0)
+    self.averageFunctionItem.setZValue(-1)
+    scene.addItem(self.averageFunctionItem)
+
+    # Window level gradient
+    backgroundColor = [1.0, 1.0, 0.7]
+    self.backgroundFunction = vtk.vtkColorTransferFunction()
+    self.backgroundFunctionContainer = ctk.ctkVTKColorTransferFunction(self.scriptedEffect)
+    self.backgroundFunctionContainer.setColorTransferFunction(self.backgroundFunction)
+    self.backgroundFunctionItem = ctk.ctkTransferFunctionGradientItem(self.backgroundFunctionContainer)
+    self.backgroundFunctionItem.setZValue(-2)
+    scene.addItem(self.backgroundFunctionItem)
 
     histogramItemFrame = qt.QHBoxLayout()
     histogramFrame.addLayout(histogramItemFrame)
@@ -394,6 +403,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     wasBlocked = self.autoThresholdModeSelectorComboBox.blockSignals(True)
     self.autoThresholdModeSelectorComboBox.setCurrentIndex(autoThresholdMode)
     self.autoThresholdModeSelectorComboBox.blockSignals(wasBlocked)
+    self.updateHistogramBackground()
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("MinimumThreshold", self.thresholdSlider.minimumValue)
@@ -660,7 +670,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     if (button == qt.Qt.RightButton):
       self.histogramStartPosition = None
       self.histogramEndPosition = None
-      self.selectionFunction.RemoveAllPoints()
+      self.minMaxFunction.RemoveAllPoints()
       self.averageFunction.RemoveAllPoints()
     self.updateHistogram()
 
@@ -741,21 +751,21 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       average = (startX + endX) / 2.0
       upper = max(startX, endX)
 
-      epsilon = 0.00001
-      self.selectionFunction.RemoveAllPoints()
-      self.selectionFunction.AddPoint(lower - epsilon, 0.0)
-      self.selectionFunction.AddPoint(lower, 1.0)
-      self.selectionFunction.AddPoint(lower + epsilon, 0.0)
-      self.selectionFunction.AddPoint(upper - epsilon, 0.0)
-      self.selectionFunction.AddPoint(upper, 1.0)
-      self.selectionFunction.AddPoint(upper + epsilon, 0.0)
-      self.selectionFunction.AdjustRange(scalarRange)
+    epsilon = 0.00001
+    self.minMaxFunction.RemoveAllPoints()
+    self.minMaxFunction.AddPoint(lower - epsilon, 0.0)
+    self.minMaxFunction.AddPoint(lower, 1.0)
+    self.minMaxFunction.AddPoint(lower + epsilon, 0.0)
+    self.minMaxFunction.AddPoint(upper - epsilon, 0.0)
+    self.minMaxFunction.AddPoint(upper, 1.0)
+    self.minMaxFunction.AddPoint(upper + epsilon, 0.0)
+    self.minMaxFunction.AdjustRange(scalarRange)
 
-      self.averageFunction.RemoveAllPoints()
-      self.averageFunction.AddPoint(average - epsilon, 0.0)
-      self.averageFunction.AddPoint(average, 1.0)
-      self.averageFunction.AddPoint(average + epsilon, 0.0)
-      self.averageFunction.AdjustRange(scalarRange)
+    self.averageFunction.RemoveAllPoints()
+    self.averageFunction.AddPoint(average - epsilon, 0.0)
+    self.averageFunction.AddPoint(average, 1.0)
+    self.averageFunction.AddPoint(average + epsilon, 0.0)
+    self.averageFunction.AdjustRange(scalarRange)
 
     minimumThreshold = lower
     maximumThreshold = upper
@@ -775,6 +785,28 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     self.scriptedEffect.setParameter("MinimumThreshold", minimumThreshold)
     self.scriptedEffect.setParameter("MaximumThreshold", maximumThreshold)
+
+  def updateHistogramBackground(self):
+
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    scalarRange = masterImageData.GetScalarRange()
+
+    self.backgroundFunction.RemoveAllPoints()
+
+    epsilon = 0.00001
+    low   = self.scriptedEffect.doubleParameter("MinimumThreshold")
+    upper = self.scriptedEffect.doubleParameter("MaximumThreshold")
+    low =   max(scalarRange[0] + epsilon, low)
+    upper = min(scalarRange[1] - epsilon, upper)
+
+    self.backgroundFunction.AddRGBPoint(scalarRange[0], 1, 1, 1)
+    self.backgroundFunction.AddRGBPoint(low - epsilon, 1, 1, 1)
+    self.backgroundFunction.AddRGBPoint(low, backgroundColor[0], backgroundColor[1], backgroundColor[2])
+    self.backgroundFunction.AddRGBPoint(upper, backgroundColor[0], backgroundColor[1], backgroundColor[2])
+    self.backgroundFunction.AddRGBPoint(upper + epsilon, 1, 1, 1)
+    self.backgroundFunction.AddRGBPoint(scalarRange[1], 1, 1, 1)
+    self.backgroundFunction.SetAlpha(1.0)
+    self.backgroundFunction.Build()
 
 #
 # PreviewPipeline
@@ -1036,7 +1068,6 @@ class HistogramPipeline(object):
       self.brushToWorldOriginTransform.MultiplyPoint(zVector, zVector)
       zLength = abs(vtk.vtkMath.Dot(zVector[:3], length))
       self.brushCubeSource.SetZLength(zLength)
-
       self.brushCubeSource.SetYLength(sliceSpacingMm)
 
     elif self.brushMode == HISTOGRAM_TYPE_LINE:
@@ -1057,6 +1088,12 @@ HISTOGRAM_TYPE_LINE = 'LINE'
 HISTOGRAM_STATE_OFF = 'OFF'
 HISTOGRAM_STATE_MOVING = 'MOVING'
 HISTOGRAM_STATE_PLACED = 'PLACED'
+
+HISTOGRAM_SET_MINIMIUM = 'SET_MINIMUM'
+HISTOGRAM_SET_LOWER = 'SET_LOWER'
+HISTOGRAM_SET_AVERAGE = 'SET_AVERAGE'
+HISTOGRAM_SET_UPPER = 'SET_UPPER'
+HISTOGRAM_SET_MAXIMUM = 'SET_MAXIMUM'
 
 ###
 
