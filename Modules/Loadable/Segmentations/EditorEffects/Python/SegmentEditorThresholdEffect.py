@@ -283,7 +283,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     scene.addItem(self.averageFunctionItem)
 
     # Window level gradient
-    backgroundColor = [1.0, 1.0, 0.7]
+    self.backgroundColor = [1.0, 1.0, 0.7]
     self.backgroundFunction = vtk.vtkColorTransferFunction()
     self.backgroundFunctionContainer = ctk.ctkVTKColorTransferFunction(self.scriptedEffect)
     self.backgroundFunctionContainer.setColorTransferFunction(self.backgroundFunction)
@@ -294,49 +294,75 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     histogramItemFrame = qt.QHBoxLayout()
     histogramFrame.addLayout(histogramItemFrame)
 
-    self.histogramMethodButtonGroup = qt.QButtonGroup()
+    ###
+    # Lower histogram threshold buttons
 
-    self.minToAverageHistogramButton = qt.QPushButton()
-    self.minToAverageHistogramButton.setText("Minimum to average")
-    self.minToAverageHistogramButton.setCheckable(True)
-    self.minToAverageHistogramButton.checked = False
-    self.minToAverageHistogramButton.clicked.connect(self.updateHistogram)
-    histogramItemFrame.addWidget(self.minToAverageHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.minToAverageHistogramButton)
+    lowerGroupBox = qt.QGroupBox("Lower")
+    lowerHistogramLayout = qt.QHBoxLayout()
+    lowerGroupBox.setLayout(lowerHistogramLayout)
+    histogramItemFrame.addWidget(lowerGroupBox)
+    self.histogramLowerMethodButtonGroup = qt.QButtonGroup()
+    self.histogramLowerMethodButtonGroup.setExclusive(True)
 
-    self.lowerToAverageHistogramButton = qt.QPushButton()
-    self.lowerToAverageHistogramButton.setText("Lower to average")
-    self.lowerToAverageHistogramButton.setCheckable(True)
-    self.lowerToAverageHistogramButton.checked = False
-    self.lowerToAverageHistogramButton.clicked.connect(self.updateHistogram)
-    histogramItemFrame.addWidget(self.lowerToAverageHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.lowerToAverageHistogramButton)
+    self.histogramLowerThresholdMinimumButton = qt.QPushButton()
+    self.histogramLowerThresholdMinimumButton.setText("Minimum")
+    self.histogramLowerThresholdMinimumButton.setCheckable(True)
+    self.histogramLowerThresholdMinimumButton.checked = False
+    self.histogramLowerThresholdMinimumButton.clicked.connect(self.updateHistogram)
+    lowerHistogramLayout.addWidget(self.histogramLowerThresholdMinimumButton)
+    self.histogramLowerMethodButtonGroup.addButton(self.histogramLowerThresholdMinimumButton)
 
-    self.lowerToUpperHistogramButton = qt.QPushButton()
-    self.lowerToUpperHistogramButton.setText("Lower to upper")
-    self.lowerToUpperHistogramButton.setCheckable(True)
-    self.lowerToUpperHistogramButton.checked = True
-    self.lowerToUpperHistogramButton.clicked.connect(self.updateHistogram)
-    histogramItemFrame.addWidget(self.lowerToUpperHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.lowerToUpperHistogramButton)
+    self.histogramLowerThresholdLowerButton = qt.QPushButton()
+    self.histogramLowerThresholdLowerButton.setText("Lower")
+    self.histogramLowerThresholdLowerButton.setCheckable(True)
+    self.histogramLowerThresholdLowerButton.checked = True
+    self.histogramLowerThresholdLowerButton.clicked.connect(self.updateHistogram)
+    lowerHistogramLayout.addWidget(self.histogramLowerThresholdLowerButton)
+    self.histogramLowerMethodButtonGroup.addButton(self.histogramLowerThresholdLowerButton)
 
-    self.averageToUpperHistogramButton = qt.QPushButton()
-    self.averageToUpperHistogramButton.setText("Average to upper")
-    self.averageToUpperHistogramButton.setCheckable(True)
-    self.averageToUpperHistogramButton.checked = False
-    self.averageToUpperHistogramButton.clicked.connect(self.updateHistogram)
-    histogramItemFrame.addWidget(self.averageToUpperHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.averageToUpperHistogramButton)
+    self.histogramLowerThresholdAverageButton = qt.QPushButton()
+    self.histogramLowerThresholdAverageButton.setText("Average")
+    self.histogramLowerThresholdAverageButton.setCheckable(True)
+    self.histogramLowerThresholdAverageButton.checked = False
+    self.histogramLowerThresholdAverageButton.clicked.connect(self.updateHistogram)
+    lowerHistogramLayout.addWidget(self.histogramLowerThresholdAverageButton)
+    self.histogramLowerMethodButtonGroup.addButton(self.histogramLowerThresholdAverageButton)
 
-    self.averageToMaxHistogramButton = qt.QPushButton()
-    self.averageToMaxHistogramButton.setText("Average to maximum")
-    self.averageToMaxHistogramButton.setCheckable(True)
-    self.averageToMaxHistogramButton.checked = False
-    self.averageToMaxHistogramButton.clicked.connect(self.updateHistogram)
-    histogramItemFrame.addWidget(self.averageToMaxHistogramButton)
-    self.histogramMethodButtonGroup.addButton(self.averageToMaxHistogramButton)
 
-    self.histogramMethodButtonGroup.setExclusive(True)
+
+    ###
+    # Upper histogram threshold buttons
+
+    upperGroupBox = qt.QGroupBox("Upper")
+    upperHistogramLayout = qt.QHBoxLayout()
+    upperGroupBox.setLayout(upperHistogramLayout)
+    histogramItemFrame.addWidget(upperGroupBox)
+    self.histogramUpperMethodButtonGroup = qt.QButtonGroup()
+    self.histogramUpperMethodButtonGroup.setExclusive(True)
+
+    self.histogramUpperThresholdAverageButton = qt.QPushButton()
+    self.histogramUpperThresholdAverageButton.setText("Average")
+    self.histogramUpperThresholdAverageButton.setCheckable(True)
+    self.histogramUpperThresholdAverageButton.checked = False
+    self.histogramUpperThresholdAverageButton.clicked.connect(self.updateHistogram)
+    upperHistogramLayout.addWidget(self.histogramUpperThresholdAverageButton)
+    self.histogramUpperMethodButtonGroup.addButton(self.histogramUpperThresholdAverageButton)
+
+    self.histogramUpperThresholdUpperButton = qt.QPushButton()
+    self.histogramUpperThresholdUpperButton.setText("Upper")
+    self.histogramUpperThresholdUpperButton.setCheckable(True)
+    self.histogramUpperThresholdUpperButton.checked = True
+    self.histogramUpperThresholdUpperButton.clicked.connect(self.updateHistogram)
+    upperHistogramLayout.addWidget(self.histogramUpperThresholdUpperButton)
+    self.histogramUpperMethodButtonGroup.addButton(self.histogramUpperThresholdUpperButton)
+
+    self.histogramUpperThresholdMaximumButton = qt.QPushButton()
+    self.histogramUpperThresholdMaximumButton.setText("Maximum")
+    self.histogramUpperThresholdMaximumButton.setCheckable(True)
+    self.histogramUpperThresholdMaximumButton.checked = False
+    self.histogramUpperThresholdMaximumButton.clicked.connect(self.updateHistogram)
+    upperHistogramLayout.addWidget(self.histogramUpperThresholdMaximumButton)
+    self.histogramUpperMethodButtonGroup.addButton(self.histogramUpperThresholdMaximumButton)
 
     histogramGroupBox = ctk.ctkCollapsibleGroupBox()
     histogramGroupBox.setTitle("Local histogram")
@@ -770,17 +796,18 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     minimumThreshold = lower
     maximumThreshold = upper
 
-    if self.minToAverageHistogramButton.checked:
+    if self.histogramLowerThresholdMinimumButton.checked:
       minimumThreshold = scalarRange[0]
-      maximumThreshold = average
-    if self.lowerToAverageHistogramButton.checked:
+    elif self.histogramLowerThresholdLowerButton.checked:
       minimumThreshold = lower
+    elif self.histogramLowerThresholdAverageButton.checked:
+      minimumThreshold = average
+
+    if self.histogramUpperThresholdAverageButton.checked:
       maximumThreshold = average
-    elif self.averageToUpperHistogramButton.checked:
-      minimumThreshold = average
+    elif self.histogramUpperThresholdUpperButton.checked:
       maximumThreshold = upper
-    elif self.averageToMaxHistogramButton.checked:
-      minimumThreshold = average
+    elif self.histogramUpperThresholdMaximumButton.checked:
       maximumThreshold = scalarRange[1]
 
     self.scriptedEffect.setParameter("MinimumThreshold", minimumThreshold)
@@ -801,8 +828,8 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
 
     self.backgroundFunction.AddRGBPoint(scalarRange[0], 1, 1, 1)
     self.backgroundFunction.AddRGBPoint(low - epsilon, 1, 1, 1)
-    self.backgroundFunction.AddRGBPoint(low, backgroundColor[0], backgroundColor[1], backgroundColor[2])
-    self.backgroundFunction.AddRGBPoint(upper, backgroundColor[0], backgroundColor[1], backgroundColor[2])
+    self.backgroundFunction.AddRGBPoint(low, self.backgroundColor[0], self.backgroundColor[1], self.backgroundColor[2])
+    self.backgroundFunction.AddRGBPoint(upper, self.backgroundColor[0], self.backgroundColor[1], self.backgroundColor[2])
     self.backgroundFunction.AddRGBPoint(upper + epsilon, 1, 1, 1)
     self.backgroundFunction.AddRGBPoint(scalarRange[1], 1, 1, 1)
     self.backgroundFunction.SetAlpha(1.0)
