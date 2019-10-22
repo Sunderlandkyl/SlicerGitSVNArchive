@@ -626,12 +626,15 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       self.histogramPipeline.state = HISTOGRAM_STATE_MOVING
       self.histogramPipeline.addPoint(ras)
       self.updateHistogram()
+      abortEvent = True
     elif eventId == vtk.vtkCommand.LeftButtonReleaseEvent:
       self.histogramPipeline.state = HISTOGRAM_STATE_PLACED
+      abortEvent = True
     elif eventId == vtk.vtkCommand.MouseMoveEvent:
       if self.histogramPipeline.state == HISTOGRAM_STATE_MOVING:
         self.histogramPipeline.addPoint(ras)
         self.updateHistogram()
+        abortEvent = True
     else:
       pass
     return abortEvent
