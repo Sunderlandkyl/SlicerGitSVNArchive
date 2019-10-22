@@ -91,7 +91,7 @@ qSlicerIO::IOFileType qSlicerSegmentationsReader::fileType()const
 QStringList qSlicerSegmentationsReader::extensions()const
 {
   return QStringList() << "Segmentation (*.seg.nrrd)" << "Segmentation (*.seg.vtm)"
-    << "Segmentation (*.nrrd)" << "Segmentation (*.vtm)"
+    << "Segmentation (*.nrrd)" << "Segmentation (*.nii.gz)" << "Segmentation (*.vtm)"
     << "Segmentation (*.stl)" << "Segmentation (*.obj)";
 }
 

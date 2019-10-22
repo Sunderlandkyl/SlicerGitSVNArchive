@@ -42,6 +42,7 @@
 #include <vtkInformation.h>
 #include <vtkInformationIntegerVectorKey.h>
 #include <vtkInformationStringKey.h>
+#include <vtkITKArchetypeImageSeriesScalarReader.h>
 #include <vtkMultiBlockDataSet.h>
 #include <vtkNew.h>
 #include <vtkTeemNRRDReader.h>
@@ -138,6 +139,7 @@ void vtkMRMLSegmentationStorageNode::InitializeSupportedReadFileTypes()
   this->SupportedReadFileTypes->InsertNextValue("Segmentation (.seg.vtm)");
   this->SupportedReadFileTypes->InsertNextValue("Segmentation (.nrrd)");
   this->SupportedReadFileTypes->InsertNextValue("Segmentation (.vtm)");
+  this->SupportedReadFileTypes->InsertNextValue("Segmentation (.nii.gz)");
 }
 
 //----------------------------------------------------------------------------
@@ -163,6 +165,7 @@ void vtkMRMLSegmentationStorageNode::InitializeSupportedWriteFileTypes()
     {
     this->SupportedWriteFileTypes->InsertNextValue("Segmentation (.seg.nrrd)");
     this->SupportedWriteFileTypes->InsertNextValue("Segmentation (.nrrd)");
+    this->SupportedWriteFileTypes->InsertNextValue("Segmentation (.nii.gz)");
     }
   if (masterIsPolyData)
     {
@@ -502,31 +505,142 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
     }
   vtkSegmentation* segmentation = segmentationNode->GetSegmentation();
 
-  vtkNew<vtkTeemNRRDReader> reader;
-  reader->SetFileName(path.c_str());
+  vtkSmartPointer<vtkImageData> imageData = nullptr;
 
   // Check if this is a NRRD file that we can read
-  if (!reader->CanReadFile(path.c_str()))
+  vtkNew<vtkTeemNRRDReader> nrrdReader;
+  nrrdReader->SetFileName(path.c_str());
+
+  vtkNew<vtkITKArchetypeImageSeriesScalarReader> archetypeImageReader;
+  archetypeImageReader->SetSingleFile(1); // TODO
+  archetypeImageReader->SetUseOrientationFromFile(1); // TODO
+  archetypeImageReader->ResetFileNames();
+  archetypeImageReader->SetArchetype(path.c_str());
+  archetypeImageReader->SetOutputScalarTypeToNative();
+  archetypeImageReader->SetDesiredCoordinateOrientationToNative();
+  archetypeImageReader->SetUseNativeOriginOn();
+
+  int numberOfSegments = 0;
+  std::map<int, std::vector<int> > segmentIndexInLayer;
+  std::string containedRepresentationNames;
+  vtkMatrix4x4* rasToFileIjk = nullptr;
+  int imageExtentInFile[6] = { 0, -1, 0, -1, 0, -1 };
+  int commonGeometryExtent[6] = { 0, -1, 0, -1, 0, -1 };
+  int referenceImageExtentOffset[3] = { 0, 0, 0 };
+
+  if (nrrdReader->CanReadFile(path.c_str()))
+    {
+    // Read the header to see if the NRRD file corresponds to the MRML Node
+    nrrdReader->UpdateInformation();
+
+    if (nrrdReader->GetPointDataType() != vtkDataSetAttributes::SCALARS)
+      {
+      vtkDebugMacro("ReadBinaryLabelmapRepresentation: only scalar point type is supported");
+      return 0;
+      }
+
+    // Read the volume
+    nrrdReader->Update();
+
+    // Copy image data to sequence of volume nodes
+    imageData = nrrdReader->GetOutput();
+    rasToFileIjk = nrrdReader->GetRasToIjkMatrix();
+    imageData->GetExtent(imageExtentInFile);
+    imageData->GetExtent(commonGeometryExtent);
+
+    // Get metadata dictionary from image
+    typedef std::vector<std::string> KeyVector;
+    KeyVector keys = nrrdReader->GetHeaderKeysVector();
+
+    // Read common geometry
+    KeyVector::iterator kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET));
+    if (kit != keys.end())
+      {
+      // Common geometry extent is specified by an offset (extent[0], extent[2], extent[4]) and the size of the image
+      // NRRD file cannot store start extent, so we store that in KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET and from imageExtentInFile we
+      // only use the extent size.
+      std::string referenceImageExtentOffsetStr =
+        nrrdReader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET).c_str());
+      std::stringstream ssExtentValue(referenceImageExtentOffsetStr);
+      ssExtentValue >> referenceImageExtentOffset[0] >> referenceImageExtentOffset[1] >> referenceImageExtentOffset[2];
+      commonGeometryExtent[0] = referenceImageExtentOffset[0];
+      commonGeometryExtent[1] = referenceImageExtentOffset[0] + imageExtentInFile[1] - imageExtentInFile[0];
+      commonGeometryExtent[2] = referenceImageExtentOffset[1];
+      commonGeometryExtent[3] = referenceImageExtentOffset[1] + imageExtentInFile[3] - imageExtentInFile[2];
+      commonGeometryExtent[4] = referenceImageExtentOffset[2];
+      commonGeometryExtent[5] = referenceImageExtentOffset[2] + imageExtentInFile[5] - imageExtentInFile[4];
+      }
+    else
+      {
+      // For backward compatibility only
+      KeyVector::iterator kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_EXTENT));
+      if (kit != keys.end())
+        {
+        GetImageExtentFromString(commonGeometryExtent, nrrdReader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_EXTENT).c_str()));
+        if (imageExtentInFile[1] - imageExtentInFile[0] != commonGeometryExtent[1] - commonGeometryExtent[0]
+          || imageExtentInFile[3] - imageExtentInFile[2] != commonGeometryExtent[3] - commonGeometryExtent[2]
+          || imageExtentInFile[5] - imageExtentInFile[4] != commonGeometryExtent[5] - commonGeometryExtent[4])
+          {
+          vtkErrorMacro("vtkMRMLVolumeSequenceStorageNode::ReadDataInternal: "
+            << GetSegmentationMetaDataKey(KEY_SEGMENTATION_EXTENT) << " is inconsistent with the image size");
+          return 0;
+          }
+        }
+      else
+        {
+        // Neither KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET nor KEY_SEGMENTATION_EXTENT is specified,
+        // which means that this is probably a regular NRRD file that should be imported as a segmentation.
+        // Use the image extent as common geometry extent.
+        vtkWarningMacro(<< KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET << " attribute was not found in NRRD segmentation file. Assume no offset.");
+        imageData->GetExtent(commonGeometryExtent);
+        }
+      }
+
+    // Read conversion parameters
+    kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONVERSION_PARAMETERS));
+    if (kit != keys.end())
+      {
+      std::string conversionParameters = nrrdReader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONVERSION_PARAMETERS).c_str());
+      segmentation->DeserializeConversionParameters(conversionParameters);
+      }
+
+    // Read contained representation names
+    kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONTAINED_REPRESENTATION_NAMES));
+    if (kit != keys.end())
+      {
+      containedRepresentationNames = nrrdReader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONTAINED_REPRESENTATION_NAMES).c_str());
+      }
+
+    while (nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(numberOfSegments, KEY_SEGMENT_ID).c_str()))
+      {
+      int segmentIndex = numberOfSegments;
+      const char* headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_LAYER).c_str());
+      if (headerValue)
+        {
+        segmentIndexInLayer[vtkVariant(headerValue).ToInt()].push_back(segmentIndex);
+        }
+      else
+        {
+        segmentIndexInLayer[segmentIndex].push_back(segmentIndex);
+        }
+      ++numberOfSegments;
+      }
+
+    }
+  else if (archetypeImageReader->CanReadFile(path.c_str()))
+    {
+    archetypeImageReader->Update();
+    imageData = archetypeImageReader->GetOutput();
+    rasToFileIjk = archetypeImageReader->GetRasToIjkMatrix();
+    imageData->GetExtent(imageExtentInFile);
+    imageData->GetExtent(commonGeometryExtent);
+    }
+  else
     {
     vtkDebugMacro("ReadBinaryLabelmapRepresentation: This is not a nrrd file");
     return 0;
     }
 
-  // Read the header to see if the NRRD file corresponds to the
-  // MRML Node
-  reader->UpdateInformation();
-
-  if (reader->GetPointDataType() != vtkDataSetAttributes::SCALARS)
-    {
-    vtkDebugMacro("ReadBinaryLabelmapRepresentation: only scalar point type is supported");
-    return 0;
-    }
-
-  // Read the volume
-  reader->Update();
-
-  // Copy image data to sequence of volume nodes
-  vtkImageData* imageData = reader->GetOutput();
   if (imageData == nullptr)
     {
     vtkErrorMacro("vtkMRMLVolumeSequenceStorageNode::ReadDataInternal: invalid image data");
@@ -538,58 +652,7 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
   segmentation->SetMasterRepresentationName(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName());
 
   int segmentationNodeWasModified = segmentationNode->StartModify();
-  // Get metadata dictionary from image
-  typedef std::vector<std::string> KeyVector;
-  KeyVector keys = reader->GetHeaderKeysVector();
 
-  // Read common geometry
-  int imageExtentInFile[6] = { 0, -1, 0, -1, 0, -1 };
-  imageData->GetExtent(imageExtentInFile);
-  int commonGeometryExtent[6] = { 0, -1, 0, -1, 0, -1 };
-  int referenceImageExtentOffset[3] = { 0, 0, 0 };
-  KeyVector::iterator kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET));
-  if (kit != keys.end())
-    {
-    // Common geometry extent is specified by an offset (extent[0], extent[2], extent[4]) and the size of the image
-    // NRRD file cannot store start extent, so we store that in KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET and from imageExtentInFile we
-    // only use the extent size.
-    std::string referenceImageExtentOffsetStr = reader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET).c_str());
-    std::stringstream ssExtentValue(referenceImageExtentOffsetStr);
-    ssExtentValue >> referenceImageExtentOffset[0] >> referenceImageExtentOffset[1] >> referenceImageExtentOffset[2];
-    commonGeometryExtent[0] = referenceImageExtentOffset[0];
-    commonGeometryExtent[1] = referenceImageExtentOffset[0] + imageExtentInFile[1] - imageExtentInFile[0];
-    commonGeometryExtent[2] = referenceImageExtentOffset[1];
-    commonGeometryExtent[3] = referenceImageExtentOffset[1] + imageExtentInFile[3] - imageExtentInFile[2];
-    commonGeometryExtent[4] = referenceImageExtentOffset[2];
-    commonGeometryExtent[5] = referenceImageExtentOffset[2] + imageExtentInFile[5] - imageExtentInFile[4];
-    }
-  else
-    {
-    // For backward compatibility only
-    KeyVector::iterator kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_EXTENT));
-    if (kit != keys.end())
-      {
-      GetImageExtentFromString(commonGeometryExtent, reader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_EXTENT).c_str()));
-      if (imageExtentInFile[1] - imageExtentInFile[0] != commonGeometryExtent[1] - commonGeometryExtent[0]
-        || imageExtentInFile[3] - imageExtentInFile[2] != commonGeometryExtent[3] - commonGeometryExtent[2]
-        || imageExtentInFile[5] - imageExtentInFile[4] != commonGeometryExtent[5] - commonGeometryExtent[4])
-        {
-        vtkErrorMacro("vtkMRMLVolumeSequenceStorageNode::ReadDataInternal: "
-          << GetSegmentationMetaDataKey(KEY_SEGMENTATION_EXTENT) << " is inconsistent with the image size");
-        return 0;
-        }
-      }
-    else
-      {
-      // Neither KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET nor KEY_SEGMENTATION_EXTENT is specified,
-      // which means that this is probably a regular NRRD file that should be imported as a segmentation.
-      // Use the image extent as common geometry extent.
-      vtkWarningMacro(<< KEY_SEGMENTATION_REFERENCE_IMAGE_EXTENT_OFFSET << " attribute was not found in NRRD segmentation file. Assume no offset.");
-      imageData->GetExtent(commonGeometryExtent);
-      }
-    }
-
-  vtkMatrix4x4* rasToFileIjk = reader->GetRasToIjkMatrix();
   // Compensate for the extent shift in the image origin.
   // We change the origin so that if a reader ignores private fields, such as
   // referenceImageExtentOffset, the image is placed correctly in physical coordinate system.
@@ -609,39 +672,6 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
   vtkNew<vtkImageConstantPad> padder;
   padder->SetInputConnection(extractComponents->GetOutputPort());
 
-  // Read conversion parameters
-  kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONVERSION_PARAMETERS));
-  if (kit != keys.end())
-    {
-    std::string conversionParameters = reader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONVERSION_PARAMETERS).c_str());
-    segmentation->DeserializeConversionParameters(conversionParameters);
-    }
-
-  // Read contained representation names
-  std::string containedRepresentationNames;
-  kit = std::find(keys.begin(), keys.end(), GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONTAINED_REPRESENTATION_NAMES));
-  if (kit != keys.end())
-    {
-    containedRepresentationNames = reader->GetHeaderValue(GetSegmentationMetaDataKey(KEY_SEGMENTATION_CONTAINED_REPRESENTATION_NAMES).c_str());
-    }
-
-  std::map<int, std::vector<int> > segmentIndexInLayer;
-  int numberOfSegments = 0;
-  while (reader->GetHeaderValue(GetSegmentMetaDataKey(numberOfSegments, KEY_SEGMENT_ID).c_str()))
-    {
-    int segmentIndex = numberOfSegments;
-    const char* headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_LAYER).c_str());
-    if (headerValue)
-      {
-      segmentIndexInLayer[vtkVariant(headerValue).ToInt()].push_back(segmentIndex);
-      }
-    else
-      {
-      segmentIndexInLayer[segmentIndex].push_back(segmentIndex);
-      }
-    ++numberOfSegments;
-    }
-
   std::vector<vtkSmartPointer<vtkSegment> > segments(numberOfSegments);
 
   std::map<int, vtkSmartPointer<vtkOrientedImageData> > layerToImage;
@@ -651,12 +681,12 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
     vtkSmartPointer<vtkOrientedImageData> currentBinaryLabelmap = nullptr;
 
     if (numberOfSegments == 0)
-    {
+      {
       currentBinaryLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
       extractComponents->SetComponents(frameIndex);
       padder->SetOutputWholeExtent(imageExtentInFile);
       padder->Update();
-      currentBinaryLabelmap->DeepCopy(padder->GetOutput());
+      currentBinaryLabelmap->ShallowCopy(padder->GetOutput());
 
       double scalarRange[2] = { 0 };
       currentBinaryLabelmap->GetScalarRange(scalarRange);
@@ -698,13 +728,14 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
         vtkSmartPointer<vtkSegment> currentSegment = vtkSmartPointer<vtkSegment>::New();
 
         // Get metadata for current segment
-
+        itk::MetaDataDictionary dictionary = archetypeImageReader->GetMetaDataDictionary();
+        //dictionary.
         // Color
-        const char* headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_COLOR).c_str());
+        const char* headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_COLOR).c_str());
         if (!headerValue)
           {
           // Backwards compatibility
-          headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, "DefaultColor").c_str());
+          headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, "DefaultColor").c_str());
           }
         if (headerValue)
           {
@@ -714,28 +745,28 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
           }
 
         // Tags
-        headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_TAGS).c_str());
+        headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_TAGS).c_str());
         if (headerValue)
           {
           this->SetSegmentTagsFromString(currentSegment, headerValue);
           }
 
         // NameAutoGenerated
-        headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_NAME_AUTO_GENERATED).c_str());
+        headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_NAME_AUTO_GENERATED).c_str());
         if (headerValue)
           {
           currentSegment->SetNameAutoGenerated(!strcmp(headerValue,"1"));
           }
 
         // ColorAutoGenerated
-        headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_COLOR_AUTO_GENERATED).c_str());
+        headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_COLOR_AUTO_GENERATED).c_str());
         if (headerValue)
           {
           currentSegment->SetColorAutoGenerated(!strcmp(headerValue,"1"));
           }
 
         // Label value
-        headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_LABEL_VALUE).c_str());
+        headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_LABEL_VALUE).c_str());
         if (headerValue)
           {
           currentSegment->SetLabelValue(vtkVariant(headerValue).ToInt());
@@ -746,7 +777,7 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
           currentBinaryLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
 
           // Extent
-          headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_EXTENT).c_str());
+          headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_EXTENT).c_str());
           int currentSegmentExtent[6] = { 0, -1, 0, -1, 0, -1 };
           if (headerValue)
             {
@@ -801,7 +832,7 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
     if (numberOfSegments != 0)
       {
       // ID
-      const char* headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_ID).c_str());
+      const char* headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_ID).c_str());
       if (headerValue)
         {
         currentSegmentID = headerValue;
@@ -830,7 +861,7 @@ int vtkMRMLSegmentationStorageNode::ReadBinaryLabelmapRepresentation(vtkMRMLSegm
         }
 
       // Name
-      headerValue = reader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_NAME).c_str());
+      headerValue = nrrdReader->GetHeaderValue(GetSegmentMetaDataKey(segmentIndex, KEY_SEGMENT_NAME).c_str());
       if (headerValue)
         {
         currentSegment->SetName(headerValue);
