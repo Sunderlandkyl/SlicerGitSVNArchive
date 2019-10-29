@@ -2280,7 +2280,7 @@ std::vector<std::string> vtkSegmentation::GetSegmentIDsForDataObject(vtkDataObje
 }
 
 //----------------------------------------------------------------------------
-void vtkSegmentation::CollapseBinaryLabelmaps(bool forceToSingleLayer/*=false*/)
+void vtkSegmentation::CollapseBinaryLabelmaps(bool forceToSingleLayer/*=false*/, bool preserveLabelValue/*=false*/)
 {
   std::string labelmapRepresentationName = vtkSegmentationConverter::GetBinaryLabelmapRepresentationName();
   int numberOfLayers = this->GetNumberOfLayers(labelmapRepresentationName);

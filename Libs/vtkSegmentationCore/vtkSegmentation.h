@@ -385,7 +385,7 @@ public:
   /// Reduce the binary labelmap representation to as few layers as possible.
   /// \param forceToSingleLayer If false, then the layers will not be overwritten by each other, if true then the layers can
   ///   overwrite each other, but the result is guaranteed to have one layer
-  void CollapseBinaryLabelmaps(bool forceToSingleLayer=false);
+  void CollapseBinaryLabelmaps(bool forceToSingleLayer=false, bool preserveLabelValue=false);
 
   // Conversion related methods
 
