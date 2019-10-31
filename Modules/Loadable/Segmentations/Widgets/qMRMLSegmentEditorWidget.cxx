@@ -311,6 +311,8 @@ public:
   QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
 
   int CurrentPointer;
+
+  bool GestureInProgress;
 };
 
 //-----------------------------------------------------------------------------
@@ -333,6 +335,7 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   , EffectButtonStyle(Qt::ToolButtonTextUnderIcon)
   , RotateWarningInNodeSelectorLayout(true)
   , CurrentPointer(-1)
+  , GestureInProgress(false)
 {
   this->AlignedMasterVolume = vtkOrientedImageData::New();
   this->ModifierLabelmap = vtkOrientedImageData::New();
@@ -490,7 +493,6 @@ void qMRMLSegmentEditorWidgetPrivate::init()
                    q, &qMRMLSegmentEditorWidget::onTabletEnterProximity);
   QObject::connect(this->ApplicationEventFilter.get(), &qSegmentEditorApplicationEventFilter::tabletLeaveProximity,
                    q, &qMRMLSegmentEditorWidget::onTabletLeaveProximity);
-  QObject::connect(this->TabletEnabledCheckBox, &QCheckBox::stateChanged, q, &qMRMLSegmentEditorWidget::onTabletModeChanged);
 
   q->qvtkConnect(this->SegmentationHistory, vtkCommand::ModifiedEvent,
     q, SLOT(onSegmentationHistoryChanged()));
@@ -2599,12 +2601,15 @@ void qMRMLSegmentEditorWidget::setupViewObservations()
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::KeyReleaseEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EnterEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::LeaveEvent, interactorObservation.CallbackCommand, 1.0);
-    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletEnterProximityEvent, interactorObservation.CallbackCommand, 1.0);
-    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletLeaveProximityEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletMoveEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletPressEvent, interactorObservation.CallbackCommand, 1.0);
     interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletReleaseEvent, interactorObservation.CallbackCommand, 1.0);
-    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::TabletTrackingChangeEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::StartPanEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EndPanEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::StartPinchEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EndPinchEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::StartRotateEvent, interactorObservation.CallbackCommand, 1.0);
+    interactorObservation.ObservationTags << interactor->AddObserver(vtkCommand::EndRotateEvent, interactorObservation.CallbackCommand, 1.0);
     d->EventObservations << interactorObservation;
 
     // Slice node observation
@@ -2795,74 +2800,64 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
   vtkMRMLAbstractViewNode* callerViewNode = vtkMRMLAbstractViewNode::SafeDownCast(caller);
   if (callerInteractor)
     {
-    if (self->mrmlSegmentEditorNode() && self->mrmlSegmentEditorNode()->GetTabletModeEnabled())
+    if (eid == vtkCommand::StartPanEvent || eid == vtkCommand::StartPinchEvent || eid == vtkCommand::StartRotateEvent)
       {
-      static double lastTabletMoveEvent = -1;
-      double timeSinceLastEvent;
-      switch (eid)
-        {
-        case vtkCommand::TabletPressEvent:
-          if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::LeftButton)
-            {
-            eid = vtkCommand::LeftButtonPressEvent;
-            }
-          else if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::RightButton)
-            {
-            eid = vtkCommand::RightButtonReleaseEvent;
-            }
+      self->d_ptr->GestureInProgress = true;
+      }
+    if (eid == vtkCommand::EndPanEvent || eid == vtkCommand::EndPinchEvent || eid == vtkCommand::EndRotateEvent)
+      {
+      self->d_ptr->GestureInProgress = false;
+      }
+    if (self->d_ptr->GestureInProgress)
+      {
+      return;
+      }
+
+    static double lastTabletMoveEvent = -1;
+    double timeSinceLastEvent;
+    switch (eid)
+      {
+      case vtkCommand::TabletPressEvent:
+        if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::LeftButton)
+          {
+          eid = vtkCommand::LeftButtonPressEvent;
+          }
+        else if (callerInteractor->GetTabletButtons() & vtkRenderWindowInteractor::TabletButtonType::RightButton)
+          {
+          eid = vtkCommand::RightButtonReleaseEvent;
+          }
+        if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
+          {
+          activeEffect->setCommonParameter("TabletPressure", callerInteractor->GetTabletPressure());
+          }
+        else
+          {
+          activeEffect->setCommonParameter("TabletPressure", 0.0);
+          }
+        break;
+      case vtkCommand::TabletMoveEvent:
+        timeSinceLastEvent = vtkTimerLog::GetUniversalTime() - lastTabletMoveEvent;
+        if (lastTabletMoveEvent < 0 || timeSinceLastEvent >= 0.05)
+          {
+          eid = vtkCommand::MouseMoveEvent;
+          lastTabletMoveEvent = vtkTimerLog::GetUniversalTime();
           if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
             {
-            activeEffect->setParameter("TabletPressure", callerInteractor->GetTabletPressure());
+            activeEffect->setCommonParameter("TabletPressure", callerInteractor->GetTabletPressure());
             }
           else
             {
-            activeEffect->setParameter("TabletPressure", 0.5);
+            activeEffect->setCommonParameter("TabletPressure", 0.0);
             }
-          break;
-        case vtkCommand::TabletMoveEvent:
-          timeSinceLastEvent = vtkTimerLog::GetUniversalTime() - lastTabletMoveEvent;
-          if (lastTabletMoveEvent < 0 || timeSinceLastEvent >= 0.05)
-            {
-            eid = vtkCommand::MouseMoveEvent;
-            lastTabletMoveEvent = vtkTimerLog::GetUniversalTime();
-            if (self->d_func()->CurrentPointer == QTabletEvent::PointerType::Pen)
-              {
-              activeEffect->setParameter("TabletPressure", callerInteractor->GetTabletPressure());
-              }
-            else
-              {
-              activeEffect->setParameter("TabletPressure", 0.5);
-              }
-            }
-          else
-            {
-            eid = 0;
-            }
-          break;
-        case vtkCommand::TabletReleaseEvent:
-          eid = vtkCommand::LeftButtonReleaseEvent;
-          break;
-        case vtkCommand::LeftButtonPressEvent:
-          qCritical() << "Left button event during tablet mode!";
-        case vtkCommand::MouseMoveEvent:
-        case vtkCommand::LeftButtonReleaseEvent:
-        case vtkCommand::RightButtonPressEvent:
-        case vtkCommand::RightButtonReleaseEvent:
+          }
+        else
+          {
           eid = 0;
-        }
-      }
-    else
-      {
-      switch (eid)
-        {
-        case vtkCommand::TabletPressEvent:
-        case vtkCommand::TabletMoveEvent:
-        case vtkCommand::TabletReleaseEvent:
-          eid = 0;
-        default:
-          break;
-
-        }
+          }
+        break;
+      case vtkCommand::TabletReleaseEvent:
+        eid = vtkCommand::LeftButtonReleaseEvent;
+        break;
       }
 
     bool abortEvent = activeEffect->processInteractionEvents(callerInteractor, eid, viewWidget);
@@ -3139,11 +3134,23 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   toggleActiveEffectShortcut->setProperty("effectIndex", -1);
   QObject::connect(toggleActiveEffectShortcut, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
 
-  // Space => activate/deactivate last effect
+  // Microsoft surface pen click
   QShortcut* toggleActiveEffectShortcut2 = new QShortcut(QKeySequence(Qt::Key_F20 + Qt::META), parent);
   d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut2);
   toggleActiveEffectShortcut2->setProperty("effectIndex", -1);
   QObject::connect(toggleActiveEffectShortcut2, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
+
+  // Microsoft surface pen double-click
+  QShortcut* toggleActiveEffectShortcut3 = new QShortcut(QKeySequence(Qt::Key_F18 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut3);
+  toggleActiveEffectShortcut3->setProperty("effectIndex", -1);
+  QObject::connect(toggleActiveEffectShortcut3, SIGNAL(activated()), this, SLOT(onSelectEffectOffsetShortcut()));
+
+  // Microsoft surface pen long-click
+  QShortcut* toggleActiveEffectShortcut4 = new QShortcut(QKeySequence(Qt::Key_F19 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut4);
+  toggleActiveEffectShortcut4->setProperty("effectIndex", +1);
+  QObject::connect(toggleActiveEffectShortcut4, SIGNAL(activated()), this, SLOT(onSelectEffectOffsetShortcut()));
 
   // z, y => undo, redo
   QShortcut* undoShortcut = new QShortcut(QKeySequence(Qt::Key_Z), parent);
@@ -3212,11 +3219,6 @@ void qMRMLSegmentEditorWidget::onTabletEnterProximity(int pointerType)
 {
   Q_D(qMRMLSegmentEditorWidget);
 
-  if (!d->TabletEnabledCheckBox->isChecked())
-    {
-    return;
-    }
-
   if (pointerType == QTabletEvent::PointerType::Eraser)
     {
     this->setActiveEffectByName("Erase");
@@ -3229,11 +3231,7 @@ void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
 {
   Q_D(qMRMLSegmentEditorWidget);
 
-  if (!d->TabletEnabledCheckBox->isChecked())
-    {
-    return;
-    }
-
+  qSlicerSegmentEditorAbstractEffect* lastEffect = d->LastActiveEffect;
   if (pointerType == QTabletEvent::PointerType::Eraser)
     {
     if (this->activeEffect() && this->activeEffect()->name() == "Erase")
@@ -3241,33 +3239,38 @@ void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
       this->setActiveEffect(d->LastActiveEffect);
       }
     }
+  d->LastActiveEffect = lastEffect;
   d->CurrentPointer = -1;
 }
 
 //-----------------------------------------------------------------------------
-void qMRMLSegmentEditorWidget::onTabletModeChanged(int checkState)
+void qMRMLSegmentEditorWidget::onSelectEffectOffsetShortcut()
 {
   Q_D(qMRMLSegmentEditorWidget);
-
-  qMRMLLayoutManager* layoutManager = qSlicerApplication::application()->layoutManager();
-  if (layoutManager)
+  QShortcut* shortcut = qobject_cast<QShortcut*>(sender());
+  if (shortcut == nullptr || d->Locked)
     {
-    QStringList sliceWidgetNames = layoutManager->sliceViewNames();
-    for (QString name : sliceWidgetNames)
-      {
-      qMRMLSliceWidget* widget = layoutManager->sliceWidget(name);
-      widget->setTabletTracking(checkState == Qt::Checked);
-      }
+    return;
     }
 
-  if (d->ParameterSetNode)
+  int indexOffset = shortcut->property("effectIndex").toInt();
+  qSlicerSegmentEditorAbstractEffect* activeEffect = this->activeEffect();
+  int nextEffect = -1;
+  for (int i = 0; i < this->effectCount(); ++i)
     {
-    d->ParameterSetNode->SetTabletModeEnabled(checkState == Qt::Checked);
-    if (d->ActiveEffect)
+    qSlicerSegmentEditorAbstractEffect* effect = this->effectByIndex(i);
+    if (activeEffect != effect)
       {
-      d->ActiveEffect->updateGUIFromMRML();
+      continue;
       }
+    nextEffect = (i + indexOffset) % this->effectCount();
     }
+  if (nextEffect < 0)
+    {
+    return;
+    }
+  qSlicerSegmentEditorAbstractEffect* selectedEffect = this->effectByIndex(nextEffect);
+  this->setActiveEffect(selectedEffect);
 }
 
 //-----------------------------------------------------------------------------

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>406</width>
-    <height>478</height>
+    <height>396</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -465,29 +465,6 @@
         </property>
         <property name="sizeAdjustPolicy">
          <enum>QComboBox::AdjustToContents</enum>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="ctkCollapsibleGroupBox" name="TabletGroupBox">
-     <property name="title">
-      <string>Tablet</string>
-     </property>
-     <layout class="QFormLayout" name="formLayout_2">
-      <item row="1" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Enabled</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QCheckBox" name="TabletEnabledCheckBox">
-        <property name="text">
-         <string/>
         </property>
        </widget>
       </item>

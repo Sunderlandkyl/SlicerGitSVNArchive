@@ -333,7 +333,7 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintAddPoint(qMRMLWidget* viewWidg
   this->PaintCoordinates_World->InsertNextPoint(brushPosition_World);
   this->PaintCoordinates_World->Modified();
 
-  if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint || (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled()))
+  if (q->integerParameter("BrushPixelMode") || !this->DelayedPaint)
     {
     this->paintApply(viewWidget);
     qSlicerSegmentEditorAbstractEffect::forceRender(viewWidget); // TODO: repaint all?
@@ -721,11 +721,14 @@ void qSlicerSegmentEditorPaintEffectPrivate::updateBrushModel(qMRMLWidget* viewW
   this->updateAbsoluteBrushDiameter();
 
   double diameterMm = q->doubleParameter("BrushAbsoluteDiameter");
-  if (q->parameterSetNode() && q->parameterSetNode()->GetTabletModeEnabled())
+
+  // TODO: Dynamic brush size is not currently supported with delayed paint.
+  if (!this->DelayedPaint && q->commonParameterDefined("TabletPressure") && q->commonParameterDefined("BrushPressureRange"))
     {
     double tabletPressure = q->doubleParameter("TabletPressure");
     double pressureRange = q->doubleParameter("BrushPressureRange");
     //diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 1 + 2 * pressureRange)));
+    //diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 10)));
     diameterMm = diameterMm * (pow(1 + pressureRange, pow(tabletPressure, 10)));
     }
 
@@ -1529,10 +1532,6 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
   d->BrushPressureRangeSlider->blockSignals(true);
   d->BrushPressureRangeSlider->setValue(this->doubleParameter("BrushPressureRange"));
   d->BrushPressureRangeSlider->blockSignals(false);
-  if (this->parameterSetNode())
-    {
-    d->BrushPressureRangeSlider->setHidden(!this->parameterSetNode()->GetTabletModeEnabled());
-    }
 
   d->BrushDiameterSpinBox->blockSignals(true);
   d->BrushDiameterSpinBox->setMRMLScene(this->scene());

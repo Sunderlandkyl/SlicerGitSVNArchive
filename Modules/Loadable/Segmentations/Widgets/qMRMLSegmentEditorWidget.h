@@ -337,6 +337,9 @@ protected slots:
   /// -1 toggles between no effect/last active effect.
   void onSelectEffectShortcut();
 
+  ///
+  void onSelectEffectOffsetShortcut();
+
   /// Segment selection shortcut is activated
   void onSelectSegmentShortcut();
 
@@ -399,7 +402,6 @@ protected slots:
 
   void onTabletEnterProximity(int pointerType);
   void onTabletLeaveProximity(int pointerType);
-  void onTabletModeChanged(int checkState);
 
 protected:
   /// Callback function invoked when interaction happens
