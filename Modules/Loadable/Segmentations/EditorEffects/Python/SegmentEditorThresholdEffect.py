@@ -599,7 +599,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
       thresh.SetOutValue(0)
       thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
       thresh.Update()
-      modifierLabelmap.DeepCopy(thresh.GetOutput())
+      modifierLabelmap.ShallowCopy(thresh.GetOutput())
     except IndexError:
       logging.error('apply: Failed to threshold master volume!')
       pass
@@ -722,13 +722,7 @@ class SegmentEditorThresholdEffect(AbstractScriptedSegmentEditorEffect):
     return abortEvent
 
   def createHistogramPipeline(self, sliceWidget):
-    brushType = HISTOGRAM_BRUSH_TYPE_CIRCLE
-    if self.boxROIButton.checked:
-      brushType = HISTOGRAM_BRUSH_TYPE_BOX
-    elif self.drawROIButton.checked:
-      brushType = HISTOGRAM_BRUSH_TYPE_DRAW
-    elif self.lineROIButton.checked:
-      brushType = HISTOGRAM_BRUSH_TYPE_LINE
+    brushType = self.scriptedEffect.parameter(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME)
     pipeline = HistogramPipeline(self, self.scriptedEffect, sliceWidget, brushType)
     self.histogramPipeline = pipeline
 

@@ -13,6 +13,7 @@ from .SegmentEditorLogicalEffect import *
 from .SegmentEditorMarginEffect import *
 from .SegmentEditorSmoothingEffect import *
 from .SegmentEditorThresholdEffect import *
+from .SegmentEditorThreshold2Effect import *
 
 from SegmentEditorEffects import *
 
@@ -29,7 +30,8 @@ editorEffectNames = [
   "SegmentEditorLogicalEffect",
   "SegmentEditorMarginEffect",
   "SegmentEditorSmoothingEffect",
-  "SegmentEditorThresholdEffect"
+  "SegmentEditorThresholdEffect",
+  "SegmentEditorThreshold2Effect",
   ]
 
 def registerEffects():

@@ -19,6 +19,7 @@ set(SegmentEditorEffects_PYTHON_SCRIPTS
   SegmentEditorMarginEffect
   SegmentEditorSmoothingEffect
   SegmentEditorThresholdEffect
+  SegmentEditorThreshold2Effect
   )
 
 set(SegmentEditorEffects_PYTHON_RESOURCES
