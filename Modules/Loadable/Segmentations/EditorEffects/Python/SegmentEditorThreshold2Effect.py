@@ -12,42 +12,6 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     SegmentEditorThresholdEffect.__init__(self, scriptedEffect)
     scriptedEffect.name = 'Threshold 2'
 
-    backgroundValue = 0
-    labelValue = 1
-
-    # Erode + Dilate + Island pipeline
-    self.thresh = vtk.vtkImageThreshold()
-    self.thresh.SetInValue(labelValue)
-    self.thresh.SetOutValue(backgroundValue)
-
-    self.erode = vtk.vtkImageDilateErode3D()
-    self.erode.SetInputConnection(self.thresh.GetOutputPort())
-    self.erode.SetDilateValue(backgroundValue)
-    self.erode.SetErodeValue(labelValue)
-
-    self.floodFillingFilter1 = vtk.vtkImageThresholdConnectivity()
-    self.floodFillingFilter1.SetInputConnection(self.erode.GetOutputPort())
-    self.floodFillingFilter1.SetInValue(backgroundValue)
-    self.floodFillingFilter1.ReplaceInOn()
-    self.floodFillingFilter1.ReplaceOutOff()
-    self.floodFillingFilter1.ThresholdBetween(labelValue, labelValue)
-
-    self.dilate = vtk.vtkImageDilateErode3D()
-    self.dilate.SetInputConnection(self.floodFillingFilter1.GetOutputPort())
-    self.dilate.SetDilateValue(labelValue)
-    self.dilate.SetErodeValue(backgroundValue)
-
-    self.imageMask = vtk.vtkImageMask()
-    self.imageMask.SetInputConnection(self.thresh.GetOutputPort())
-    self.imageMask.SetMaskedOutputValue(backgroundValue)
-    self.imageMask.NotMaskOn()
-
-    self.floodFillingFilter = vtk.vtkImageThresholdConnectivity()
-    self.floodFillingFilter.SetInputConnection(self.imageMask.GetOutputPort())
-    self.floodFillingFilter.SetInValue(labelValue)
-    self.floodFillingFilter.SetOutValue(backgroundValue)
-    self.floodFillingFilter.ThresholdBetween(labelValue, labelValue)
-
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
     clonedEffect = effects.qSlicerSegmentEditorScriptedEffect(None)
@@ -153,6 +117,9 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     if kernelSizePixel[0]<=1 and kernelSizePixel[1]<=1 and kernelSizePixel[2]<=1:
       return
 
+    # Get parameter set node
+    parameterSetNode = self.scriptedEffect.parameterSetNode()
+
     # Get parameters
     minimumThreshold = self.scriptedEffect.doubleParameter("MinimumThreshold")
     maximumThreshold = self.scriptedEffect.doubleParameter("MaximumThreshold")
@@ -160,48 +127,89 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     # Get modifier labelmap
     modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
 
-    try:
-      # Get master volume image data
-      import vtkSegmentationCorePython as vtkSegmentationCore
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
+    # Get master volume image data
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
 
-      # Perform thresholding
-      self.thresh.SetInputData(masterImageData)
-      self.thresh.ThresholdBetween(minimumThreshold, maximumThreshold)
-      self.thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
-      self.thresh.Update()
+    backgroundValue = 0
+    labelValue = 1
 
-    except IndexError:
-      logging.error('apply: Failed to threshold master volume!')
-      return
-      pass
+    # Pipeline
+    self.thresh = vtk.vtkImageThreshold()
+    self.thresh.SetInValue(labelValue)
+    self.thresh.SetOutValue(backgroundValue)
+    self.thresh.SetInputData(masterImageData)
+    self.thresh.ThresholdBetween(minimumThreshold, maximumThreshold)
+    self.thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
+    self.thresh.Update()
 
-    parameterSetNode = self.scriptedEffect.parameterSetNode()
+    self.erode = vtk.vtkImageDilateErode3D()
+    self.erode.SetInputConnection(self.thresh.GetOutputPort())
+    self.erode.SetDilateValue(backgroundValue)
+    self.erode.SetErodeValue(labelValue)
+    self.erode.SetKernelSize(
+      kernelSizePixel[0],
+      kernelSizePixel[1],
+      kernelSizePixel[2])
+
+    self.floodFillingFilterIsland = vtk.vtkImageThresholdConnectivity()
+    self.floodFillingFilterIsland.SetInputConnection(self.erode.GetOutputPort())
+    self.floodFillingFilterIsland.SetInValue(labelValue)
+    self.floodFillingFilterIsland.SetOutValue(backgroundValue)
+    self.floodFillingFilterIsland.ThresholdBetween(labelValue, labelValue)
+    self.floodFillingFilterIsland.SetSeedPoints(ijkPoints)
+
+    self.dislateIsland = vtk.vtkImageDilateErode3D()
+    self.dislateIsland.SetInputConnection(self.floodFillingFilterIsland.GetOutputPort())
+    self.dislateIsland.SetDilateValue(labelValue)
+    self.dislateIsland.SetErodeValue(backgroundValue)
+    self.dislateIsland.SetKernelSize(
+      2*kernelSizePixel[0],
+      2*kernelSizePixel[1],
+      2*kernelSizePixel[2])
+    self.dislateIsland.Update()
+
+    self.imageMaskIsland = vtk.vtkImageMask()
+    self.imageMaskIsland.SetInputConnection(self.erode.GetOutputPort())
+    self.imageMaskIsland.SetMaskedOutputValue(backgroundValue)
+    self.imageMaskIsland.NotMaskOn()
+    self.imageMaskIsland.SetMaskInputData(self.dislateIsland.GetOutput())
+
+    self.dilate = vtk.vtkImageDilateErode3D()
+    self.dilate.SetInputConnection(self.imageMaskIsland.GetOutputPort())
+    self.dilate.SetDilateValue(labelValue)
+    self.dilate.SetErodeValue(backgroundValue)
+    self.dilate.SetKernelSize(
+      kernelSizePixel[0],
+      kernelSizePixel[1],
+      kernelSizePixel[2])
+    self.dilate.Update()
+
+    self.imageMask = vtk.vtkImageMask()
+    self.imageMask.SetInputConnection(self.thresh.GetOutputPort())
+    self.imageMask.SetMaskedOutputValue(backgroundValue)
+    self.imageMask.NotMaskOn()
+    self.imageMask.SetMaskInputData(self.dilate.GetOutput())
+
+    self.floodFillingFilter = vtk.vtkImageThresholdConnectivity()
+    self.floodFillingFilter.SetInputConnection(self.imageMask.GetOutputPort())
+    self.floodFillingFilter.SetInValue(labelValue)
+    self.floodFillingFilter.SetOutValue(backgroundValue)
+    self.floodFillingFilter.ThresholdBetween(labelValue, labelValue)
+    self.floodFillingFilter.SetSeedPoints(ijkPoints)
+    self.floodFillingFilter.Update()
+
+    modifierLabelmap.ShallowCopy(self.floodFillingFilter.GetOutput())
 
     oldMasterVolumeIntensityMask = parameterSetNode.GetMasterVolumeIntensityMask()
     parameterSetNode.MasterVolumeIntensityMaskOn()
-
     oldIntensityMaskRange = parameterSetNode.GetMasterVolumeIntensityMaskRange()
     intensityRange = [minimumThreshold, maximumThreshold]
     if oldMasterVolumeIntensityMask:
       intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
     parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
 
-    self.erode.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
-
-    self.floodFillingFilter1.SetSeedPoints(ijkPoints)
-
-    self.dilate.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
-    self.dilate.Update()
-
-    self.imageMask.SetMaskInputData(self.dilate.GetOutput())
-
-    self.floodFillingFilter.SetSeedPoints(ijkPoints)
-    self.floodFillingFilter.Update()
-    modifierLabelmap.ShallowCopy(self.floodFillingFilter.GetOutput())
-
     self.scriptedEffect.saveStateForUndo()
-    self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
+    self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
 
     parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
     parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
@@ -218,8 +226,20 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     writer.SetInputData(self.erode.GetOutput())
     writer.Write()
 
-    writer.SetFileName(dir+"floodFillingFilter1.nrrd")
-    writer.SetInputData(self.floodFillingFilter1.GetOutput())
+    writer.SetFileName(dir+"floodFillingFilterIsland.nrrd")
+    writer.SetInputData(self.floodFillingFilterIsland.GetOutput())
+    writer.Write()
+
+    writer.SetFileName(dir+"dislateIsland.nrrd")
+    writer.SetInputData(self.dislateIsland.GetOutput())
+    writer.Write()
+
+    writer.SetFileName(dir+"imageMaskIsland.nrrd")
+    writer.SetInputData(self.imageMaskIsland.GetOutput())
+    writer.Write()
+
+    writer.SetFileName(dir+"dilate.nrrd")
+    writer.SetInputData(self.dilate.GetOutput())
     writer.Write()
 
     writer.SetFileName(dir+"imageMask.nrrd")
@@ -230,9 +250,6 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     writer.SetInputData(self.floodFillingFilter.GetOutput())
     writer.Write()
 
-    writer.SetFileName(dir+"dilate.nrrd")
-    writer.SetInputData(self.dilate.GetOutput())
-    writer.Write()
 
   def getKernelSizePixel(self):
     selectedSegmentLabelmapSpacing = [1.0, 1.0, 1.0]
