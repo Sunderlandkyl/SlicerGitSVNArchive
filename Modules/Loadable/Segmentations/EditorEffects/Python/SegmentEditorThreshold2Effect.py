@@ -11,8 +11,31 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     SegmentEditorThresholdEffect.__init__(self, scriptedEffect)
     scriptedEffect.name = 'Threshold 2'
 
+    backgroundValue = 0
+    labelValue = 1
+
     # Erode + Dilate + Island pipeline
-    #self.thresholdFilter
+    self.thresh = vtk.vtkImageThreshold()
+    self.thresh.SetInValue(labelValue)
+    self.thresh.SetOutValue(backgroundValue)
+
+    self.floodFillingFilter = vtk.vtkImageThresholdConnectivity()
+    self.dilate = vtk.vtkImageDilateErode3D()
+
+    self.erode = vtk.vtkImageDilateErode3D()
+    self.erode.SetInputConnection(self.thresh.GetOutputPort())
+    self.erode.SetDilateValue(backgroundValue)
+    self.erode.SetErodeValue(labelValue)
+
+    self.floodFillingFilter.SetInValue(labelValue)
+    self.floodFillingFilter.SetOutValue(backgroundValue)
+    self.floodFillingFilter.ThresholdBetween(labelValue, labelValue)
+    self.floodFillingFilter.SetInputConnection(self.erode.GetOutputPort())
+
+    self.dilate.SetInputConnection(self.floodFillingFilter.GetOutputPort())
+    self.dilate.SetDilateValue(labelValue)
+    self.dilate.SetErodeValue(backgroundValue)
+
 
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -106,6 +129,10 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     return abortEvent
 
   def keepIslandAtPoints(self, ijkPoints):
+    kernelSizePixel = self.getKernelSizePixel()
+    if kernelSizePixel[0]<=1 and kernelSizePixel[1]<=1 and kernelSizePixel[2]<=1:
+      return
+
     # Get parameters
     minimumThreshold = self.scriptedEffect.doubleParameter("MinimumThreshold")
     maximumThreshold = self.scriptedEffect.doubleParameter("MaximumThreshold")
@@ -119,13 +146,10 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
       masterImageData = self.scriptedEffect.masterVolumeImageData()
 
       # Perform thresholding
-      thresh = vtk.vtkImageThreshold()
-      thresh.SetInputData(masterImageData)
-      thresh.ThresholdBetween(minimumThreshold, maximumThreshold)
-      thresh.SetInValue(1)
-      thresh.SetOutValue(0)
-      thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
-      thresh.Update()
+      self.thresh.SetInputData(masterImageData)
+      self.thresh.ThresholdBetween(minimumThreshold, maximumThreshold)
+      self.thresh.SetOutputScalarType(modifierLabelmap.GetScalarType())
+      self.thresh.Update()
 
     except IndexError:
       logging.error('apply: Failed to threshold master volume!')
@@ -143,31 +167,12 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
       intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
     parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
 
-    kernelSizePixel = self.getKernelSizePixel()
-    backgroundValue = 0
-    labelValue = 1
+    self.erode.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
+    self.floodFillingFilter.SetSeedPoints(ijkPoints)
+    self.dilate.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
+    self.dilate.Update()
 
-    erode = vtk.vtkImageDilateErode3D()
-    erode.SetInputConnection(thresh.GetOutputPort())
-    erode.SetDilateValue(backgroundValue)
-    erode.SetErodeValue(labelValue)
-    erode.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
-
-    floodFillingFilter = vtk.vtkImageThresholdConnectivity()
-    floodFillingFilter.SetInputConnection(erode.GetOutputPort())
-    floodFillingFilter.SetSeedPoints(ijkPoints)
-    floodFillingFilter.ThresholdBetween(labelValue, labelValue)
-    floodFillingFilter.SetInValue(1)
-    floodFillingFilter.SetOutValue(0)
-
-    dilate = vtk.vtkImageDilateErode3D()
-    dilate.SetInputConnection(floodFillingFilter.GetOutputPort())
-    dilate.SetDilateValue(labelValue)
-    dilate.SetErodeValue(backgroundValue)
-    dilate.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
-    dilate.Update()
-
-    modifierLabelmap.ShallowCopy(dilate.GetOutput())
+    modifierLabelmap.ShallowCopy(self.dilate.GetOutput())
 
     self.scriptedEffect.saveStateForUndo()
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
