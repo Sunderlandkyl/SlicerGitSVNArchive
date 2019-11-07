@@ -177,9 +177,9 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     self.dilate.SetDilateValue(labelValue)
     self.dilate.SetErodeValue(backgroundValue)
     self.dilate.SetKernelSize(
-      kernelSizePixel[0],
-      kernelSizePixel[1],
-      kernelSizePixel[2])
+      2*kernelSizePixel[0]-1,
+      2*kernelSizePixel[1]-1,
+      2*kernelSizePixel[2]-1)
     self.dilate.Update()
 
     self.imageMask = vtk.vtkImageMask()
@@ -206,7 +206,7 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
 
     self.scriptedEffect.saveStateForUndo()
     modifierLabelmap.ShallowCopy(self.floodFillingFilter.GetOutput())
-    self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
+    self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
 
     parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
     parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
@@ -246,7 +246,6 @@ class SegmentEditorThreshold2Effect(SegmentEditorThresholdEffect):
     # writer.SetFileName(dir+"floodFillingFilter.nrrd")
     # writer.SetInputData(self.floodFillingFilter.GetOutput())
     # writer.Write()
-
 
   def getKernelSizePixel(self):
     selectedSegmentLabelmapSpacing = [1.0, 1.0, 1.0]
