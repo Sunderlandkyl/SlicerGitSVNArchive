@@ -69,9 +69,13 @@
 #include <vtkSlicerApplicationLogic.h>
 
 // MRML includes
+#include <vtkMRMLCameraDisplayableManager.h>
+#include <vtkMRMLCameraWidget.h>
+#include <vtkMRMLCrosshairDisplayableManager.h>
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLSelectionNode.h>
 #include <vtkMRMLScene.h>
+#include <vtkMRMLSliceIntersectionWidget.h>
 #include <vtkMRMLSliceNode.h>
 #include <vtkMRMLTransformNode.h>
 #include <vtkMRMLViewNode.h>
@@ -311,8 +315,6 @@ public:
   QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
 
   int CurrentPointer;
-
-  bool GestureInProgress;
 };
 
 //-----------------------------------------------------------------------------
@@ -335,7 +337,6 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   , EffectButtonStyle(Qt::ToolButtonTextUnderIcon)
   , RotateWarningInNodeSelectorLayout(true)
   , CurrentPointer(-1)
-  , GestureInProgress(false)
 {
   this->AlignedMasterVolume = vtkOrientedImageData::New();
   this->ModifierLabelmap = vtkOrientedImageData::New();
@@ -2800,17 +2801,49 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
   vtkMRMLAbstractViewNode* callerViewNode = vtkMRMLAbstractViewNode::SafeDownCast(caller);
   if (callerInteractor)
     {
-    if (eid == vtkCommand::StartPanEvent || eid == vtkCommand::StartPinchEvent || eid == vtkCommand::StartRotateEvent)
+    vtkNew<vtkCollection> displayManagers;
+    qMRMLSliceWidget* sliceWidget = qobject_cast<qMRMLSliceWidget*>(viewWidget);
+    if (sliceWidget)
       {
-      self->d_ptr->GestureInProgress = true;
+      sliceWidget->sliceView()->getDisplayableManagers(displayManagers);
       }
-    if (eid == vtkCommand::EndPanEvent || eid == vtkCommand::EndPinchEvent || eid == vtkCommand::EndRotateEvent)
+    qMRMLThreeDWidget* threeDWidget = qobject_cast<qMRMLThreeDWidget*>(viewWidget);
+    if (threeDWidget)
       {
-      self->d_ptr->GestureInProgress = false;
+      threeDWidget->threeDView()->getDisplayableManagers(displayManagers);
       }
-    if (self->d_ptr->GestureInProgress)
+
+    vtkMRMLCrosshairDisplayableManager* crosshairDisplayableManager = nullptr;
+    vtkMRMLCameraDisplayableManager* cameraDisplayableManager = nullptr;
+    for (int i = 0; i < displayManagers->GetNumberOfItems(); ++i)
       {
-      return;
+      vtkObject* object = displayManagers->GetItemAsObject(i);
+      if (object->IsA("vtkMRMLCrosshairDisplayableManager"))
+        {
+        crosshairDisplayableManager = vtkMRMLCrosshairDisplayableManager::SafeDownCast(object);
+        break;
+        }
+      else if (object->IsA("vtkMRMLCameraDisplayableManager"))
+        {
+        cameraDisplayableManager = vtkMRMLCameraDisplayableManager::SafeDownCast(object);
+        }
+      }
+
+    if (crosshairDisplayableManager)
+      {
+      int widgetState = crosshairDisplayableManager->GetSliceIntersectionWidget()->GetWidgetState();
+      if (widgetState == vtkMRMLSliceIntersectionWidget::WidgetStateTouchGesture)
+        {
+        return;
+        }
+      }
+    else if (cameraDisplayableManager)
+      {
+      int widgetState = cameraDisplayableManager->GetCameraWidget()->GetWidgetState();
+      if (widgetState == vtkMRMLCameraWidget::WidgetStateTouchGesture)
+        {
+        return;
+        }
       }
 
     static double lastTabletMoveEvent = -1;
