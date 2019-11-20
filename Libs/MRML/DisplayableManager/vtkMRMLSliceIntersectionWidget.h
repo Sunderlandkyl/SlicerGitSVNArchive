@@ -154,6 +154,11 @@ public:
 
   void UpdateInteractionEventMapping();
 
+  /// Adjust the slice position with respect to current slice node offset
+  void IncrementSlice();
+  void DecrementSlice();
+  void MoveSlice(double delta);
+
 protected:
   vtkMRMLSliceIntersectionWidget();
   ~vtkMRMLSliceIntersectionWidget() override;
@@ -230,10 +235,6 @@ protected:
   /// for current layer setup (use logic to look for spacing of first non-null
   /// layer)
   double GetSliceSpacing();
-  /// Adjust the slice position with respect to current slice node offset
-  void IncrementSlice();
-  void DecrementSlice();
-  void MoveSlice(double delta);
 
   ///
   /// Change the displayed volume in the selected layer by moving

@@ -315,6 +315,8 @@ public:
   QSharedPointer<qSegmentEditorApplicationEventFilter> ApplicationEventFilter;
 
   int CurrentPointer;
+
+  qMRMLSliceWidget* LastActiveSliceWidget;
 };
 
 //-----------------------------------------------------------------------------
@@ -337,6 +339,7 @@ qMRMLSegmentEditorWidgetPrivate::qMRMLSegmentEditorWidgetPrivate(qMRMLSegmentEdi
   , EffectButtonStyle(Qt::ToolButtonTextUnderIcon)
   , RotateWarningInNodeSelectorLayout(true)
   , CurrentPointer(-1)
+  , LastActiveSliceWidget(nullptr)
 {
   this->AlignedMasterVolume = vtkOrientedImageData::New();
   this->ModifierLabelmap = vtkOrientedImageData::New();
@@ -2806,6 +2809,7 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
     if (sliceWidget)
       {
       sliceWidget->sliceView()->getDisplayableManagers(displayManagers);
+      self->d_ptr->LastActiveSliceWidget = sliceWidget;
       }
     qMRMLThreeDWidget* threeDWidget = qobject_cast<qMRMLThreeDWidget*>(viewWidget);
     if (threeDWidget)
@@ -2870,7 +2874,7 @@ void qMRMLSegmentEditorWidget::processEvents(vtkObject* caller,
         break;
       case vtkCommand::TabletMoveEvent:
         timeSinceLastEvent = vtkTimerLog::GetUniversalTime() - lastTabletMoveEvent;
-        if (lastTabletMoveEvent < 0 || timeSinceLastEvent >= 0.05)
+        if (lastTabletMoveEvent < 0 || timeSinceLastEvent >= 0.1)
           {
           eid = vtkCommand::MouseMoveEvent;
           lastTabletMoveEvent = vtkTimerLog::GetUniversalTime();
@@ -3163,22 +3167,22 @@ void qMRMLSegmentEditorWidget::installKeyboardShortcuts(QWidget* parent /*=nullp
   QObject::connect(toggleActiveEffectShortcut, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
 
   // Microsoft surface pen click
-  QShortcut* toggleActiveEffectShortcut2 = new QShortcut(QKeySequence(Qt::Key_F20 + Qt::META), parent);
-  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut2);
-  toggleActiveEffectShortcut2->setProperty("effectIndex", -1);
-  QObject::connect(toggleActiveEffectShortcut2, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
+  QShortcut* changeCurrentSliceShortcut = new QShortcut(QKeySequence(Qt::Key_F20 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(changeCurrentSliceShortcut);
+  changeCurrentSliceShortcut->setProperty("sliceOffset", +1);
+  QObject::connect(changeCurrentSliceShortcut, SIGNAL(activated()), this, SLOT(onChangeSliceShortcut()));
 
   // Microsoft surface pen double-click
-  QShortcut* toggleActiveEffectShortcut3 = new QShortcut(QKeySequence(Qt::Key_F18 + Qt::META), parent);
-  d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut3);
-  toggleActiveEffectShortcut3->setProperty("effectIndex", -1);
-  QObject::connect(toggleActiveEffectShortcut3, SIGNAL(activated()), this, SLOT(onSelectEffectOffsetShortcut()));
+  QShortcut* changeCurrentSliceShortcut2 = new QShortcut(QKeySequence(Qt::Key_F19 + Qt::META), parent);
+  d->KeyboardShortcuts.push_back(changeCurrentSliceShortcut2);
+  changeCurrentSliceShortcut2->setProperty("sliceOffset", -1);
+  QObject::connect(changeCurrentSliceShortcut2, SIGNAL(activated()), this, SLOT(onChangeSliceShortcut()));
 
   // Microsoft surface pen long-click
-  QShortcut* toggleActiveEffectShortcut4 = new QShortcut(QKeySequence(Qt::Key_F19 + Qt::META), parent);
+  QShortcut* toggleActiveEffectShortcut4 = new QShortcut(QKeySequence(Qt::Key_F18 + Qt::META), parent);
   d->KeyboardShortcuts.push_back(toggleActiveEffectShortcut4);
-  toggleActiveEffectShortcut4->setProperty("effectIndex", +1);
-  QObject::connect(toggleActiveEffectShortcut4, SIGNAL(activated()), this, SLOT(onSelectEffectOffsetShortcut()));
+  toggleActiveEffectShortcut4->setProperty("effectIndex", -1);
+  QObject::connect(toggleActiveEffectShortcut4, SIGNAL(activated()), this, SLOT(onSelectEffectShortcut()));
 
   // z, y => undo, redo
   QShortcut* undoShortcut = new QShortcut(QKeySequence(Qt::Key_Z), parent);
@@ -3272,7 +3276,7 @@ void qMRMLSegmentEditorWidget::onTabletLeaveProximity(int pointerType)
 }
 
 //-----------------------------------------------------------------------------
-void qMRMLSegmentEditorWidget::onSelectEffectOffsetShortcut()
+void qMRMLSegmentEditorWidget::onChangeSliceShortcut()
 {
   Q_D(qMRMLSegmentEditorWidget);
   QShortcut* shortcut = qobject_cast<QShortcut*>(sender());
@@ -3281,24 +3285,37 @@ void qMRMLSegmentEditorWidget::onSelectEffectOffsetShortcut()
     return;
     }
 
-  int indexOffset = shortcut->property("effectIndex").toInt();
-  qSlicerSegmentEditorAbstractEffect* activeEffect = this->activeEffect();
-  int nextEffect = -1;
-  for (int i = 0; i < this->effectCount(); ++i)
+  int sliceOffset = shortcut->property("sliceOffset").toInt();
+
+  vtkNew<vtkCollection> displayManagers;
+  qMRMLSliceWidget* sliceWidget = d->LastActiveSliceWidget;
+  if (sliceWidget)
     {
-    qSlicerSegmentEditorAbstractEffect* effect = this->effectByIndex(i);
-    if (activeEffect != effect)
+    sliceWidget->sliceView()->getDisplayableManagers(displayManagers);
+    }
+
+  vtkMRMLCrosshairDisplayableManager* crosshairDisplayableManager = nullptr;
+  for (int i = 0; i < displayManagers->GetNumberOfItems(); ++i)
+    {
+    vtkObject* object = displayManagers->GetItemAsObject(i);
+    if (object->IsA("vtkMRMLCrosshairDisplayableManager"))
       {
-      continue;
+      crosshairDisplayableManager = vtkMRMLCrosshairDisplayableManager::SafeDownCast(object);
+      break;
       }
-    nextEffect = (i + indexOffset) % this->effectCount();
     }
-  if (nextEffect < 0)
+
+  if (crosshairDisplayableManager)
     {
-    return;
+    if (sliceOffset > 0)
+      {
+      crosshairDisplayableManager->GetSliceIntersectionWidget()->IncrementSlice();
+      }
+    else
+      {
+      crosshairDisplayableManager->GetSliceIntersectionWidget()->DecrementSlice();
+      }
     }
-  qSlicerSegmentEditorAbstractEffect* selectedEffect = this->effectByIndex(nextEffect);
-  this->setActiveEffect(selectedEffect);
 }
 
 //-----------------------------------------------------------------------------

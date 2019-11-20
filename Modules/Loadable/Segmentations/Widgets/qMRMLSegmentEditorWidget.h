@@ -337,8 +337,10 @@ protected slots:
   /// -1 toggles between no effect/last active effect.
   void onSelectEffectShortcut();
 
-  ///
-  void onSelectEffectOffsetShortcut();
+  /// Increment or deincrement the current slice
+  /// +1 Increments
+  /// -1 Deincrements
+  void onChangeSliceShortcut();
 
   /// Segment selection shortcut is activated
   void onSelectSegmentShortcut();

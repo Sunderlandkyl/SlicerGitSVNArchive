@@ -180,6 +180,7 @@ public:
   QCheckBox* ColorSmudgeCheckbox;
   QCheckBox* EraseAllSegmentsCheckbox;
   QCheckBox* BrushPixelModeCheckbox;
+  QCheckBox* DelayedPaintCheckbox;
 };
 
 #endif

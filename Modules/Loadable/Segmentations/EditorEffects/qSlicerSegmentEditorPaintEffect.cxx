@@ -389,7 +389,6 @@ void qSlicerSegmentEditorPaintEffectPrivate::paintApply(qMRMLWidget* viewWidget)
     updateExtentList << updateExtent[i];
     }
 
-
   // Rendering the feedback actor with no points will result in an error message that will clutter the log.
   // "No input data"
   this->clearBrushPipelines();
@@ -1483,6 +1482,13 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   //TODO: Implement this effect option
   //hbox->addWidget(d->BrushPixelModeCheckbox);
 
+  d->DelayedPaintCheckbox = new QCheckBox("Delayed paint");
+  d->DelayedPaintCheckbox->setToolTip("If not checked, then the paint effect is applied continuously.");
+  if (!this->m_AlwaysErase)
+    {
+    //hbox->addWidget(d->DelayedPaintCheckbox);
+    }
+
   this->addOptionsWidget(hbox);
 
   QObject::connect(d->BrushDiameterRelativeToggle, SIGNAL(clicked()), d, SLOT(onDiameterUnitsClicked()));
@@ -1491,6 +1497,7 @@ void qSlicerSegmentEditorPaintEffect::setupOptionsFrame()
   QObject::connect(d->ColorSmudgeCheckbox, SIGNAL(clicked()), this, SLOT(updateMRMLFromGUI()));
   QObject::connect(d->EraseAllSegmentsCheckbox, SIGNAL(clicked()), this, SLOT(updateMRMLFromGUI()));
   QObject::connect(d->BrushPixelModeCheckbox, SIGNAL(clicked()), this, SLOT(updateMRMLFromGUI()));
+  QObject::connect(d->DelayedPaintCheckbox, SIGNAL(clicked()), this, SLOT(updateMRMLFromGUI()));
   QObject::connect(d->BrushDiameterSlider, SIGNAL(valueChanged(double)), d, SLOT(onDiameterValueChanged(double)));
   QObject::connect(d->BrushDiameterSpinBox, SIGNAL(valueChanged(double)), d, SLOT(onDiameterValueChanged(double)));
   QObject::connect(d->BrushPressureRangeSlider, SIGNAL(valueChanged(double)), d, SLOT(onPressureRangeChanged(double)));
@@ -1543,6 +1550,10 @@ void qSlicerSegmentEditorPaintEffect::updateGUIFromMRML()
   d->ColorSmudgeCheckbox->blockSignals(true);
   d->ColorSmudgeCheckbox->setChecked(this->integerParameter("ColorSmudge"));
   d->ColorSmudgeCheckbox->blockSignals(false);
+
+  d->DelayedPaintCheckbox->blockSignals(true);
+  d->DelayedPaintCheckbox->setChecked(this->delayedPaint());
+  d->DelayedPaintCheckbox->blockSignals(false);
 
   d->EraseAllSegmentsCheckbox->blockSignals(true);
   d->EraseAllSegmentsCheckbox->setChecked(this->integerParameter("EraseAllSegments"));
@@ -1630,6 +1641,7 @@ void qSlicerSegmentEditorPaintEffect::updateMRMLFromGUI()
     {
     // paint
     this->setParameter("ColorSmudge", (int)d->ColorSmudgeCheckbox->isChecked());
+    this->setDelayedPaint(d->DelayedPaintCheckbox->isChecked());
     }
   bool pixelMode = d->BrushPixelModeCheckbox->isChecked();
   bool pixelModeChanged = (pixelMode != (bool)this->integerParameter("BrushPixelMode"));
@@ -1638,6 +1650,8 @@ void qSlicerSegmentEditorPaintEffect::updateMRMLFromGUI()
   bool isBrushDiameterRelative = (d->BrushDiameterRelativeToggle->text() == "%");
   this->setCommonParameter("BrushDiameterIsRelative", isBrushDiameterRelative ? 1 : 0);
   d->onDiameterValueChanged(d->BrushDiameterSlider->value());
+
+
 
   // If pixel mode changed, then other GUI changes are due
   if (pixelModeChanged)
