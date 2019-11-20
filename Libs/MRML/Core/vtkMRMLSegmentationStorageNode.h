@@ -178,6 +178,9 @@ protected:
   /// Write binary labelmap representation to file
   virtual int WriteBinaryLabelmapRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string path);
 
+  /// Write fractional labelmap representation to file
+  virtual int WriteFractionalLabelmapRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string path);
+
   /// Write a poly data representation to file
   virtual int WritePolyDataRepresentation(vtkMRMLSegmentationNode* segmentationNode, std::string path);
 

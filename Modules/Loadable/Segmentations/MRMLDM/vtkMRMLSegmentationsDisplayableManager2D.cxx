@@ -989,12 +989,7 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
         maxLabelmapValue = std::max(maxLabelmapValue, labelmapValue);
         }
 
-      if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetFractionalLabelmapRepresentationName())
-        {
-        pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
-        pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
-        }
-      else
+      if (displayNode->GetDisplayRepresentationName2D() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName())
         {
         int numberOfValues = maxLabelmapValue - minLabelmapValue + 1;
         pipeline->LookupTableOutline->SetNumberOfTableValues(numberOfValues);
@@ -1055,11 +1050,14 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
           if (!this->SmoothFractionalLabelMapBorder)
             {
             pipeline->LookupTableFill->SetNumberOfTableValues(2);
+            pipeline->LookupTableFill->SetTableRange(0, 1);
             }
           else
             {
             pipeline->LookupTableFill->SetNumberOfTableValues(maximumValue - minimumValue + 1);
+            pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
             }
+
           double hsv[3] = { 0,0,0 };
           vtkMath::RGBToHSV(color, hsv);
           pipeline->LookupTableFill->SetHueRange(hsv[0], hsv[0]);
@@ -1067,7 +1065,6 @@ void vtkMRMLSegmentationsDisplayableManager2D::vtkInternal::UpdateDisplayNodePip
           pipeline->LookupTableFill->SetValueRange(hsv[2], hsv[2]);
           pipeline->LookupTableFill->SetAlphaRange(0.0,
             hierarchyOpacity* properties.Opacity2DFill* displayNode->GetOpacity2DFill()* genericDisplayNode->GetOpacity());
-          pipeline->LookupTableFill->SetTableRange(minimumValue, maximumValue);
           pipeline->LookupTableFill->ForceBuild();
 
           pipeline->LookupTableOutline->SetTableValue(0,color[0], color[1], color[2], 0.0);
