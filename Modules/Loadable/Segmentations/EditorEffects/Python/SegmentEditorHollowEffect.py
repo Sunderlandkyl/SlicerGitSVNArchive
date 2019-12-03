@@ -1,6 +1,7 @@
 import os
 import vtk, qt, ctk, slicer
 import logging
+import math
 from SegmentEditorEffects import *
 
 class SegmentEditorHollowEffect(AbstractScriptedSegmentEditorEffect):
@@ -52,8 +53,8 @@ class SegmentEditorHollowEffect(AbstractScriptedSegmentEditorEffect):
 
     shellThicknessFrame = qt.QHBoxLayout()
     shellThicknessFrame.addWidget(self.shellThicknessMmSpinBox)
-    shellThicknessFrame.addWidget(self.kernelSizePixel)
     self.shellThicknessMmLabel = self.scriptedEffect.addLabeledOptionsWidget("Shell thickness:", shellThicknessFrame)
+    self.scriptedEffect.addLabeledOptionsWidget("", self.kernelSizePixel)
 
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
@@ -82,7 +83,7 @@ class SegmentEditorHollowEffect(AbstractScriptedSegmentEditorEffect):
 
     # Size rounded to nearest odd number. If kernel size is even then image gets shifted.
     shellThicknessMm = abs(self.scriptedEffect.doubleParameter("ShellThicknessMm"))
-    kernelSizePixel = [int(round(shellThicknessMm / selectedSegmentLabelmapSpacing[componentIndex])*2.0+1.0) for componentIndex in range(3)]
+    kernelSizePixel = [int(round(shellThicknessMm / selectedSegmentLabelmapSpacing[componentIndex])) for componentIndex in range(3)]
     return kernelSizePixel
 
   def updateGUIFromMRML(self):
@@ -109,15 +110,18 @@ class SegmentEditorHollowEffect(AbstractScriptedSegmentEditorEffect):
     if selectedSegmentLabelmap:
       selectedSegmentLabelmapSpacing = selectedSegmentLabelmap.GetSpacing()
       kernelSizePixel = self.getKernelSizePixel()
-      if kernelSizePixel[0]<=1 and kernelSizePixel[1]<=1 and kernelSizePixel[2]<=1:
-        self.kernelSizePixel.text = "requested. Not feasible at current resolution."
+      if kernelSizePixel[0] < 1 and kernelSizePixel[1] < 1 and kernelSizePixel[2] < 1:
+        self.kernelSizePixel.text = "Not feasible at current resolution."
         self.applyButton.setEnabled(False)
       else:
-        thicknessMm = [abs((kernelSizePixel[i]-1.0)/2.0*selectedSegmentLabelmapSpacing[i]) for i in range(3)]
-        self.kernelSizePixel.text = "requested. Actual: {0} x {1} x {2} mm.".format(*thicknessMm)
+        thicknessMm = [abs((kernelSizePixel[i])*selectedSegmentLabelmapSpacing[i]) for i in range(3)]
+        for i in range(3):
+          if thicknessMm[i] > 0:
+            thicknessMm[i] = round(thicknessMm[i], max(int(-math.floor(math.log10(thicknessMm[i]))),1))
+        self.kernelSizePixel.text = "Actual: {0} x {1} x {2} mm.".format(*thicknessMm)
         self.applyButton.setEnabled(True)
     else:
-      self.kernelSizePixel.text = "empty segment"
+      self.kernelSizePixel.text = "Empty segment"
 
     self.setWidgetMinMaxStepFromImageSpacing(self.shellThicknessMmSpinBox, self.scriptedEffect.selectedSegmentLabelmap())
 
@@ -154,49 +158,31 @@ class SegmentEditorHollowEffect(AbstractScriptedSegmentEditorEffect):
     thresh.SetInValue(backgroundValue)
     thresh.SetOutValue(labelValue)
     thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
-    thresh.Update()
 
-    subtract = vtk.vtkImageMathematics()
-    subtract.SetOperationToSubtract()
-    kernelSizePixel = self.getKernelSizePixel()
     shellMode = self.scriptedEffect.parameter("ShellMode")
+    shellThicknessMm = self.scriptedEffect.doubleParameter("ShellThicknessMm")
+    import vtkITK
+    margin = vtkITK.vtkITKImageMargin()
+    margin.SetInputConnection(thresh.GetOutputPort())
+
+    voxelDiameter = min(selectedSegmentLabelmap.GetSpacing())
     if shellMode == MEDIAL_SURFACE:
-      dilateKernelSizePixel = [int((kernelSizePixel[i]+1.0)/4.0)*2+1 for i in range(3)]
-      erodeKernelSizePixel = [int((kernelSizePixel[i]-1.0)/4.0)*2+1 for i in range(3)]
+      margin.SetOuterMarginMm(0.5 * shellThicknessMm)
+      margin.SetInnerMarginMm(-0.5 * shellThicknessMm)
     elif shellMode == INSIDE_SURFACE:
-      dilateKernelSizePixel = kernelSizePixel
-      erodeKernelSizePixel = [1, 1, 1]
+      margin.SetOuterMarginMm(shellThicknessMm + 0.5*voxelDiameter)
+      margin.SetInnerMarginMm(0.0 + 0.1*voxelDiameter)
     elif shellMode == OUTSIDE_SURFACE:
-      dilateKernelSizePixel = [1, 1, 1]
-      erodeKernelSizePixel = kernelSizePixel
+      margin.SetOuterMarginMm(0.0)
+      margin.SetInnerMarginMm(-shellThicknessMm + 0.5*voxelDiameter)
 
-    if dilateKernelSizePixel[0]>1 or dilateKernelSizePixel[1]>1 or dilateKernelSizePixel[2]>1:
-      dilate = vtk.vtkImageDilateErode3D()
-      dilate.SetInputConnection(thresh.GetOutputPort())
-      dilate.SetDilateValue(labelValue)
-      dilate.SetErodeValue(backgroundValue)
-      dilate.SetKernelSize(*dilateKernelSizePixel)
-      dilate.Update()
-      subtract.SetInput1Data(dilate.GetOutput())
-    else:
-      subtract.SetInput1Data(thresh.GetOutput())
-
-    if erodeKernelSizePixel[0]>1 or erodeKernelSizePixel[1]>1 or erodeKernelSizePixel[2]>1:
-      erode = vtk.vtkImageDilateErode3D()
-      erode.SetInputConnection(thresh.GetOutputPort())
-      erode.SetDilateValue(backgroundValue)
-      erode.SetErodeValue(labelValue)
-      erode.SetKernelSize(*erodeKernelSizePixel)
-      erode.Update()
-      subtract.SetInput2Data(erode.GetOutput())
-    else:
-      subtract.SetInput2Data(thresh.GetOutput())
+    modifierLabelmap.DeepCopy(margin.GetOutput())
 
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
-    subtract.Update()
-    modifierLabelmap.DeepCopy(subtract.GetOutput())
+    margin.Update()
+    modifierLabelmap.ShallowCopy(margin.GetOutput())
 
     # Apply changes
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)

@@ -1,6 +1,7 @@
 import os
 import vtk, qt, ctk, slicer
 import logging
+import math
 from SegmentEditorEffects import *
 
 class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
@@ -50,8 +51,8 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
 
     marginSizeFrame = qt.QHBoxLayout()
     marginSizeFrame.addWidget(self.marginSizeMmSpinBox)
-    marginSizeFrame.addWidget(self.kernelSizePixel)
     self.marginSizeMmLabel = self.scriptedEffect.addLabeledOptionsWidget("Margin size:", marginSizeFrame)
+    self.scriptedEffect.addLabeledOptionsWidget("", self.kernelSizePixel)
 
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
@@ -78,7 +79,7 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
 
     # size rounded to nearest odd number. If kernel size is even then image gets shifted.
     marginSizeMm = abs(self.scriptedEffect.doubleParameter("MarginSizeMm"))
-    kernelSizePixel = [int(round((marginSizeMm / selectedSegmentLabelmapSpacing[componentIndex]+1)/2)*2-1) for componentIndex in range(3)]
+    kernelSizePixel = [int(round(marginSizeMm / selectedSegmentLabelmapSpacing[componentIndex])) for componentIndex in range(3)]
     return kernelSizePixel
 
   def updateGUIFromMRML(self):
@@ -95,14 +96,23 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
     self.shrinkOptionRadioButton.setChecked(marginSizeMm < 0)
     self.shrinkOptionRadioButton.blockSignals(wasBlocked)
 
-    kernelSizePixel = self.getKernelSizePixel()
-
-    if kernelSizePixel[0]<=1 and kernelSizePixel[1]<=1 and kernelSizePixel[2]<=1:
-      self.kernelSizePixel.text = "margin too small"
-      self.applyButton.setEnabled(False)
+    selectedSegmentLabelmapSpacing = [1.0, 1.0, 1.0]
+    selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
+    if selectedSegmentLabelmap:
+      selectedSegmentLabelmapSpacing = selectedSegmentLabelmap.GetSpacing()
+      kernelSizePixel = self.getKernelSizePixel()
+      if kernelSizePixel[0] < 1 and kernelSizePixel[1] < 1 and kernelSizePixel[2] < 1:
+        self.kernelSizePixel.text = "Not feasible at current resolution."
+        self.applyButton.setEnabled(False)
+      else:
+        thicknessMm = [abs((kernelSizePixel[i])*selectedSegmentLabelmapSpacing[i]) for i in range(3)]
+        for i in range(3):
+          if thicknessMm[i] > 0:
+            thicknessMm[i] = round(thicknessMm[i], max(int(-math.floor(math.log10(thicknessMm[i]))),1))
+        self.kernelSizePixel.text = "Actual: {0} x {1} x {2} mm.".format(*thicknessMm)
+        self.applyButton.setEnabled(True)
     else:
-      self.kernelSizePixel.text = "{0}x{1}x{2} pixels".format(abs(kernelSizePixel[0]), abs(kernelSizePixel[1]), abs(kernelSizePixel[2]))
-      self.applyButton.setEnabled(True)
+      self.kernelSizePixel.text = "Empty segment"
 
     self.setWidgetMinMaxStepFromImageSpacing(self.marginSizeMmSpinBox, self.scriptedEffect.selectedSegmentLabelmap())
 
@@ -119,7 +129,6 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameter("MarginSizeMm", marginSizeMm)
 
   def onApply(self):
-
     self.scriptedEffect.saveStateForUndo()
 
     # Get modifier labelmap and parameters
@@ -127,7 +136,6 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
 
     marginSizeMm = self.scriptedEffect.doubleParameter("MarginSizeMm")
-    kernelSizePixel = self.getKernelSizePixel()
 
     # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
     labelValue = 1
@@ -139,23 +147,18 @@ class SegmentEditorMarginEffect(AbstractScriptedSegmentEditorEffect):
     thresh.SetOutValue(labelValue)
     thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
 
-    erodeDilate = vtk.vtkImageDilateErode3D()
-    erodeDilate.SetInputConnection(thresh.GetOutputPort())
-    if marginSizeMm>0:
-      # grow
-      erodeDilate.SetDilateValue(labelValue)
-      erodeDilate.SetErodeValue(backgroundValue)
+    voxelDiameter = min(selectedSegmentLabelmap.GetSpacing())
+    if marginSizeMm > 0:
+      marginSizeMm += 0.1*voxelDiameter
     else:
-      # shrink
-      erodeDilate.SetDilateValue(backgroundValue)
-      erodeDilate.SetErodeValue(labelValue)
+      marginSizeMm -= 0.1*voxelDiameter
 
-    # This can be a long operation - indicate it to the user
-    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-
-    erodeDilate.SetKernelSize(kernelSizePixel[0],kernelSizePixel[1],kernelSizePixel[2])
-    erodeDilate.Update()
-    modifierLabelmap.DeepCopy(erodeDilate.GetOutput())
+    import vtkITK
+    margin = vtkITK.vtkITKImageMargin()
+    margin.SetInputConnection(thresh.GetOutputPort())
+    margin.SetOuterMarginMm(marginSizeMm)
+    margin.Update()
+    modifierLabelmap.ShallowCopy(margin.GetOutput())
 
     # Apply changes
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
