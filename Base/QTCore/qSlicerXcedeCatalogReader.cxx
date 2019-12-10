@@ -701,8 +701,8 @@ void qSlicerXcedeCatalogReaderPrivate::importVolumeNode(NodeType node)
     //volumeDisplayNode->SetAndObserveColorNodeID(colorLogic->GetDefaultFreeSurferLabelMapColorNodeID());
     // }else {
     // volumeDisplayNode->SetAndObserveColorNodeID("vtkMRMLColorTableNodeGrey");}
-    volumeDisplayNode->SetAndObserveColorNodeID(
-      this->ColorLogic->GetDefaultFreeSurferLabelMapColorNodeID());
+    //volumeDisplayNode->SetAndObserveColorNodeID(
+    //  this->ColorLogic->GetDefaultFreeSurferLabelMapColorNodeID());
     }
 
     // } else {

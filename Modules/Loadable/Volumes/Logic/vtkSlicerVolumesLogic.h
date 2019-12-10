@@ -86,10 +86,6 @@ public:
   virtual void SetColorLogic(vtkMRMLColorLogic* colorLogic);
   vtkMRMLColorLogic* GetColorLogic()const;
 
-  /// Examine the file name to see if the extension is one of the supported
-  /// freesurfer volume formats. Used to assign the proper colour node to label maps.
-  int IsFreeSurferVolume(const char* filename);
-
   /// The currently active mrml volume node
   void SetActiveVolumeNode(vtkMRMLVolumeNode *ActiveVolumeNode);
   vtkMRMLVolumeNode* GetActiveVolumeNode()const;
@@ -247,13 +243,6 @@ public:
     vtkMRMLVolumeNode *volumeNode,
     const char *name,
     bool cloneImageData = true);
-
-  /// Computes matrix we need to register
-  /// V1Node to V2Node given the "register.dat" matrix from tkregister2 (FreeSurfer)
-  void TranslateFreeSurferRegistrationMatrixIntoSlicerRASToRASMatrix(vtkMRMLVolumeNode *V1Node,
-                             vtkMRMLVolumeNode *V2Node,
-                             vtkMatrix4x4 *FSRegistrationMatrix,
-                             vtkMatrix4x4 *ResultsMatrix);
 
   /// Convenience method to compute a volume's Vox2RAS-tkreg Matrix
   void ComputeTkRegVox2RASMatrix ( vtkMRMLVolumeNode *VNode,

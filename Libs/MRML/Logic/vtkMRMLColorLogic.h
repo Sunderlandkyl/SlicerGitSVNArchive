@@ -17,7 +17,6 @@
 // MRML includes
 class vtkMRMLColorNode;
 class vtkMRMLColorTableNode;
-class vtkMRMLFreeSurferProceduralColorNode;
 class vtkMRMLProceduralColorNode;
 class vtkMRMLPETProceduralColorNode;
 class vtkMRMLdGEMRICProceduralColorNode;
@@ -90,12 +89,6 @@ public:
   /// | ColorTable                | Tint                     | CoolTint3                      | CoolTint3                      | CoolTint3                             | vtkMRMLColorTableNodeCoolTint3                              |
   /// | ProceduralColor           | Discrete                 | RandomIntegers                 | RandomIntegers                 | RandomIntegers                        | vtkMRMLProceduralColorNodeRandomIntegers                    |
   /// | ProceduralColor           | Continuous               | RedGreenBlue                   | RedGreenBlue                   | RedGreenBlue                          | vtkMRMLProceduralColorNodeRedGreenBlue                      |
-  /// | FreeSurferProceduralColor | FreeSurfer               | Heat                           | Heat                           | Heat                                  | vtkMRMLFreeSurferProceduralColorNodeHeat                    |
-  /// | FreeSurferProceduralColor | FreeSurfer               | BlueRed                        | BlueRed                        | BlueRed                               | vtkMRMLFreeSurferProceduralColorNodeBlueRed                 |
-  /// | FreeSurferProceduralColor | FreeSurfer               | RedBlue                        | RedBlue                        | RedBlue                               | vtkMRMLFreeSurferProceduralColorNodeRedBlue                 |
-  /// | FreeSurferProceduralColor | FreeSurfer               | RedGreen                       | RedGreen                       | RedGreen                              | vtkMRMLFreeSurferProceduralColorNodeRedGreen                |
-  /// | FreeSurferProceduralColor | FreeSurfer               | GreenRed                       | GreenRed                       | GreenRed                              | vtkMRMLFreeSurferProceduralColorNodeGreenRed                |
-  /// | ColorTable                | FreeSurfer               | File                           | FreeSurferLabels               | File                                  | vtkMRMLColorTableNodeFile                                   |
   /// | PETProceduralColor        | PET                      | PET-Heat                       | PET-Heat                       | PET-Heat                              | vtkMRMLPETProceduralColorNodePET-Heat                       |
   /// | PETProceduralColor        | PET                      | PET-Rainbow                    | PET-Rainbow                    | PET-Rainbow                           | vtkMRMLPETProceduralColorNodePET-Rainbow                    |
   /// | PETProceduralColor        | PET                      | PET-MaximumIntensityProjection | PET-MaximumIntensityProjection | PET-MaximumIntensityProjection        | vtkMRMLPETProceduralColorNodePET-MaximumIntensityProjection |
@@ -146,9 +139,6 @@ public:
   /// Return the default color table node id for a given type
   static const char * GetColorTableNodeID(int type);
 
-  /// Return the default freesurfer color node id for a given type
-  static const char * GetFreeSurferColorNodeID(int type);
-
   /// Return the default dGEMRIC color node id for a given type
   static const char * GetdGEMRICColorNodeID(int type);
 
@@ -166,9 +156,6 @@ public:
   /// \warning You are responsible to delete the returned string.
   static const char * GetFileColorNodeID(const char *fileName);
   static std::string  GetFileColorNodeSingletonTag(const char * fileName);
-
-  /// Return a default color node id for a freesurfer label map volume
-  virtual const char * GetDefaultFreeSurferLabelMapColorNodeID();
 
   /// Return a default color node id for a volume
   virtual const char * GetDefaultVolumeColorNodeID();
@@ -220,6 +207,9 @@ public:
   /// procedural node with a blank color transfer function.
   static vtkMRMLProceduralColorNode* CopyProceduralNode(vtkMRMLColorNode* colorNode, const char* copyName);
 
+  /// Creates a color node from the fileName
+  vtkMRMLColorTableNode* CreateFileNode(const char* fileName);
+
 protected:
   vtkMRMLColorLogic();
   ~vtkMRMLColorLogic() override;
@@ -238,27 +228,22 @@ protected:
   vtkMRMLColorTableNode* CreateDefaultTableNode(int type);
   vtkMRMLProceduralColorNode* CreateRandomNode();
   vtkMRMLProceduralColorNode* CreateRedGreenBlueNode();
-  vtkMRMLFreeSurferProceduralColorNode* CreateFreeSurferNode(int type);
-  vtkMRMLColorTableNode* CreateFreeSurferFileNode(const char* fileName);
   vtkMRMLPETProceduralColorNode* CreatePETColorNode(int type);
   vtkMRMLdGEMRICProceduralColorNode* CreatedGEMRICColorNode(int type);
   vtkMRMLColorTableNode* CreateDefaultFileNode(const std::string& colorname);
   vtkMRMLColorTableNode* CreateUserFileNode(const std::string& colorname);
-  vtkMRMLColorTableNode* CreateFileNode(const char* fileName);
   vtkMRMLProceduralColorNode* CreateProceduralFileNode(const char* fileName);
 
   void AddLabelsNode();
   void AddDefaultTableNode(int i);
   void AddDefaultProceduralNodes();
   void AddFreeSurferNode(int type);
-  void AddFreeSurferFileNode(vtkMRMLFreeSurferProceduralColorNode* basicFSNode);
   void AddPETNode(int type);
   void AddDGEMRICNode(int type);
   void AddDefaultFileNode(int i);
   void AddUserFileNode(int i);
 
   void AddDefaultTableNodes();
-  void AddFreeSurferNodes();
   void AddPETNodes();
   void AddDGEMRICNodes();
   void AddDefaultFileNodes();

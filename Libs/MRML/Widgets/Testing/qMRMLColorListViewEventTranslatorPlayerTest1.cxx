@@ -40,7 +40,7 @@
 
 // MRML includes
 #include <vtkMRMLColorTableNode.h>
-#include <vtkMRMLFreeSurferProceduralColorNode.h>
+//#include <vtkMRMLFreeSurferProceduralColorNode.h>
 #include <vtkMRMLPETProceduralColorNode.h>
 
 // VTK includes

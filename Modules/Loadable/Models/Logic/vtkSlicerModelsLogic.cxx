@@ -15,11 +15,10 @@
 /// MRML includes
 #include <vtkCacheManager.h>
 #include <vtkMRMLClipModelsNode.h>
-#include <vtkMRMLFreeSurferModelOverlayStorageNode.h>
-#include <vtkMRMLFreeSurferModelStorageNode.h>
 #include <vtkMRMLModelDisplayNode.h>
 #include <vtkMRMLModelHierarchyNode.h>
 #include <vtkMRMLModelNode.h>
+#include <vtkMRMLModelStorageNode.h>
 #include <vtkMRMLSelectionNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSubjectHierarchyNode.h>
@@ -249,7 +248,7 @@ int vtkSlicerModelsLogic::AddModels (const char* dirname, const char* suffix )
 }
 
 //----------------------------------------------------------------------------
-vtkMRMLModelNode* vtkSlicerModelsLogic::AddModel (const char* filename)
+vtkMRMLModelNode* vtkSlicerModelsLogic::AddModel(const char* filename)
 {
   if (this->GetMRMLScene() == nullptr ||
       filename == nullptr)
@@ -259,8 +258,6 @@ vtkMRMLModelNode* vtkSlicerModelsLogic::AddModel (const char* filename)
   vtkNew<vtkMRMLModelNode> modelNode;
   vtkNew<vtkMRMLModelDisplayNode> displayNode;
   vtkNew<vtkMRMLModelStorageNode> mStorageNode;
-  vtkNew<vtkMRMLFreeSurferModelStorageNode> fsmStorageNode;
-  fsmStorageNode->SetUseStripper(0);  // turn off stripping by default (breaks some pickers)
   vtkSmartPointer<vtkMRMLStorageNode> storageNode;
 
   // check for local or remote files
@@ -274,14 +271,12 @@ vtkMRMLModelNode* vtkSlicerModelsLogic::AddModel (const char* filename)
   if (useURI)
     {
     mStorageNode->SetURI(filename);
-    fsmStorageNode->SetURI(filename);
     // reset filename to the local file name
     localFile = ((this->GetMRMLScene())->GetCacheManager())->GetFilenameFromURI(filename);
     }
   else
     {
     mStorageNode->SetFileName(filename);
-    fsmStorageNode->SetFileName(filename);
     localFile = filename;
     }
   const std::string fname(localFile?localFile:"");
@@ -294,11 +289,6 @@ vtkMRMLModelNode* vtkSlicerModelsLogic::AddModel (const char* filename)
   if (mStorageNode->SupportedFileType(name.c_str()))
     {
     storageNode = mStorageNode.GetPointer();
-    }
-  else if (fsmStorageNode->SupportedFileType(name.c_str()))
-    {
-    vtkDebugMacro("AddModel: have a freesurfer type model file.");
-    storageNode = fsmStorageNode.GetPointer();
     }
 
   /* don't read just yet, need to add to the scene first for remote reading
@@ -406,14 +396,14 @@ void vtkSlicerModelsLogic::PrintSelf(ostream& os, vtkIndent indent)
 //----------------------------------------------------------------------------
 bool vtkSlicerModelsLogic::AddScalar(const char* filename, vtkMRMLModelNode *modelNode)
 {
+  return false; // TODO: Only handled through freesurfer currently
+
   if (modelNode == nullptr ||
       filename == nullptr)
     {
     vtkErrorMacro("Model node or file name are null.");
     return false;
     }
-
-  vtkNew<vtkMRMLFreeSurferModelOverlayStorageNode> storageNode;
 
   // check for local or remote files
   int useURI = 0; //false ;
@@ -427,61 +417,59 @@ bool vtkSlicerModelsLogic::AddScalar(const char* filename, vtkMRMLModelNode *mod
   const char *localFile;
   if (useURI)
     {
-    storageNode->SetURI(filename);
     // add other overlay storage nodes here
     localFile = ((this->GetMRMLScene())->GetCacheManager())->GetFilenameFromURI(filename);
     }
   else
     {
-    storageNode->SetFileName(filename);
     // add other overlay storage nodes here
     localFile = filename;
     }
 
   // check to see if it can read it
-  if (!storageNode->SupportedFileType(localFile))
-    {
-    return false;
-    }
+  //if (!storageNode->SupportedFileType(localFile))
+  //  {
+  //  return false;
+  //  }
 
-  this->GetMRMLScene()->AddNode(storageNode.GetPointer());
+  //this->GetMRMLScene()->AddNode(storageNode.GetPointer());
 
   // now read, since all the id's are set up
-  vtkDebugMacro("AddScalar: calling read data now.");
-  if (this->GetDebug()) { storageNode->DebugOn(); }
-  int retval = storageNode->ReadData(modelNode);
-  if (retval == 0)
-    {
-    vtkErrorMacro("AddScalar: error adding scalar " << filename);
-    this->GetMRMLScene()->RemoveNode(storageNode.GetPointer());
-    return false;
-    }
+  //vtkDebugMacro("AddScalar: calling read data now.");
+  //if (this->GetDebug()) { storageNode->DebugOn(); }
+  //int retval = storageNode->ReadData(modelNode);
+  //if (retval == 0)
+  //  {
+  //  vtkErrorMacro("AddScalar: error adding scalar " << filename);
+  //  this->GetMRMLScene()->RemoveNode(storageNode.GetPointer());
+  //  return false;
+  //  }
 
-  // check to see if the model display node has a colour node already
-  vtkMRMLModelDisplayNode *displayNode = modelNode->GetModelDisplayNode();
-  if (displayNode == nullptr)
-    {
-    vtkWarningMacro("Model " << modelNode->GetName() << "'s display node is null\n");
-    }
-  else
-    {
-    vtkMRMLColorNode *colorNode = displayNode->GetColorNode();
-    if (colorNode == nullptr && this->ColorLogic != nullptr)
-      {
-      displayNode->SetAndObserveColorNodeID(
-        this->ColorLogic->GetDefaultModelColorNodeID());
-      }
-    }
+  //// check to see if the model display node has a colour node already
+  //vtkMRMLModelDisplayNode *displayNode = modelNode->GetModelDisplayNode();
+  //if (displayNode == nullptr)
+  //  {
+  //  vtkWarningMacro("Model " << modelNode->GetName() << "'s display node is null\n");
+  //  }
+  //else
+  //  {
+  //  vtkMRMLColorNode *colorNode = displayNode->GetColorNode();
+  //  if (colorNode == nullptr && this->ColorLogic != nullptr)
+  //    {
+  //    displayNode->SetAndObserveColorNodeID(
+  //      this->ColorLogic->GetDefaultModelColorNodeID());
+  //    }
+  //  }
 
-  //--- tag for informatics and invoke event for anyone who cares.
-  vtkTagTable *tt = modelNode->GetUserTagTable();
-  if ( tt != nullptr )
-    {
-    modelNode->SetSlicerDataType ( "FreeSurferModelWithOverlay" );
-    tt = modelNode->GetUserTagTable();
-    tt->AddOrUpdateTag ( "SlicerDataType", modelNode->GetSlicerDataType() );
-    }
-  this->GetMRMLScene()->RemoveNode(storageNode.GetPointer());
+  ////--- tag for informatics and invoke event for anyone who cares.
+  //vtkTagTable *tt = modelNode->GetUserTagTable();
+  //if ( tt != nullptr )
+  //  {
+  //  modelNode->SetSlicerDataType ( "FreeSurferModelWithOverlay" );
+  //  tt = modelNode->GetUserTagTable();
+  //  tt->AddOrUpdateTag ( "SlicerDataType", modelNode->GetSlicerDataType() );
+  //  }
+  //this->GetMRMLScene()->RemoveNode(storageNode.GetPointer());
 
   return true;
 }

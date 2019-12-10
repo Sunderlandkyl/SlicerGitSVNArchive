@@ -42,7 +42,6 @@
 
 // MRML includes
 #include <vtkMRMLColorTableNode.h>
-#include <vtkMRMLFreeSurferProceduralColorNode.h>
 #include <vtkMRMLProceduralColorNode.h>
 #include <vtkMRMLScene.h>
 
@@ -268,9 +267,8 @@ void qSlicerColorsModuleWidget::onMRMLColorNodeChanged(vtkMRMLNode* newColorNode
 
   vtkMRMLColorTableNode *colorTableNode = vtkMRMLColorTableNode::SafeDownCast(colorNode);
   vtkMRMLProceduralColorNode *procColorNode = vtkMRMLProceduralColorNode::SafeDownCast(colorNode);
-  vtkMRMLFreeSurferProceduralColorNode *fsColorNode = vtkMRMLFreeSurferProceduralColorNode::SafeDownCast(colorNode);
 
-  if (colorTableNode != nullptr || fsColorNode != nullptr)
+  if (colorTableNode != nullptr)
     {
     // hide the procedural display, show the color table
     // freesurfer nodes are bit of a special case, they're defined
@@ -295,11 +293,6 @@ void qSlicerColorsModuleWidget::onMRMLColorNodeChanged(vtkMRMLNode* newColorNode
       {
       range = colorTableNode->GetLookupTable()->GetRange();
       d->ScalarBarActor->SetLookupTable(colorTableNode->GetLookupTable());
-      }
-    else if (fsColorNode && fsColorNode->GetLookupTable())
-      {
-      range = fsColorNode->GetScalarsToColors()->GetRange();
-      d->ScalarBarActor->SetLookupTable(fsColorNode->GetScalarsToColors());
       }
     disconnect(d->LUTRangeWidget, SIGNAL(valuesChanged(double, double)),
       this, SLOT(setLookupTableRange(double, double)));

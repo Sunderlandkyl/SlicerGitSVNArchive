@@ -462,11 +462,7 @@ void vtkSlicerVolumesLogic
     }
   if (labelMap)
     {
-    if (this->IsFreeSurferVolume(filename))
-      {
-      displayNode->SetAndObserveColorNodeID(colorLogic->GetDefaultFreeSurferLabelMapColorNodeID());
-      }
-    else if (displayNode->GetColorNodeID() == nullptr)
+    if (displayNode->GetColorNodeID() == nullptr)
       {
       // only set default color node ID if it was not set already (by default volume node stored in the scene)
       displayNode->SetAndObserveColorNodeID(colorLogic->GetDefaultLabelMapColorNodeID());
@@ -1268,27 +1264,6 @@ void vtkSlicerVolumesLogic::PrintSelf(ostream& os, vtkIndent indent)
      << this->CompareVolumeGeometryPrecision << "\n";
 }
 
-//----------------------------------------------------------------------------
-int vtkSlicerVolumesLogic::IsFreeSurferVolume (const char* filename)
-{
-  if (filename == nullptr)
-    {
-    return 0;
-    }
-
-  std::string extension = vtkMRMLStorageNode::GetLowercaseExtensionFromFileName(filename);
-  if (extension == std::string(".mgz") ||
-      extension == std::string(".mgh") ||
-      extension == std::string(".mgh.gz"))
-    {
-    return 1;
-    }
-  else
-    {
-    return 0;
-    }
-}
-
 //-------------------------------------------------------------------------
 void vtkSlicerVolumesLogic::ComputeTkRegVox2RASMatrix ( vtkMRMLVolumeNode *VNode,
                                                                        vtkMatrix4x4 *M )
@@ -1375,88 +1350,6 @@ void vtkSlicerVolumesLogic
   origin[1] = -0.5 * rasCorner[1];
   origin[2] = -0.5 * rasCorner[2];
 }
-
-//-------------------------------------------------------------------------
-void vtkSlicerVolumesLogic::TranslateFreeSurferRegistrationMatrixIntoSlicerRASToRASMatrix( vtkMRMLVolumeNode *V1Node,
-                                                                       vtkMRMLVolumeNode *V2Node,
-                                                                       vtkMatrix4x4 *FSRegistrationMatrix,
-                                                                       vtkMatrix4x4 *RAS2RASMatrix)
-{
-  if  ( V1Node  && V2Node && FSRegistrationMatrix  && RAS2RASMatrix )
-    {
-    RAS2RASMatrix->Zero();
-
-    //
-    // Looking for RASv1_To_RASv2:
-    //
-    //---
-    //
-    // In Slicer:
-    // [ IJKv1_To_IJKv2] = [ RAS_To_IJKv2 ]  [ RASv1_To_RASv2 ] [ IJK_To_RASv1 ] [i,j,k]transpose
-    //
-    // In FreeSurfer:
-    // [ IJKv1_To_IJKv2] = [FStkRegVox_To_RASv2 ]inverse [ FSRegistrationMatrix] [FStkRegVox_To_RASv1 ] [ i,j,k] transpose
-    //
-    //----
-    //
-    // So:
-    // [FStkRegVox_To_RASv2 ] inverse [ FSRegistrationMatrix] [FStkRegVox_To_RASv1 ] =
-    // [ RAS_To_IJKv2 ]  [ RASv1_To_RASv2 ] [ IJKv1_2_RAS ]
-    //
-    //---
-    //
-    // Below use this shorthand:
-    //
-    // S = FStkRegVox_To_RASv2
-    // T = FStkRegVox_To_RASv1
-    // N = RAS_To_IJKv2
-    // M = IJK_To_RASv1
-    // R = FSRegistrationMatrix
-    // [Sinv]  [R]  [T] = [N]  [RASv1_To_RASv2]  [M];
-    //
-    // So this is what we'll compute and use in Slicer instead
-    // of the FreeSurfer register.dat matrix:
-    //
-    // [Ninv]  [Sinv]  [R]  [T]  [Minv]  = RASv1_To_RASv2
-    //
-    // I think we need orientation in FreeSurfer: nothing in the tkRegVox2RAS
-    // handles scanOrder. The tkRegVox2RAS = IJKToRAS matrix for a coronal
-    // volume. But for an Axial volume, these two matrices are different.
-    // How do we compute the correct orientation for FreeSurfer Data?
-
-    vtkNew<vtkMatrix4x4> T;
-    vtkNew<vtkMatrix4x4> S;
-    vtkNew<vtkMatrix4x4> Sinv;
-    vtkNew<vtkMatrix4x4> M;
-    vtkNew<vtkMatrix4x4> Minv;
-    vtkNew<vtkMatrix4x4> N;
-    vtkNew<vtkMatrix4x4> Ninv;
-
-    //--
-    // compute FreeSurfer tkRegVox2RAS for V1 volume
-    //--
-    ComputeTkRegVox2RASMatrix(V1Node, T.GetPointer());
-
-    //--
-    // compute FreeSurfer tkRegVox2RAS for V2 volume
-    //--
-    ComputeTkRegVox2RASMatrix(V2Node, S.GetPointer());
-
-    // Probably a faster way to do these things?
-    vtkMatrix4x4::Invert(S.GetPointer(), Sinv.GetPointer());
-    V1Node->GetIJKToRASMatrix(M.GetPointer());
-    V2Node->GetRASToIJKMatrix(N.GetPointer());
-    vtkMatrix4x4::Invert(M.GetPointer(), Minv.GetPointer());
-    vtkMatrix4x4::Invert(N.GetPointer(), Ninv.GetPointer());
-
-    //    [Ninv]  [Sinv]  [R]  [T]  [Minv]
-    vtkMatrix4x4::Multiply4x4(T.GetPointer(), Minv.GetPointer(), RAS2RASMatrix );
-    vtkMatrix4x4::Multiply4x4(FSRegistrationMatrix, RAS2RASMatrix, RAS2RASMatrix );
-    vtkMatrix4x4::Multiply4x4(Sinv.GetPointer(), RAS2RASMatrix, RAS2RASMatrix );
-    vtkMatrix4x4::Multiply4x4(Ninv.GetPointer(), RAS2RASMatrix, RAS2RASMatrix );
-    }
-}
-
 
 // Add a class to the list of registry of volume types.
 // The default storage nodes for these volume types will be tested in
