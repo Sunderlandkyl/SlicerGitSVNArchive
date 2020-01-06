@@ -129,8 +129,7 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
       }
 
     ShapeLabelObjectType::CentroidType centroidObject = labelObject->GetCentroid();
-    double centroid[3] = { centroidObject[0], centroidObject[1], centroidObject[2] };
-    self->AddCentroid(label, centroid);
+    self->AddCentroid(label, vtkVector3d(centroidObject[0], centroidObject[1], centroidObject[2]));
 
     if (self->GetComputeOrientedBoundingBox())
       {
@@ -150,21 +149,49 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
         size[j] = boundingBoxSize[j];
         }
 
+
       vtkNew<vtkPoints> points;
-      ShapeLabelObjectType::OrientedBoundingBoxVerticesType boundingBoxVertices = labelObject->GetOrientedBoundingBoxVertices();
-      for (int i = 0; i < ShapeLabelObjectType::OrientedBoundingBoxVerticesType::Length; ++i)
+      /// TODO: In the current version of ITK used in Slicer, the vertices from the ShapeLabelObject are not calculated correctly.
+
+      /// Uncomment when the version of ITK used includes https://github.com/InsightSoftwareConsortium/ITK/pull/1235/
+      //ShapeLabelObjectType::OrientedBoundingBoxVerticesType boundingBoxVertices = labelObject->GetOrientedBoundingBoxVertices();
+      //for (int i = 0; i < ShapeLabelObjectType::OrientedBoundingBoxVerticesType::Length; ++i)
+      //  {
+      //  ShapeLabelObjectType::OrientedBoundingBoxPointType vertex = boundingBoxVertices[i];
+      //  double point[3] = { vertex[0], vertex[1], vertex[2] };
+      //  points->InsertNextPoint(point);
+      //  }
+
+      /// Delete when the version of ITK used includes https://github.com/InsightSoftwareConsortium/ITK/pull/1235/
+      ///////////////////////
+      const ShapeLabelObjectType::MatrixType obbToPhysical(boundingBoxDirections.GetTranspose());
+      for (unsigned int i = 0; i < ShapeLabelObjectType::OrientedBoundingBoxVerticesType::Length; ++i)
         {
-        ShapeLabelObjectType::OrientedBoundingBoxPointType vertex = boundingBoxVertices[i];
-        double point[3] = { vertex[0], vertex[1], vertex[2] };
-        points->InsertNextPoint(point);
+        constexpr unsigned int         msb = 1 << (3 - 1);
+        ShapeLabelObjectType::OrientedBoundingBoxSizeType offset;
+        for (unsigned int j = 0; j < 3; ++j)
+          {
+          if (i & msb >> j)
+            {
+            offset[j] = boundingBoxSize[j];
+            }
+          else
+            {
+            offset[j] = 0;
+            }
+          }
+          ShapeLabelObjectType::OrientedBoundingBoxPointType vertex = boundingBoxOrigin + (obbToPhysical * offset);
+          double point[3] = { vertex[0], vertex[1], vertex[2] };
+          points->InsertNextPoint(point);
         }
+      ///////////////////////
 
       self->AddBoundingBox(label, directions, origin, size, points);
       }
 
     if (self->GetComputeFeretDiameter())
       {
-      // TODO
+      labelObject->GetFeretDiameter();
       }
 
     if (self->GetComputePerimeter())
@@ -181,9 +208,9 @@ void vtkITKLabelShapeStatistics::ClearCentroids()
 }
 
 //----------------------------------------------------------------------------
-void vtkITKLabelShapeStatistics::AddCentroid(int value, double centroid[3])
+void vtkITKLabelShapeStatistics::AddCentroid(int value, vtkVector3d centroid)
 {
-  this->Centroids[value] = vtkVector3d(centroid[0], centroid[1], centroid[2]);
+  this->Centroids[value] = centroid;
 }
 
 //----------------------------------------------------------------------------
@@ -281,10 +308,107 @@ void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxDirection(int labelValue,
     return;
     }
 
-  std::map<int, vtkSmartPointer<vtkMatrix4x4> >::iterator orientedDirectionIt = this->OrientedBoundingBoxDirection.find(labelValue);
-  if (orientedDirectionIt == this->OrientedBoundingBoxDirection.end())
+  std::map<int, vtkSmartPointer<vtkMatrix4x4> >::iterator directionIt = this->OrientedBoundingBoxDirection.find(labelValue);
+  if (directionIt == this->OrientedBoundingBoxDirection.end())
     {
     return;
     }
-  directions->DeepCopy(orientedDirectionIt->second);
+  directions->DeepCopy(directionIt->second);
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxOrigin(int labelValue, double* origin)
+{
+  if (!origin)
+    {
+    return;
+    }
+  std::map<int, vtkVector3d>::iterator originIt = this->OrientedBoundingBoxOrigin.find(labelValue);
+  if (originIt == this->OrientedBoundingBoxOrigin.end())
+    {
+    return;
+    }
+  for (int i = 0; i < 3; ++i)
+    {
+    origin[i] = originIt->second[0];
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxSize(int labelValue, double* size)
+{
+  if (!size)
+    {
+    return;
+    }
+  std::map<int, vtkVector3d>::iterator sizeIt = this->OrientedBoundingBoxSize.find(labelValue);
+  if (sizeIt == this->OrientedBoundingBoxSize.end())
+    {
+    return;
+    }
+  for (int i = 0; i < 3; ++i)
+    {
+    size[i] = sizeIt->second[0];
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxVertices(int labelValue, vtkPoints* points)
+{
+  if (!points)
+    {
+    return;
+    }
+  std::map<int, vtkSmartPointer<vtkPoints> >::iterator vertexIt = this->OrientedBoundingBoxVertices.find(labelValue);
+  if (vertexIt == this->OrientedBoundingBoxVertices.end())
+    {
+    return;
+    }
+  points->DeepCopy(vertexIt->second);
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::ClearFeretDiameter()
+{
+  this->FeretDiameter.clear();
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::AddFeretDiameter(int labelValue, double feretDiameter)
+{
+  this->FeretDiameter[labelValue] = feretDiameter;
+}
+
+//----------------------------------------------------------------------------
+double vtkITKLabelShapeStatistics::GetFeretDiameter(int labelValue)
+{
+  std::map<int, double>::iterator feretDiameterIt = this->FeretDiameter.find(labelValue);
+  if (feretDiameterIt == this->FeretDiameter.end())
+    {
+    return 0.0;
+    }
+  return feretDiameterIt->second;
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::ClearPerimeter()
+{
+  this->Perimeter.clear();
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::AddPerimeter(int labelValue, double perimeter)
+{
+  this->Perimeter[labelValue] = perimeter;
+}
+
+//----------------------------------------------------------------------------
+double vtkITKLabelShapeStatistics::GetPerimeter(int labelValue)
+{
+  std::map<int, double>::iterator perimeterIt = this->Perimeter.find(labelValue);
+  if (perimeterIt == this->Perimeter.end())
+  {
+    return 0.0;
+  }
+  return perimeterIt->second;
 }

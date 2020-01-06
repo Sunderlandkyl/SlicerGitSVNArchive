@@ -26,7 +26,7 @@ class vtkPoints;
 /// \brief ITK-based utilities for calculating label statistics.
 class VTK_ITK_EXPORT vtkITKLabelShapeStatistics : public vtkSimpleImageToImageFilter
 {
- public:
+public:
   static vtkITKLabelShapeStatistics *New();
   vtkTypeMacro(vtkITKLabelShapeStatistics, vtkSimpleImageToImageFilter);
   void PrintSelf(ostream& os, vtkIndent indent) override;
@@ -43,18 +43,28 @@ class VTK_ITK_EXPORT vtkITKLabelShapeStatistics : public vtkSimpleImageToImageFi
   vtkSetMacro(ComputePerimeter, bool);
   vtkBooleanMacro(ComputePerimeter, bool);
 
+  vtkSetObjectMacro(Directions, vtkMatrix4x4);
+
+
+public:
   void ClearCentroids();
-  void AddCentroid(int value, double centroid[3]);
-  bool GetCentroid(int value, double* centroid);
+  void AddCentroid(int labelValue, vtkVector3d centroid);
+  bool GetCentroid(int labelValue, double* centroid);
 
   void ClearOrientedBoundingBox();
-  void AddBoundingBox(int label, vtkMatrix4x4* directions, vtkVector3d origin, vtkVector3d size, vtkPoints* points);
-  void GetOrientedBoundingBoxDirection(int value, vtkMatrix4x4* direction);
-  void GetOrientedBoundingBoxOrigin(int value, double* origin);
-  void GetOrientedBoundingBoxSize(int value, double* origin);
-  //void GetOrientedBoundingBoxVertices(int value, double* origin);
+  void AddBoundingBox(int labelValue, vtkMatrix4x4* directions, vtkVector3d origin, vtkVector3d size, vtkPoints* points);
+  void GetOrientedBoundingBoxDirection(int labelValue, vtkMatrix4x4* direction);
+  void GetOrientedBoundingBoxOrigin(int labelValue, double* origin);
+  void GetOrientedBoundingBoxSize(int labelValue, double* size);
+  void GetOrientedBoundingBoxVertices(int labelValue, vtkPoints* points);
 
-  vtkSetObjectMacro(Directions, vtkMatrix4x4);
+  void ClearFeretDiameter();
+  void AddFeretDiameter(int labelValue, double feretDiameter);
+  double GetFeretDiameter(int labelValue);
+
+  void ClearPerimeter();
+  void AddPerimeter(int labelValue, double perimeter);
+  double GetPerimeter(int labelValue);
 
 protected:
   vtkITKLabelShapeStatistics();
@@ -63,7 +73,8 @@ protected:
   void SimpleExecute(vtkImageData* input, vtkImageData* output) override;
 
   std::map<int, vtkVector3d> Centroids;
-
+  std::map<int, double> FeretDiameter;
+  std::map<int, double> Perimeter;
   std::map<int, vtkSmartPointer<vtkMatrix4x4> > OrientedBoundingBoxDirection;
   std::map<int, vtkVector3d> OrientedBoundingBoxOrigin;
   std::map<int, vtkVector3d> OrientedBoundingBoxSize;
