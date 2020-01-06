@@ -138,7 +138,6 @@ void vtkITKIslandMath::SimpleExecute(vtkImageData *input, vtkImageData *output)
   // Initialize and check input
   //
   vtkPointData *pd = input->GetPointData();
-  pd=input->GetPointData();
   if (pd ==nullptr)
     {
     vtkErrorMacro(<<"PointData is NULL");

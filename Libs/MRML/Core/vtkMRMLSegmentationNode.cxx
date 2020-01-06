@@ -1098,6 +1098,9 @@ double* vtkMRMLSegmentationNode::GetSegmentCenter(const std::string& segmentID)
     vtkNew<vtkITKLabelShapeStatistics> stats;
     stats->SetInputData(largestResampledIsland);
     stats->SetDirections(directions);
+    stats->ComputeFeretDiameterOn();
+    stats->ComputeOrientedBoundingBoxOn();
+    stats->ComputePerimeterOn();
     stats->Update();
     stats->GetCentroid(1, this->SegmentCenterTmp);
     }

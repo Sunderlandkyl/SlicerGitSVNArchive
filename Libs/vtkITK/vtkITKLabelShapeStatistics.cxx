@@ -19,6 +19,7 @@
 #include <vtkImageData.h>
 #include <vtkMatrix4x4.h>
 #include <vtkObjectFactory.h>
+#include <vtkPoints.h>
 #include <vtkPointData.h>
 
 // ITK includes
@@ -28,6 +29,7 @@
 
 vtkStandardNewMacro(vtkITKLabelShapeStatistics);
 
+//----------------------------------------------------------------------------
 vtkITKLabelShapeStatistics::vtkITKLabelShapeStatistics()
 {
   this->ComputeFeretDiameter = false;
@@ -36,9 +38,13 @@ vtkITKLabelShapeStatistics::vtkITKLabelShapeStatistics()
   this->Directions = nullptr;
 }
 
+//----------------------------------------------------------------------------
 vtkITKLabelShapeStatistics::~vtkITKLabelShapeStatistics()
-= default;
+{
+  this->SetDirections(nullptr);
+}
 
+//----------------------------------------------------------------------------
 void vtkITKLabelShapeStatistics::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os,indent);
@@ -48,6 +54,7 @@ void vtkITKLabelShapeStatistics::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "ComputePerimeter: " << ComputePerimeter << std::endl;
 }
 
+//----------------------------------------------------------------------------
 // Note: local function not method - conforms to signature in itkCommand.h
 void vtkITKLabelShapeStatisticsHandleProgressEvent (itk::Object *caller,
                                           const itk::EventObject& vtkNotUsed(eventObject),
@@ -61,6 +68,7 @@ void vtkITKLabelShapeStatisticsHandleProgressEvent (itk::Object *caller,
     }
 };
 
+//----------------------------------------------------------------------------
 template <class T>
 void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImageData* input,
   vtkMatrix4x4* directionMatrix, T* vtkNotUsed(inPtr))
@@ -107,7 +115,7 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
   labelFilter->Update();
 
   LabelMapType::Pointer labelShapeObject = labelFilter->GetOutput();
-  const std::vector<typename ShapeLabelObjectType::LabelType> labels = labelShapeObject->GetLabels(); 
+  const std::vector<typename ShapeLabelObjectType::LabelType> labels = labelShapeObject->GetLabels();
 
   self->ClearCentroids();
   for (int i = 0; i < labels.size(); ++i)
@@ -120,38 +128,65 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
       continue;
       }
 
-    ShapeLabelObjectType::CentroidType centroidObject = labelObject->GetCentroid();    
+    ShapeLabelObjectType::CentroidType centroidObject = labelObject->GetCentroid();
     double centroid[3] = { centroidObject[0], centroidObject[1], centroidObject[2] };
     self->AddCentroid(label, centroid);
-    }
 
-  if (self->GetComputeFeretDiameter())
-    {
-    // TODO
-    }
+    if (self->GetComputeOrientedBoundingBox())
+      {
+      vtkNew<vtkMatrix4x4> directions;
+      ShapeLabelObjectType::OrientedBoundingBoxDirectionType boundingBoxDirections = labelObject->GetOrientedBoundingBoxDirection();
+      vtkVector3d origin;
+      ShapeLabelObjectType::OrientedBoundingBoxPointType boundingBoxOrigin = labelObject->GetOrientedBoundingBoxOrigin();
+      vtkVector3d size;
+      ShapeLabelObjectType::OrientedBoundingBoxSizeType boundingBoxSize = labelObject->GetOrientedBoundingBoxSize();
+      for (int j=0; j < 3; ++j)
+        {
+        for (int i = 0; i < 3; ++i)
+          {
+          directions->SetElement(i, j, boundingBoxDirections(i, j));
+          }
+        origin[j] = boundingBoxOrigin[j];
+        size[j] = boundingBoxSize[j];
+        }
 
-  if (self->GetComputeOrientedBoundingBox())
-    {
-    // TODO
-    }
+      vtkNew<vtkPoints> points;
+      ShapeLabelObjectType::OrientedBoundingBoxVerticesType boundingBoxVertices = labelObject->GetOrientedBoundingBoxVertices();
+      for (int i = 0; i < ShapeLabelObjectType::OrientedBoundingBoxVerticesType::Length; ++i)
+        {
+        ShapeLabelObjectType::OrientedBoundingBoxPointType vertex = boundingBoxVertices[i];
+        double point[3] = { vertex[0], vertex[1], vertex[2] };
+        points->InsertNextPoint(point);
+        }
 
-  if (self->GetComputePerimeter())
-    {
-    // TODO
-    }
+      self->AddBoundingBox(label, directions, origin, size, points);
+      }
 
+    if (self->GetComputeFeretDiameter())
+      {
+      // TODO
+      }
+
+    if (self->GetComputePerimeter())
+      {
+      // TODO
+      }
+    }
 }
 
+//----------------------------------------------------------------------------
 void vtkITKLabelShapeStatistics::ClearCentroids()
 {
   this->Centroids.clear();
 }
 
+//----------------------------------------------------------------------------
 void vtkITKLabelShapeStatistics::AddCentroid(int value, double centroid[3])
 {
   this->Centroids[value] = vtkVector3d(centroid[0], centroid[1], centroid[2]);
 }
 
+//----------------------------------------------------------------------------
 bool vtkITKLabelShapeStatistics::GetCentroid(int value, double* centroid)
 {
   if (this->Centroids.find(value) == this->Centroids.end())
@@ -166,9 +201,7 @@ bool vtkITKLabelShapeStatistics::GetCentroid(int value, double* centroid)
   return true;
 }
 
-//
-//
-//
+//----------------------------------------------------------------------------
 void vtkITKLabelShapeStatistics::SimpleExecute(vtkImageData *input, vtkImageData *vtkNotUsed(output))
 {
   vtkDebugMacro(<< "Executing label shape statistics");
@@ -220,4 +253,38 @@ void vtkITKLabelShapeStatistics::SimpleExecute(vtkImageData *input, vtkImageData
     {
     vtkErrorMacro(<< "Only single component images supported.");
     }
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::ClearOrientedBoundingBox()
+{
+  this->OrientedBoundingBoxDirection.clear();
+  this->OrientedBoundingBoxOrigin.clear();
+  this->OrientedBoundingBoxSize.clear();
+  this->OrientedBoundingBoxVertices.clear();
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::AddBoundingBox(int labelValue, vtkMatrix4x4* directions, vtkVector3d origin, vtkVector3d size, vtkPoints* points)
+{
+  this->OrientedBoundingBoxDirection[labelValue] = directions;
+  this->OrientedBoundingBoxOrigin[labelValue] = origin;
+  this->OrientedBoundingBoxSize[labelValue] = size;
+  this->OrientedBoundingBoxVertices[labelValue] = points;
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxDirection(int labelValue, vtkMatrix4x4* directions)
+{
+  if (!directions)
+    {
+    return;
+    }
+
+  std::map<int, vtkSmartPointer<vtkMatrix4x4> >::iterator orientedDirectionIt = this->OrientedBoundingBoxDirection.find(labelValue);
+  if (orientedDirectionIt == this->OrientedBoundingBoxDirection.end())
+    {
+    return;
+    }
+  directions->DeepCopy(orientedDirectionIt->second);
 }
