@@ -11,9 +11,9 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
     super(LabelmapSegmentStatisticsPlugin,self).__init__()
     self.name = "Labelmap"
     self.obbKeys = ["obb_origin_ras", "obb_diameter_mm", "obb_direction_ras_x", "obb_direction_ras_y", "obb_direction_ras_z"]
-    self.shapeKeys = ["centroid_ras", "feret_diameter_mm", "surface_mm2", "roundness"] + self.obbKeys
-    self.keys = ["voxel_count", "volume_mm3", "volume_cm3"] + self.shapeKeys
-    self.defaultKeys = self.keys # calculate all measurements by default
+    self.shapeKeys = ["centroid_ras", "feret_diameter_mm", "surface_mm2", "roundness", "flatness"] + self.obbKeys
+    self.defaultKeys = ["voxel_count", "volume_mm3", "volume_cm3"] # Don't calculate label shape statistics by default since they take longer to compute
+    self.keys = self.defaultKeys + self.shapeKeys
     #... developer may add extra options to configure other parameters
 
   def computeStatistics(self, segmentID):
@@ -111,6 +111,9 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
       if "roundness" in requestedKeys:
         roundness = shapeStat.GetRoundness(labelValue)
         stats["roundness"] = roundness
+      if "flatness" in requestedKeys:
+        flatness = shapeStat.GetFlatness(labelValue)
+        stats["flatness"] = flatness
       if "feret_diameter_mm" in requestedKeys:
         feretDiameter = shapeStat.GetFeretDiameter(labelValue)
         stats["feret_diameter_mm"] = feretDiameter
@@ -127,7 +130,7 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
         obbDiameterMM = [0,0,0]
         shapeStat.GetOrientedBoundingBoxSize(labelValue, obbDiameterMM)
         stats["obb_diameter_mm"] = obbDiameterMM
-      if "obb_direction_ras_x" in requestedKeys:
+      if "obb_direction_ras_x" in requestedKeys or "obb_direction_ras_y" or "obb_direction_ras_z" in requestedKeys:
         obbOrigin = [0,0,0]
         shapeStat.GetOrientedBoundingBoxOrigin(labelValue, obbOrigin)
 
@@ -144,9 +147,12 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
         transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionX, obbDirectionX)
         transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionY, obbDirectionY)
         transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionZ, obbDirectionZ)
-        stats["obb_direction_ras_x"] = obbDirectionX
-        stats["obb_direction_ras_y"] = obbDirectionY
-        stats["obb_direction_ras_z"] = obbDirectionZ
+        if "obb_direction_ras_x" in requestedKeys:
+          stats["obb_direction_ras_x"] = obbDirectionX
+        if "obb_direction_ras_y" in requestedKeys:
+          stats["obb_direction_ras_y"] = obbDirectionY
+        if "obb_direction_ras_z" in requestedKeys:
+          stats["obb_direction_ras_z"] = obbDirectionZ
 
     return stats
 
@@ -188,6 +194,9 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
 
     info["roundness"] = \
       self.createMeasurementInfo(name="Roundness", description="Roundness", units="")
+
+    info["flatness"] = \
+      self.createMeasurementInfo(name="Flatness", description="Flatness", units="")
 
     info["obb_origin_ras"] = \
       self.createMeasurementInfo(name="OBB Origin (RAS)", description="OBB origin", units="")
