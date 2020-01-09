@@ -16,10 +16,11 @@
 // VTK includes
 #include <vtkMatrix4x4.h>
 #include <vtkSmartPointer.h>
+#include <vtkTable.h>
 #include <vtkVector.h>
 
 // std includes
-#include <map>
+#include <set>
 
 class vtkPoints;
 
@@ -31,47 +32,24 @@ public:
   vtkTypeMacro(vtkITKLabelShapeStatistics, vtkSimpleImageToImageFilter);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  vtkGetMacro(ComputeFeretDiameter, bool);
-  vtkSetMacro(ComputeFeretDiameter, bool);
-  vtkBooleanMacro(ComputeFeretDiameter, bool);
+  enum ShapeStatistic
+  {
+    Centroid,
+    OrientedBoundingBox,
+    FeretDiameter,
+    Perimeter,
+    Roundness,
+    Flatness,
+  };
 
-  vtkGetMacro(ComputeOrientedBoundingBox, bool);
-  vtkSetMacro(ComputeOrientedBoundingBox, bool);
-  vtkBooleanMacro(ComputeOrientedBoundingBox, bool);
-
-  vtkGetMacro(ComputePerimeter, bool);
-  vtkSetMacro(ComputePerimeter, bool);
-  vtkBooleanMacro(ComputePerimeter, bool);
+  std::string GetShapeStatisticAsString(ShapeStatistic statistic);
+  ShapeStatistic GetShapeStatisticFromString(std::string statisticName);
 
   vtkSetObjectMacro(Directions, vtkMatrix4x4);
+  vtkSetObjectMacro(StatisticsTable, vtkTable);
+  vtkGetObjectMacro(StatisticsTable, vtkTable);
 
-public:
-  void ClearCentroids();
-  void AddCentroid(int labelValue, vtkVector3d centroid);
-  bool GetCentroid(int labelValue, double* centroid);
-
-  void ClearOrientedBoundingBox();
-  void AddBoundingBox(int labelValue, vtkMatrix4x4* directions, vtkVector3d origin, vtkVector3d size, vtkPoints* points);
-  void GetOrientedBoundingBoxDirection(int labelValue, vtkMatrix4x4* direction);
-  void GetOrientedBoundingBoxOrigin(int labelValue, double* origin);
-  void GetOrientedBoundingBoxSize(int labelValue, double* size);
-  void GetOrientedBoundingBoxVertices(int labelValue, vtkPoints* points);
-
-  void ClearFeretDiameter();
-  void AddFeretDiameter(int labelValue, double feretDiameter);
-  double GetFeretDiameter(int labelValue);
-
-  void ClearPerimeter();
-  void AddPerimeter(int labelValue, double perimeter);
-  double GetPerimeter(int labelValue);
-
-  void ClearRoundness();
-  void AddRoundness(int labelValue, double roundness);
-  double GetRoundness(int labelValue);
-
-  void ClearFlatness();
-  void AddFlatness(int labelValue, double flatness);
-  double GetFlatness(int labelValue);
+  vtkGetMacro(ComputedStatistics, std::set<ShapeStatistic>);
 
 protected:
   vtkITKLabelShapeStatistics();
@@ -79,21 +57,17 @@ protected:
 
   void SimpleExecute(vtkImageData* input, vtkImageData* output) override;
 
-  std::map<int, vtkVector3d> Centroids;
-  std::map<int, double> FeretDiameter;
-  std::map<int, double> Perimeter;
-  std::map<int, double> Roundness;
-  std::map<int, double> Flatness;
-  std::map<int, vtkSmartPointer<vtkMatrix4x4> > OrientedBoundingBoxDirection;
-  std::map<int, vtkVector3d> OrientedBoundingBoxOrigin;
-  std::map<int, vtkVector3d> OrientedBoundingBoxSize;
-  std::map<int, vtkSmartPointer<vtkPoints> > OrientedBoundingBoxVertices;
+  void ComputeShapeStatisticOn(ShapeStatistic statistic);
+  void ComputeShapeStatisticOn(std::string statisticName);
+  void ComputeShapeStatisticOff(ShapeStatistic statistic);
+  void ComputeShapeStatisticOff(std::string statisticName);
+  void SetComputeShapeStatistic(ShapeStatistic statistic, bool state);
+  void SetComputeShapeStatistic(std::string statisticName, bool state);
 
-  bool ComputeFeretDiameter;
-  bool ComputeOrientedBoundingBox;
-  bool ComputePerimeter;
-
+protected:
+  std::set<ShapeStatistic> ComputedStatistics;
   vtkMatrix4x4* Directions;
+  vtkTable* StatisticsTable;
 
 private:
   vtkITKLabelShapeStatistics(const vtkITKLabelShapeStatistics&) = delete;
