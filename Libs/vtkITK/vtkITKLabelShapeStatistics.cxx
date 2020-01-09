@@ -17,7 +17,6 @@
 // VTK includes
 #include <vtkDataArray.h>
 #include <vtkImageData.h>
-#include <vtkMatrix4x4.h>
 #include <vtkObjectFactory.h>
 #include <vtkPoints.h>
 #include <vtkPointData.h>
@@ -73,6 +72,19 @@ template <class T>
 void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImageData* input,
   vtkMatrix4x4* directionMatrix, T* vtkNotUsed(inPtr))
 {
+  if (!self || !input)
+    {
+    return;
+    }
+
+  // Clear current results
+  self->ClearCentroids();
+  self->ClearOrientedBoundingBox();
+  self->ClearFeretDiameter();
+  self->ClearPerimeter();
+  self->ClearRoundness();
+  self->ClearFlatness();
+
   // Wrap VTK image into an ITK image
   typedef itk::Image<T, 3> ImageType;
   using VTKToITKFilterType = itk::VTKImageToImageFilter<ImageType>;
@@ -115,21 +127,21 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
   labelFilter->Update();
 
   LabelMapType::Pointer labelShapeObject = labelFilter->GetOutput();
-  const std::vector<typename ShapeLabelObjectType::LabelType> labels = labelShapeObject->GetLabels();
+  const std::vector<typename ShapeLabelObjectType::LabelType> labelValues = labelShapeObject->GetLabels();
 
   self->ClearCentroids();
-  for (int i = 0; i < labels.size(); ++i)
+  for (int i = 0; i < labelValues.size(); ++i)
     {
-    int label = labels[i];
+    int labelValue = labelValues[i];
 
-    ShapeLabelObjectType::ShapeLabelObject::Pointer labelObject = labelShapeObject->GetLabelObject(label);
+    ShapeLabelObjectType::ShapeLabelObject::Pointer labelObject = labelShapeObject->GetLabelObject(labelValue);
     if (!labelObject)
       {
       continue;
       }
 
     ShapeLabelObjectType::CentroidType centroidObject = labelObject->GetCentroid();
-    self->AddCentroid(label, vtkVector3d(centroidObject[0], centroidObject[1], centroidObject[2]));
+    self->AddCentroid(labelValue, vtkVector3d(centroidObject[0], centroidObject[1], centroidObject[2]));
 
     if (self->GetComputeOrientedBoundingBox())
       {
@@ -149,10 +161,10 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
         size[j] = boundingBoxSize[j];
         }
 
-
       vtkNew<vtkPoints> points;
-      /// TODO: In the current version of ITK used in Slicer, the vertices from the ShapeLabelObject are not calculated correctly.
+      /// TODO: In the current version of ITK used in Slicer, the vertices from in ShapeLabelObject are not calculated correctly.
 
+      ///////////////////////
       /// Uncomment when the version of ITK used includes https://github.com/InsightSoftwareConsortium/ITK/pull/1235/
       //ShapeLabelObjectType::OrientedBoundingBoxVerticesType boundingBoxVertices = labelObject->GetOrientedBoundingBoxVertices();
       //for (int i = 0; i < ShapeLabelObjectType::OrientedBoundingBoxVerticesType::Length; ++i)
@@ -161,9 +173,11 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
       //  double point[3] = { vertex[0], vertex[1], vertex[2] };
       //  points->InsertNextPoint(point);
       //  }
-
-      /// Delete when the version of ITK used includes https://github.com/InsightSoftwareConsortium/ITK/pull/1235/
       ///////////////////////
+
+      ///////////////////////
+      /// Delete when the version of ITK used includes https://github.com/InsightSoftwareConsortium/ITK/pull/1235/
+      std::cout << boundingBoxDirections << std::endl;
       const ShapeLabelObjectType::MatrixType obbToPhysical(boundingBoxDirections.GetTranspose());
       for (unsigned int i = 0; i < ShapeLabelObjectType::OrientedBoundingBoxVerticesType::Length; ++i)
         {
@@ -186,17 +200,25 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
         }
       ///////////////////////
 
-      self->AddBoundingBox(label, directions, origin, size, points);
+      self->AddBoundingBox(labelValue, directions, origin, size, points);
       }
+
+    double roundness = labelObject->GetRoundness();
+    self->AddRoundness(labelValue, roundness);
+
+    double flatness = labelObject->GetFlatness();
+    self->AddFlatness(labelValue, flatness);
 
     if (self->GetComputeFeretDiameter())
       {
-      labelObject->GetFeretDiameter();
+      double feretDiameter = labelObject->GetFeretDiameter();
+      self->AddFeretDiameter(labelValue, feretDiameter);
       }
 
     if (self->GetComputePerimeter())
       {
-      // TODO
+      double perimeter = labelObject->GetPerimeter();
+      self->AddPerimeter(labelValue, perimeter);
       }
     }
 }
@@ -330,7 +352,7 @@ void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxOrigin(int labelValue, do
     }
   for (int i = 0; i < 3; ++i)
     {
-    origin[i] = originIt->second[0];
+    origin[i] = originIt->second[i];
     }
 }
 
@@ -348,7 +370,7 @@ void vtkITKLabelShapeStatistics::GetOrientedBoundingBoxSize(int labelValue, doub
     }
   for (int i = 0; i < 3; ++i)
     {
-    size[i] = sizeIt->second[0];
+    size[i] = sizeIt->second[i];
     }
 }
 
@@ -407,8 +429,54 @@ double vtkITKLabelShapeStatistics::GetPerimeter(int labelValue)
 {
   std::map<int, double>::iterator perimeterIt = this->Perimeter.find(labelValue);
   if (perimeterIt == this->Perimeter.end())
+    {
+    return 0.0;
+    }
+  return perimeterIt->second;
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::ClearRoundness()
+{
+  this->Roundness.clear();
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::AddRoundness(int labelValue, double roundness)
+{
+  this->Roundness[labelValue] = roundness;
+}
+
+//----------------------------------------------------------------------------
+double vtkITKLabelShapeStatistics::GetRoundness(int labelValue)
+{
+  std::map<int, double>::iterator roundnessIt = this->Roundness.find(labelValue);
+  if (roundnessIt == this->Roundness.end())
+    {
+    return 0.0;
+    }
+  return roundnessIt->second;
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::ClearFlatness()
+{
+  this->Flatness.clear();
+}
+
+//----------------------------------------------------------------------------
+void vtkITKLabelShapeStatistics::AddFlatness(int labelValue, double flatness)
+{
+  this->Flatness[labelValue] = flatness;
+}
+
+//----------------------------------------------------------------------------
+double vtkITKLabelShapeStatistics::GetFlatness(int labelValue)
+{
+  std::map<int, double>::iterator flatnessIt = this->Flatness.find(labelValue);
+  if (flatnessIt == this->Flatness.end())
   {
     return 0.0;
   }
-  return perimeterIt->second;
+  return flatnessIt->second;
 }

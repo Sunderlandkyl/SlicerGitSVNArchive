@@ -55,7 +55,6 @@
 
 // vtkITK includes
 #include <vtkITKIslandMath.h>
-#include <vtkITKLabelShapeStatistics.h>
 
 // STD includes
 #include <algorithm>
@@ -1092,17 +1091,27 @@ double* vtkMRMLSegmentationNode::GetSegmentCenter(const std::string& segmentID)
     largestResampledIsland->ShallowCopy(largestIslandFilter->GetOutput());
     largestResampledIsland->CopyDirections(resampledLabelmap);
 
-    vtkNew<vtkMatrix4x4> directions;
-    largestResampledIsland->GetDirectionMatrix(directions);
+    int resampledLabelEffectiveExtent[6] = { 0, -1, 0, -1, 0, -1 };
+    if (!vtkOrientedImageDataResample::CalculateEffectiveExtent(largestResampledIsland, resampledLabelEffectiveExtent))
+      {
+      vtkWarningMacro("GetSegmentCenter: segment " << segmentID << " is empty");
+      return nullptr;
+      }
 
-    vtkNew<vtkITKLabelShapeStatistics> stats;
-    stats->SetInputData(largestResampledIsland);
-    stats->SetDirections(directions);
-    stats->ComputeFeretDiameterOn();
-    stats->ComputeOrientedBoundingBoxOn();
-    stats->ComputePerimeterOn();
-    stats->Update();
-    stats->GetCentroid(1, this->SegmentCenterTmp);
+    // segmentCenter_Image is floored to put the center exactly in the center of a voxel
+    // (otherwise center position would be set at the boundary between two voxels when extent size is an even number)
+    double segmentCenter_Image[4] =
+      {
+      floor((resampledLabelEffectiveExtent[0] + resampledLabelEffectiveExtent[1]) / 2.0),
+      floor((resampledLabelEffectiveExtent[2] + resampledLabelEffectiveExtent[3]) / 2.0),
+      floor((resampledLabelEffectiveExtent[4] + resampledLabelEffectiveExtent[5]) / 2.0),
+      1.0
+      };
+
+    // Resampled image to world
+    vtkNew<vtkMatrix4x4> resampledImageToWorldMatrix;
+    resampledLabelmap->GetImageToWorldMatrix(resampledImageToWorldMatrix.GetPointer());
+    resampledImageToWorldMatrix->MultiplyPoint(segmentCenter_Image, this->SegmentCenterTmp);
     }
   else
     {

@@ -45,7 +45,6 @@ public:
 
   vtkSetObjectMacro(Directions, vtkMatrix4x4);
 
-
 public:
   void ClearCentroids();
   void AddCentroid(int labelValue, vtkVector3d centroid);
@@ -66,6 +65,14 @@ public:
   void AddPerimeter(int labelValue, double perimeter);
   double GetPerimeter(int labelValue);
 
+  void ClearRoundness();
+  void AddRoundness(int labelValue, double roundness);
+  double GetRoundness(int labelValue);
+
+  void ClearFlatness();
+  void AddFlatness(int labelValue, double flatness);
+  double GetFlatness(int labelValue);
+
 protected:
   vtkITKLabelShapeStatistics();
   ~vtkITKLabelShapeStatistics() override;
@@ -75,6 +82,8 @@ protected:
   std::map<int, vtkVector3d> Centroids;
   std::map<int, double> FeretDiameter;
   std::map<int, double> Perimeter;
+  std::map<int, double> Roundness;
+  std::map<int, double> Flatness;
   std::map<int, vtkSmartPointer<vtkMatrix4x4> > OrientedBoundingBoxDirection;
   std::map<int, vtkVector3d> OrientedBoundingBoxOrigin;
   std::map<int, vtkVector3d> OrientedBoundingBoxSize;
