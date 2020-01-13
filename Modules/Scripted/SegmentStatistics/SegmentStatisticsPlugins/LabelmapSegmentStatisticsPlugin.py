@@ -11,9 +11,25 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
     super(LabelmapSegmentStatisticsPlugin,self).__init__()
     self.name = "Labelmap"
     self.obbKeys = ["obb_origin_ras", "obb_diameter_mm", "obb_direction_ras_x", "obb_direction_ras_y", "obb_direction_ras_z"]
-    self.shapeKeys = ["centroid_ras", "feret_diameter_mm", "surface_mm2", "roundness", "flatness"] + self.obbKeys
+    self.shapeKeys = [
+      "centroid_ras", "feret_diameter_mm", "surface_area_mm2", "roundness", "flatness",
+      ] + self.obbKeys
+
     self.defaultKeys = ["voxel_count", "volume_mm3", "volume_cm3"] # Don't calculate label shape statistics by default since they take longer to compute
     self.keys = self.defaultKeys + self.shapeKeys
+    self.keyToShapeStatisticNames = {
+      "centroid_ras" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.Centroid),
+      "feret_diameter_mm": vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.FeretDiameter),
+      "surface_area_mm2" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.Perimeter),
+      "roundness" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.Roundness),
+      "flatness" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.Flatness),
+      "oriented_bounding_box" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.OrientedBoundingBox),
+      "obb_origin_ras" : "OrientedBoundingBoxOrigin",
+      "obb_diameter_mm" : "OrientedBoundingBoxSize",
+      "obb_direction_ras_x" : "OrientedBoundingBoxDirectionX",
+      "obb_direction_ras_y" : "OrientedBoundingBoxDirectionY",
+      "obb_direction_ras_z" : "OrientedBoundingBoxDirectionZ",
+      }
     #... developer may add extra options to configure other parameters
 
   def computeStatistics(self, segmentID):
@@ -78,81 +94,100 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
         break
 
     if calculateShapeStats:
-      calculateOBB = False
-      for obbKey in self.obbKeys:
-        if obbKey in requestedKeys:
-          calculateOBB = True
-          break
-
       directions = vtk.vtkMatrix4x4()
       segmentLabelmap.GetDirectionMatrix(directions)
+
+      # Remove oriented bounding box from requested keys and replace with individual keys
+      statFilterOptions = self.shapeKeys
+      calculateOBB = (
+        "obb_diameter_mm" in requestedKeys or
+        "obb_origin_ras" in requestedKeys or
+        "obb_direction_ras_x" in requestedKeys or
+        "obb_direction_ras_y" in requestedKeys or
+        "obb_direction_ras_z" in requestedKeys
+        )
+      if calculateOBB:
+        temp = statFilterOptions
+        statFilterOptions = []
+        for option in temp:
+          if not option in self.obbKeys:
+            statFilterOptions.append(option)
+        statFilterOptions.append("oriented_bounding_box")
 
       shapeStat = vtkITK.vtkITKLabelShapeStatistics()
       shapeStat.SetInputData(thresh.GetOutput())
       shapeStat.SetDirections(directions)
-      if calculateOBB:
-        shapeStat.ComputeOrientedBoundingBoxOn()
-      if "feret_diameter_mm" in requestedKeys:
-        shapeStat.ComputeFeretDiameterOn()
-      if "surface_mm2" in requestedKeys:
-        shapeStat.ComputePerimeterOn()
+      for shapeKey in self.shapeKeys:
+        shapeStat.SetComputeShapeStatistic(self.keyToShapeStatisticNames[shapeKey], shapeKey in requestedKeys)
       shapeStat.Update()
 
       # If segmentation node is transformed, apply that transform to get RAS coordinates
       transformSegmentToRas = vtk.vtkGeneralTransform()
       slicer.vtkMRMLTransformNode.GetTransformBetweenNodes(segmentationNode.GetParentTransformNode(), None, transformSegmentToRas)
 
+      statTable = shapeStat.GetOutput()
       if "centroid_ras" in requestedKeys:
-        centroid = [0,0,0]
         centroidRAS = [0,0,0]
-        shapeStat.GetCentroid(labelValue, centroid)
+        centroidArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["centroid_ras"])
+        centroid = centroidArray.GetTuple(0)
         transformSegmentToRas.TransformPoint(centroid, centroidRAS)
         stats["centroid_ras"] = centroidRAS
+
       if "roundness" in requestedKeys:
-        roundness = shapeStat.GetRoundness(labelValue)
+        roundnessArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["roundness"])
+        roundness = roundnessArray.GetTuple(0)[0]
         stats["roundness"] = roundness
+
       if "flatness" in requestedKeys:
-        flatness = shapeStat.GetFlatness(labelValue)
+        flatnessArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["flatness"])
+        flatness = flatnessArray.GetTuple(0)[0]
         stats["flatness"] = flatness
+
       if "feret_diameter_mm" in requestedKeys:
-        feretDiameter = shapeStat.GetFeretDiameter(labelValue)
+        feretDiameterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["feret_diameter_mm"])
+        feretDiameter = feretDiameterArray.GetTuple(0)[0]
         stats["feret_diameter_mm"] = feretDiameter
-      if "surface_mm2" in requestedKeys:
-        perimeter = shapeStat.GetPerimeter(labelValue)
-        stats["surface_mm2"] = perimeter
+
+      if "surface_area_mm2" in requestedKeys:
+        perimeterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["surface_area_mm2"])
+        perimeter = perimeterArray.GetTuple(0)[0]
+        stats["surface_area_mm2"] = perimeter
+
       if "obb_origin_ras" in requestedKeys:
-        obbOrigin = [0,0,0]
         obbOriginRAS = [0,0,0]
-        shapeStat.GetOrientedBoundingBoxOrigin(labelValue, obbOrigin)
+        obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
+        obbOrigin = obbOriginArray.GetTuple(0)
         transformSegmentToRas.TransformPoint(obbOrigin, obbOriginRAS)
         stats["obb_origin_ras"] = obbOriginRAS
+
       if "obb_diameter_mm" in requestedKeys:
-        obbDiameterMM = [0,0,0]
-        shapeStat.GetOrientedBoundingBoxSize(labelValue, obbDiameterMM)
+        obbDiameterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_diameter_mm"])
+        obbDiameterMM = list(obbDiameterArray.GetTuple(0))
         stats["obb_diameter_mm"] = obbDiameterMM
-      if "obb_direction_ras_x" in requestedKeys or "obb_direction_ras_y" or "obb_direction_ras_z" in requestedKeys:
-        obbOrigin = [0,0,0]
-        shapeStat.GetOrientedBoundingBoxOrigin(labelValue, obbOrigin)
 
-        directions = vtk.vtkMatrix4x4()
-        shapeStat.GetOrientedBoundingBoxDirection(labelValue, directions)
-
-        obbDirectionX = [0,0,0]
-        obbDirectionY = [0,0,0]
-        obbDirectionZ = [0,0,0]
-        for i in range(3):
-          obbDirectionX[i] = directions.GetElement(0, i)
-          obbDirectionY[i] = directions.GetElement(1, i)
-          obbDirectionZ[i] = directions.GetElement(2, i)
+      if "obb_direction_ras_x" in requestedKeys:
+        obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
+        obbOrigin = obbOriginArray.GetTuple(0)
+        obbDirectionXArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_direction_ras_x"])
+        obbDirectionX = list(obbDirectionXArray.GetTuple(0))
         transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionX, obbDirectionX)
+        stats["obb_direction_ras_x"] = obbDirectionX
+
+      if "obb_direction_ras_y" in requestedKeys:
+        obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
+        obbOrigin = obbOriginArray.GetTuple(0)
+        obbDirectionYArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_direction_ras_y"])
+        obbDirectionY = list(obbDirectionYArray.GetTuple(0))
         transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionY, obbDirectionY)
+        stats["obb_direction_ras_y"] = obbDirectionY
+
+      if "obb_direction_ras_z" in requestedKeys:
+        obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
+        obbOrigin = obbOriginArray.GetTuple(0)
+        obbDirectionZArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_direction_ras_z"])
+        obbDirectionZ = list(obbDirectionZArray.GetTuple(0))
         transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionZ, obbDirectionZ)
-        if "obb_direction_ras_x" in requestedKeys:
-          stats["obb_direction_ras_x"] = obbDirectionX
-        if "obb_direction_ras_y" in requestedKeys:
-          stats["obb_direction_ras_y"] = obbDirectionY
-        if "obb_direction_ras_z" in requestedKeys:
-          stats["obb_direction_ras_z"] = obbDirectionZ
+        stats["obb_direction_ras_z"] = obbDirectionZ
 
     return stats
 
@@ -187,7 +222,7 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
     info["feret_diameter_mm"] = \
       self.createMeasurementInfo(name="Feret Diameter mm", description="Feret diameter in mm", units="mm")
 
-    info["surface_mm2"] = \
+    info["surface_area_mm2"] = \
       self.createMeasurementInfo(name="Surface mm2", description="Surface area in mm2", units="mm2",
                                    quantityDicomCode=self.createCodedEntry("000247", "99CHEMINF", "Surface area", True),
                                    unitsDicomCode=self.createCodedEntry("mm2", "UCUM", "squared millimeters", True))
@@ -198,19 +233,22 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
     info["flatness"] = \
       self.createMeasurementInfo(name="Flatness", description="Flatness", units="")
 
+    info["oriented_bounding_box"] = \
+      self.createMeasurementInfo(name="Oriented bounding box", description="Oriented bounding box", units="")
+
     info["obb_origin_ras"] = \
-      self.createMeasurementInfo(name="OBB Origin (RAS)", description="OBB origin", units="")
+      self.createMeasurementInfo(name="OBB origin (RAS)", description="Oriented bounding box origin", units="")
 
     info["obb_diameter_mm"] = \
-      self.createMeasurementInfo(name="OBB diameter", description="OBB diameter", units="mm")
+      self.createMeasurementInfo(name="OBB diameter", description="Oriented bounding box diameter", units="mm")
 
     info["obb_direction_ras_x"] = \
-      self.createMeasurementInfo(name="OBB X direction (RAS)", description="OBB X direction", units="")
+      self.createMeasurementInfo(name="OBB X direction (RAS)", description="Oriented bounding box X direction", units="")
 
     info["obb_direction_ras_y"] = \
-      self.createMeasurementInfo(name="OBB Y direction (RAS)", description="OBB Y direction", units="")
+      self.createMeasurementInfo(name="OBB Y direction (RAS)", description="Oriented bounding box Y direction", units="")
 
     info["obb_direction_ras_z"] = \
-      self.createMeasurementInfo(name="OBB Z direction (RAS)", description="OBB Z direction", units="")
+      self.createMeasurementInfo(name="OBB Z direction (RAS)", description="Oriented bounding box Z direction", units="")
 
     return info[key] if key in info else None

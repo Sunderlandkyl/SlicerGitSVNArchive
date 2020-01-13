@@ -11,25 +11,25 @@
 #define __vtkITKLabelShapeStatistics_h
 
 #include "vtkITK.h"
-#include "vtkSimpleImageToImageFilter.h"
 
 // VTK includes
 #include <vtkMatrix4x4.h>
 #include <vtkSmartPointer.h>
 #include <vtkTable.h>
+#include <vtkTableAlgorithm.h>
 #include <vtkVector.h>
 
 // std includes
-#include <set>
+#include <vector>
 
 class vtkPoints;
 
 /// \brief ITK-based utilities for calculating label statistics.
-class VTK_ITK_EXPORT vtkITKLabelShapeStatistics : public vtkSimpleImageToImageFilter
+class VTK_ITK_EXPORT vtkITKLabelShapeStatistics : public vtkTableAlgorithm
 {
 public:
   static vtkITKLabelShapeStatistics *New();
-  vtkTypeMacro(vtkITKLabelShapeStatistics, vtkSimpleImageToImageFilter);
+  vtkTypeMacro(vtkITKLabelShapeStatistics, vtkTableAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   enum ShapeStatistic
@@ -40,34 +40,33 @@ public:
     Perimeter,
     Roundness,
     Flatness,
+    LastStatistc,
   };
 
-  std::string GetShapeStatisticAsString(ShapeStatistic statistic);
-  ShapeStatistic GetShapeStatisticFromString(std::string statisticName);
+  static std::string GetShapeStatisticAsString(ShapeStatistic statistic);
+  static ShapeStatistic GetShapeStatisticFromString(std::string statisticName);
 
   vtkSetObjectMacro(Directions, vtkMatrix4x4);
-  vtkSetObjectMacro(StatisticsTable, vtkTable);
-  vtkGetObjectMacro(StatisticsTable, vtkTable);
+  vtkSetMacro(ComputedStatistics, std::vector<std::string>);
+  vtkGetMacro(ComputedStatistics, std::vector<std::string>);
 
-  vtkGetMacro(ComputedStatistics, std::set<ShapeStatistic>);
+  void ComputeShapeStatisticOn(std::string statisticName);
+  void ComputeShapeStatisticOff(std::string statisticName);
+  void SetComputeShapeStatistic(std::string statisticName, bool state);
+  bool GetComputeShapeStatistic(std::string statisticName);
 
 protected:
   vtkITKLabelShapeStatistics();
   ~vtkITKLabelShapeStatistics() override;
 
-  void SimpleExecute(vtkImageData* input, vtkImageData* output) override;
-
-  void ComputeShapeStatisticOn(ShapeStatistic statistic);
-  void ComputeShapeStatisticOn(std::string statisticName);
-  void ComputeShapeStatisticOff(ShapeStatistic statistic);
-  void ComputeShapeStatisticOff(std::string statisticName);
-  void SetComputeShapeStatistic(ShapeStatistic statistic, bool state);
-  void SetComputeShapeStatistic(std::string statisticName, bool state);
+  int FillInputPortInformation(int vtkNotUsed(port), vtkInformation* info) override;
+  virtual int RequestData(vtkInformation* request,
+    vtkInformationVector** inputVector,
+    vtkInformationVector* outputVector) override;
 
 protected:
-  std::set<ShapeStatistic> ComputedStatistics;
+  std::vector<std::string> ComputedStatistics;
   vtkMatrix4x4* Directions;
-  vtkTable* StatisticsTable;
 
 private:
   vtkITKLabelShapeStatistics(const vtkITKLabelShapeStatistics&) = delete;
