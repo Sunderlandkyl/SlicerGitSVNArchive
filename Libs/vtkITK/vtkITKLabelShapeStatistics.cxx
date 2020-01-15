@@ -162,7 +162,7 @@ void vtkITKLabelShapeStatisticsHandleProgressEvent (itk::Object *caller,
 
 //----------------------------------------------------------------------------
 template <class T>
-T* GetArray(vtkTable* table, std::string name, int numberOfComponents)
+T* GetArray(vtkTable* table, std::string name, int numberOfComponents, std::vector<std::string>* componentNames = nullptr)
 {
   vtkSmartPointer<T> array = T::SafeDownCast(table->GetColumnByName(name.c_str()));
   if (!array)
@@ -172,6 +172,21 @@ T* GetArray(vtkTable* table, std::string name, int numberOfComponents)
     array->SetNumberOfComponents(numberOfComponents);
     array->SetNumberOfTuples(table->GetNumberOfRows());
     table->AddColumn(array);
+    int componentIndex = 0;
+    if (componentNames)
+      {
+      if (numberOfComponents != componentNames->size())
+        {
+        vtkErrorWithObjectMacro(nullptr, "vtkITKLAbelSHapeStatistics: GetArray - Number of components and component names do not match!");
+        }
+      else
+        {
+        for (std::string componentName : *componentNames)
+          {
+          array->SetComponentName(componentIndex, componentName.c_str());
+          }
+        }
+      }
     }
   return array.GetPointer();
 }
@@ -234,8 +249,8 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
   labelFilter->SetComputeOrientedBoundingBox(computeOrientedBoundingBox);
   labelFilter->Update();
 
-  typename LabelMapType::Pointer labelShapeObject = labelFilter->GetOutput();
-  const std::vector<typename ShapeLabelObjectType::LabelType> labelValues = labelShapeObject->GetLabels();
+  typename LabelMapType::Pointer labelmapObject = labelFilter->GetOutput();
+  const std::vector<typename ShapeLabelObjectType::LabelType> labelValues = labelmapObject->GetLabels();
 
   // Number of rows in the table is equal to the number of label values
   output->SetNumberOfRows(labelValues.size());
@@ -246,8 +261,8 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
     rowIndex++;
     int labelValue = labelValues[i];
 
-    typename ShapeLabelObjectType::ShapeLabelObject::Pointer labelObject = labelShapeObject->GetLabelObject(labelValue);
-    if (!labelObject)
+    typename ShapeLabelObjectType::ShapeLabelObject::Pointer shapeObject = labelmapObject->GetLabelObject(labelValue);
+    if (!shapeObject)
       {
       continue;
       }
@@ -259,45 +274,46 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
       {
       if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::Centroid))
         {
-        typename ShapeLabelObjectType::CentroidType centroidObject = labelObject->GetCentroid();
+        typename ShapeLabelObjectType::CentroidType centroidObject = shapeObject->GetCentroid();
         vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 3);
         array->InsertTuple3(rowIndex, centroidObject[0], centroidObject[1], centroidObject[2]);
         }
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::Roundness))
         {
-        double roundness = labelObject->GetRoundness();
+        double roundness = shapeObject->GetRoundness();
         vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 1);
         array->InsertTuple1(rowIndex, roundness);
         }
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::Flatness))
         {
-        double flatness = labelObject->GetFlatness();
+        double flatness = shapeObject->GetFlatness();
         vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 1);
         array->InsertTuple1(rowIndex, flatness);
         }
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::FeretDiameter))
         {
-        double feretDiameter = labelObject->GetFeretDiameter();
+        double feretDiameter = shapeObject->GetFeretDiameter();
         vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 1);
         array->InsertTuple1(rowIndex, feretDiameter);
         }
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::Perimeter))
         {
-        double perimeter = labelObject->GetPerimeter();
+        double perimeter = shapeObject->GetPerimeter();
         vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 1);
         array->InsertTuple1(rowIndex, perimeter);
         }
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::OrientedBoundingBox))
         {
-        typename ShapeLabelObjectType::OrientedBoundingBoxPointType boundingBoxOrigin = labelObject->GetOrientedBoundingBoxOrigin();
+        typename ShapeLabelObjectType::OrientedBoundingBoxPointType boundingBoxOrigin = shapeObject->GetOrientedBoundingBoxOrigin();
         vtkDoubleArray* obbOriginArray = GetArray<vtkDoubleArray>(output, "OrientedBoundingBoxOrigin", 3);
         obbOriginArray->InsertTuple3(rowIndex, boundingBoxOrigin[0], boundingBoxOrigin[1], boundingBoxOrigin[2]);
 
-        typename ShapeLabelObjectType::OrientedBoundingBoxPointType boundingBoxSize = labelObject->GetOrientedBoundingBoxSize();
-        vtkDoubleArray* obbSizeArray = GetArray<vtkDoubleArray>(output, "OrientedBoundingBoxSize", 3);
+        typename ShapeLabelObjectType::OrientedBoundingBoxPointType boundingBoxSize = shapeObject->GetOrientedBoundingBoxSize();
+        std::vector<std::string> componentNames = { "x", "y", "z" };
+        vtkDoubleArray* obbSizeArray = GetArray<vtkDoubleArray>(output, "OrientedBoundingBoxSize", 3, &componentNames);
         obbSizeArray->InsertTuple3(rowIndex, boundingBoxSize[0], boundingBoxSize[1], boundingBoxSize[2]);
 
-        typename ShapeLabelObjectType::OrientedBoundingBoxDirectionType boundingBoxDirections = labelObject->GetOrientedBoundingBoxDirection();
+        typename ShapeLabelObjectType::OrientedBoundingBoxDirectionType boundingBoxDirections = shapeObject->GetOrientedBoundingBoxDirection();
         vtkDoubleArray* obbDirectionXArray = GetArray<vtkDoubleArray>(output, "OrientedBoundingBoxDirectionX", 3);
         obbDirectionXArray->InsertTuple3(rowIndex, boundingBoxDirections(0, 0), boundingBoxDirections(0, 1), boundingBoxDirections(0, 2));
         vtkDoubleArray* obbDirectionYArray = GetArray<vtkDoubleArray>(output, "OrientedBoundingBoxDirectionY", 3);

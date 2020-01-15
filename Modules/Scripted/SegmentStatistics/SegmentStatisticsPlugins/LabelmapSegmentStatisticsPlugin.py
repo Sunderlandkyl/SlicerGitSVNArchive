@@ -217,7 +217,7 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
                                                                              "Sum of segmented voxel volumes", True))
 
     info["centroid_ras"] = \
-      self.createMeasurementInfo(name="Centroid (RAS)", description="Location of the centroid in RAS", units="")
+      self.createMeasurementInfo(name="Centroid (RAS)", description="Location of the centroid in RAS", units="", componentNames=["r", "a", "s"])
 
     info["feret_diameter_mm"] = \
       self.createMeasurementInfo(name="Feret Diameter mm", description="Feret diameter in mm", units="mm")
@@ -237,18 +237,18 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
       self.createMeasurementInfo(name="Oriented bounding box", description="Oriented bounding box", units="")
 
     info["obb_origin_ras"] = \
-      self.createMeasurementInfo(name="OBB origin (RAS)", description="Oriented bounding box origin", units="")
+      self.createMeasurementInfo(name="OBB origin (RAS)", description="Oriented bounding box origin", units="", componentNames=["r", "a", "s"])
 
     info["obb_diameter_mm"] = \
-      self.createMeasurementInfo(name="OBB diameter", description="Oriented bounding box diameter", units="mm")
+      self.createMeasurementInfo(name="OBB diameter", description="Oriented bounding box diameter", units="mm", componentNames=["x", "y", "z"])
 
     info["obb_direction_ras_x"] = \
-      self.createMeasurementInfo(name="OBB X direction (RAS)", description="Oriented bounding box X direction", units="")
+      self.createMeasurementInfo(name="OBB X direction (RAS)", description="Oriented bounding box X direction", units="", componentNames=["r", "a", "s"])
 
     info["obb_direction_ras_y"] = \
-      self.createMeasurementInfo(name="OBB Y direction (RAS)", description="Oriented bounding box Y direction", units="")
+      self.createMeasurementInfo(name="OBB Y direction (RAS)", description="Oriented bounding box Y direction", units="", componentNames=["r", "a", "s"])
 
     info["obb_direction_ras_z"] = \
-      self.createMeasurementInfo(name="OBB Z direction (RAS)", description="Oriented bounding box Z direction", units="")
+      self.createMeasurementInfo(name="OBB Z direction (RAS)", description="Oriented bounding box Z direction", units="", componentNames=["r", "a", "s"])
 
     return info[key] if key in info else None

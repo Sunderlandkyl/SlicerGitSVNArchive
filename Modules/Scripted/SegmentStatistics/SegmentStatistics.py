@@ -494,6 +494,7 @@ class SegmentStatisticsLogic(ScriptedLoadableModuleLogic):
     # Fill columns
     statistics = self.getStatistics()
     nonEmptyKeys = []
+    print(self.keys)
     for key in self.keys:
       for segmentID in statistics["SegmentIDs"]:
         if (segmentID, key) in statistics:
@@ -600,6 +601,13 @@ class SegmentStatisticsLogic(ScriptedLoadableModuleLogic):
             table.SetColumnDescription(columnName, str(miv))
           elif mik=='units':
             table.SetColumnUnitLabel(columnName, str(miv))
+          elif mik == 'componentNames':
+            componentNames = miv
+            array = table.GetTable().GetColumnByName(columnName)
+            componentIndex = 0
+            for componentName in miv:
+              array.SetComponentName(componentIndex, componentName)
+              componentIndex += 1
           else:
             table.SetColumnProperty(columnName, str(mik), str(miv))
 
