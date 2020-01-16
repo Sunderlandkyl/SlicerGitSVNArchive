@@ -117,11 +117,15 @@ void qSlicerTableColumnPropertiesWidget::setup()
   d->LongNameLineEdit->setProperty(SCHEMA_PROPERTY_NAME, QString("longName"));
   d->DescriptionLineEdit->setProperty(SCHEMA_PROPERTY_NAME, QString("description"));
   d->UnitLabelLineEdit->setProperty(SCHEMA_PROPERTY_NAME, QString("unitLabel"));
+  d->ComponentCountLineEdit->setProperty(SCHEMA_PROPERTY_NAME, QString("componentCount"));
+  d->ComponentNamesLineEdit->setProperty(SCHEMA_PROPERTY_NAME, QString("componentNames"));
 
   d->PropertyEditWidgets << d->NullValueLineEdit;
   d->PropertyEditWidgets << d->LongNameLineEdit;
   d->PropertyEditWidgets << d->DescriptionLineEdit;
   d->PropertyEditWidgets << d->UnitLabelLineEdit;
+  d->PropertyEditWidgets << d->ComponentCountLineEdit;
+  d->PropertyEditWidgets << d->ComponentNamesLineEdit;
 
   connect(d->DataTypeComboBox, SIGNAL(currentIndexChanged(const QString&)), this, SLOT(onDataTypeChanged(const QString&)));
   foreach(QLineEdit* widget, d->PropertyEditWidgets)
@@ -180,7 +184,7 @@ void qSlicerTableColumnPropertiesWidget::setColumnProperty(QString propertyName,
     }
   foreach(const QString& columnName, d->ColumnNames)
     {
-      d->CurrentTableNode->SetColumnProperty(columnName.toLatin1().constData(), propertyName.toLatin1().constData(), propertyValue.toLatin1().constData());
+    d->CurrentTableNode->SetColumnProperty(columnName.toLatin1().constData(), propertyName.toLatin1().constData(), propertyValue.toLatin1().constData());
     }
 }
 
@@ -218,6 +222,12 @@ void qSlicerTableColumnPropertiesWidget::updateWidget()
   d->NameLabel->setVisible(d->ColumnNameVisible);
   d->NameLineEdit->setVisible(d->ColumnNameVisible);
 
+  bool componentRowsVisible = vtkVariant(this->columnProperty("componentCount").toStdString()) > 1;
+  d->ComponentCountLabel->setVisible(componentRowsVisible);
+  d->ComponentCountLineEdit->setVisible(componentRowsVisible);
+  d->ComponentNamesLabel->setVisible(componentRowsVisible);
+  d->ComponentNamesLineEdit->setVisible(componentRowsVisible);
+
   if (d->CurrentTableNode == nullptr)
     {
     this->setEnabled(false);
@@ -232,7 +242,6 @@ void qSlicerTableColumnPropertiesWidget::updateWidget()
 
   foreach(QLineEdit* widget, d->PropertyEditWidgets)
     {
-    connect(widget, SIGNAL(textEdited(const QString&)), this, SLOT(onPropertyChanged(const QString&)));
     widget->setText(this->columnProperty(widget->property(SCHEMA_PROPERTY_NAME).toString()));
     }
 
