@@ -51,6 +51,7 @@ static const char SCHEMA_COLUMN_NULL_VALUE[] = "nullValue";
 static const char SCHEMA_COLUMN_LONG_NAME[] = "longName";
 static const char SCHEMA_COLUMN_DESCRIPTION[] = "description";
 static const char SCHEMA_COLUMN_UNIT_LABEL[] = "unitLabel";
+static const char SCHEMA_COMPONENT_NAMES[] = "componentName";
 
 static const char SCHEMA_DEFAULT_COLUMN_NAME[] = "<default>";
 
@@ -752,6 +753,10 @@ std::string vtkMRMLTableNode::GetColumnProperty(const std::string& columnName, c
     {
     return vtkMRMLTableNode::GetValueTypeAsString(this->GetColumnType(columnName));
     }
+  if (propertyName == SCHEMA_COMPONENT_NAMES)
+    {
+    return vtkMRMLTableNode::GetComponentNamesAsString(this->GetComponentNames(columnName));
+    }
 
   return this->GetColumnPropertyInternal(columnName, propertyName);
 }
@@ -808,6 +813,11 @@ void vtkMRMLTableNode::SetColumnProperty(const std::string& columnName, const st
     this->SetColumnType(columnName, vtkMRMLTableNode::GetValueTypeFromString(propertyValue));
     return;
     }
+  if (propertyName == SCHEMA_COMPONENT_NAMES)
+    {
+    this->SetComponentNames(columnName, this->GetComponentNamesFromString(propertyValue));
+    }
+
   if (propertyName.empty())
     {
     vtkErrorMacro("vtkMRMLTableNode::SetColumnProperty failed: property name is invalid");
@@ -876,7 +886,7 @@ void vtkMRMLTableNode::SetColumnPropertyInternal(const std::string& columnName, 
 //----------------------------------------------------------------------------
 void vtkMRMLTableNode::RemoveColumnProperty(const std::string& propertyName)
 {
-  if (propertyName == SCHEMA_COLUMN_NAME || propertyName == SCHEMA_COLUMN_TYPE)
+  if (propertyName == SCHEMA_COLUMN_NAME || propertyName == SCHEMA_COLUMN_TYPE || propertyName == SCHEMA_COMPONENT_NAMES)
     {
     vtkErrorMacro("vtkMRMLTableNode::RemoveColumnProperty failed: reserved propertyName: " << propertyName);
     return;
@@ -1185,4 +1195,108 @@ int vtkMRMLTableNode::GetColumnType(const std::string& columnName)
     }
   int valueTypeId = this->Table->GetColumn(columnIndex)->GetDataType();
   return valueTypeId;
+}
+
+//----------------------------------------------------------------------------
+const std::vector<std::string> vtkMRMLTableNode::GetComponentNamesFromString(const std::string& componentNamesString)
+{
+  std::stringstream ss(componentNamesString);
+  std::string componentName;
+  std::vector<std::string> componentNames;
+  while (std::getline(ss, componentName, '|'))
+    {
+    componentNames.push_back(componentName);
+    }
+  return componentNames;
+}
+
+//----------------------------------------------------------------------------
+std::string vtkMRMLTableNode::GetComponentNamesAsString(const std::vector<std::string>& componentNames)
+{
+  std::stringstream ss;
+  int componentCount = 0;
+  for (int componentCount = 0; componentCount != componentNames.size(); ++componentCount)
+    {
+    if (componentCount != 0)
+      {
+      ss << "|";
+      }
+    ss << componentNames[componentCount];
+    }
+  return ss.str();
+}
+
+//----------------------------------------------------------------------------
+bool vtkMRMLTableNode::SetComponentNames(const std::string& columnName, const std::vector<std::string>& componentNames)
+{
+  vtkAbstractArray* column = nullptr;
+  if (this->Table && columnName != SCHEMA_DEFAULT_COLUMN_NAME)
+    {
+    column = this->Table->GetColumnByName(columnName.c_str());
+    }
+
+  if (column == nullptr)
+    {
+    return false;
+    }
+
+  if (column->GetNumberOfComponents() != componentNames.size())
+    {
+    return false;
+    }
+
+  int componentIndex = 0;
+  for (std::string componentName : componentNames)
+    {
+    column->SetComponentName(componentIndex, componentName.c_str());
+    ++componentIndex;
+    }
+
+  return true;
+}
+
+
+//----------------------------------------------------------------------------
+std::vector<std::string> vtkMRMLTableNode::GetComponentNames(const std::string& columnName)
+{
+  int numberOfComponents = 1;
+  vtkAbstractArray* column = nullptr;
+  if (this->Table && columnName != SCHEMA_DEFAULT_COLUMN_NAME)
+    {
+    column = this->Table->GetColumnByName(columnName.c_str());
+    }
+
+  return vtkMRMLTableNode::GetComponentNamesFromArray(column);
+}
+
+//----------------------------------------------------------------------------
+std::vector<std::string> vtkMRMLTableNode::GetComponentNamesFromSchema(const std::string& columnName)
+{
+  return this->GetComponentNamesFromString(this->GetColumnPropertyInternal(columnName, SCHEMA_COLUMN_TYPE));
+}
+
+//----------------------------------------------------------------------------
+std::vector<std::string> vtkMRMLTableNode::GetComponentNamesFromArray(vtkAbstractArray* array)
+{
+  std::vector<std::string> componentNames;
+  if (!array)
+    {
+    return componentNames;
+    }
+
+  for (int componentIndex = 0; componentIndex < array->GetNumberOfComponents(); ++componentIndex)
+    {
+    const char* componentName = array->GetComponentName(componentIndex);
+    if (componentName != nullptr)
+      {
+      componentNames.push_back(componentName);
+      }
+    else
+      {
+      // Default to colum integer name 0, 1, 2, etc.
+      std::stringstream ss(componentIndex);
+      componentNames.push_back(ss.str());
+      }
+    }
+  return componentNames;
 }

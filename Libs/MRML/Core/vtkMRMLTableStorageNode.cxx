@@ -771,28 +771,9 @@ bool vtkMRMLTableStorageNode::WriteSchema(std::string filename, vtkMRMLTableNode
         columnNameArray->SetValue(schemaRowIndex, column->GetName());
         }
 
-      std::stringstream componentNamesSS;
-      if (column->GetNumberOfComponents() > 1)
-        {
-        for (int componentIndex = 0; componentIndex < column->GetNumberOfComponents(); ++componentIndex)
-          {
-          if (componentIndex != 0)
-            {
-            componentNamesSS << "|";
-            }
-
-          if (column->GetComponentName(componentIndex))
-            {
-            componentNamesSS << column->GetComponentName(componentIndex);
-            }
-          else
-            {
-            componentNamesSS << componentIndex;
-            }
-          }
-        }
-      std::string componentNames = componentNamesSS.str();
-      componentNamesArray->SetValue(schemaRowIndex, componentNames.c_str());
+      std::vector<std::string> componentNames = vtkMRMLTableNode::GetComponentNamesFromArray(column);
+      std::string componentNamesStr = vtkMRMLTableNode::GetComponentNamesAsString(componentNames);
+      componentNamesArray->SetValue(schemaRowIndex, componentNamesStr.c_str());
       }
     }
 
