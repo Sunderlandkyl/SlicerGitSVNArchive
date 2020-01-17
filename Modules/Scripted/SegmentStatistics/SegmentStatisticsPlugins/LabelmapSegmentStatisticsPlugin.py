@@ -13,6 +13,7 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
     self.obbKeys = ["obb_origin_ras", "obb_diameter_mm", "obb_direction_ras_x", "obb_direction_ras_y", "obb_direction_ras_z"]
     self.shapeKeys = [
       "centroid_ras", "feret_diameter_mm", "surface_area_mm2", "roundness", "flatness",
+      "principal_moments", "principal_axis_x", "principal_axis_y", "principal_axis_z",
       ] + self.obbKeys
 
     self.defaultKeys = ["voxel_count", "volume_mm3", "volume_cm3"] # Don't calculate label shape statistics by default since they take longer to compute
@@ -29,6 +30,11 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
       "obb_direction_ras_x" : "OrientedBoundingBoxDirectionX",
       "obb_direction_ras_y" : "OrientedBoundingBoxDirectionY",
       "obb_direction_ras_z" : "OrientedBoundingBoxDirectionZ",
+      "principal_moments" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.PrincipalMoments),
+      "principal_axes" : vtkITK.vtkITKLabelShapeStatistics.GetShapeStatisticAsString(vtkITK.vtkITKLabelShapeStatistics.PrincipalAxes),
+      "principal_axis_x" : "PrincipalAxisX",
+      "principal_axis_y" : "PrincipalAxisY",
+      "principal_axis_z" : "PrincipalAxisZ",
       }
     #... developer may add extra options to configure other parameters
 
@@ -138,65 +144,97 @@ class LabelmapSegmentStatisticsPlugin(SegmentStatisticsPluginBase):
       if "centroid_ras" in requestedKeys:
         centroidRAS = [0,0,0]
         centroidArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["centroid_ras"])
-        centroid = centroidArray.GetTuple(0)
-        transformSegmentToRas.TransformPoint(centroid, centroidRAS)
-        stats["centroid_ras"] = centroidRAS
+        centroidTuple = centroidArray.GetTuple(0)
+        if centroidTuple is not None:
+          transformSegmentToRas.TransformPoint(centroidTuple, centroidRAS)
+          stats["centroid_ras"] = centroidRAS
 
       if "roundness" in requestedKeys:
         roundnessArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["roundness"])
-        roundness = roundnessArray.GetTuple(0)[0]
-        stats["roundness"] = roundness
+        roundnessTuple = roundnessArray.GetTuple(0)
+        if roundnessTuple is not None:
+          roundness = roundnessTuple[0]
+          stats["roundness"] = roundness
 
       if "flatness" in requestedKeys:
         flatnessArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["flatness"])
-        flatness = flatnessArray.GetTuple(0)[0]
-        stats["flatness"] = flatness
+        flatnessTuple = flatnessArray.GetTuple(0)
+        if flatnessTuple is not None:
+          flatness = flatnessTuple[0]
+          stats["flatness"] = flatness
 
       if "feret_diameter_mm" in requestedKeys:
         feretDiameterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["feret_diameter_mm"])
-        feretDiameter = feretDiameterArray.GetTuple(0)[0]
-        stats["feret_diameter_mm"] = feretDiameter
+        feretDiameterTuple = feretDiameterArray.GetTuple(0)
+        if feretDiameterTuple is not None:
+          feretDiameter = feretDiameterTuple[0]
+          stats["feret_diameter_mm"] = feretDiameter
 
       if "surface_area_mm2" in requestedKeys:
         perimeterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["surface_area_mm2"])
-        perimeter = perimeterArray.GetTuple(0)[0]
-        stats["surface_area_mm2"] = perimeter
+        perimeterTuple = perimeterArray.GetTuple(0)
+        if perimeterTuple is not None:
+          perimeter = perimeterTuple[0]
+          stats["surface_area_mm2"] = perimeter
 
       if "obb_origin_ras" in requestedKeys:
         obbOriginRAS = [0,0,0]
         obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
-        obbOrigin = obbOriginArray.GetTuple(0)
-        transformSegmentToRas.TransformPoint(obbOrigin, obbOriginRAS)
-        stats["obb_origin_ras"] = obbOriginRAS
+        obbOriginTuple = obbOriginArray.GetTuple(0)
+        if obbOriginTuple is not None:
+          transformSegmentToRas.TransformPoint(obbOriginTuple, obbOriginRAS)
+          stats["obb_origin_ras"] = obbOriginRAS
 
       if "obb_diameter_mm" in requestedKeys:
         obbDiameterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_diameter_mm"])
-        obbDiameterMM = list(obbDiameterArray.GetTuple(0))
-        stats["obb_diameter_mm"] = obbDiameterMM
+        obbDiameterMMTuple = obbDiameterArray.GetTuple(0)
+        if obbDiameterMMTuple is not None:
+          obbDiameterMM = list(obbDiameterMMTuple)
+          stats["obb_diameter_mm"] = obbDiameterMM
 
       if "obb_direction_ras_x" in requestedKeys:
         obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
-        obbOrigin = obbOriginArray.GetTuple(0)
+        obbOriginTuple = obbOriginArray.GetTuple(0)
         obbDirectionXArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_direction_ras_x"])
-        obbDirectionX = list(obbDirectionXArray.GetTuple(0))
-        transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionX, obbDirectionX)
-        stats["obb_direction_ras_x"] = obbDirectionX
+        obbDirectionXTuple = obbDirectionXArray.GetTuple(0)
+        if obbOriginTuple is not None and obbDirectionXTuple is not None:
+          obbDirectionX = list(obbDirectionXTuple)
+          transformSegmentToRas.TransformVectorAtPoint(obbOriginTuple, obbDirectionX, obbDirectionX)
+          stats["obb_direction_ras_x"] = obbDirectionX
 
       if "obb_direction_ras_y" in requestedKeys:
         obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
-        obbOrigin = obbOriginArray.GetTuple(0)
+        obbOriginTuple = obbOriginArray.GetTuple(0)
         obbDirectionYArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_direction_ras_y"])
-        obbDirectionY = list(obbDirectionYArray.GetTuple(0))
-        transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionY, obbDirectionY)
-        stats["obb_direction_ras_y"] = obbDirectionY
+        obbDirectionYTuple = obbDirectionYArray.GetTuple(0)
+        if obbOriginTuple is not None and obbDirectionYTuple is not None:
+          obbDirectionY = list(obbDirectionYTuple)
+          transformSegmentToRas.TransformVectorAtPoint(obbOriginTuple, obbDirectionY, obbDirectionY)
+          stats["obb_direction_ras_y"] = obbDirectionY
 
       if "obb_direction_ras_z" in requestedKeys:
         obbOriginArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_origin_ras"])
-        obbOrigin = obbOriginArray.GetTuple(0)
+        obbOriginTuple = obbOriginArray.GetTuple(0)
         obbDirectionZArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_direction_ras_z"])
-        obbDirectionZ = list(obbDirectionZArray.GetTuple(0))
-        transformSegmentToRas.TransformVectorAtPoint(obbOrigin, obbDirectionZ, obbDirectionZ)
-        stats["obb_direction_ras_z"] = obbDirectionZ
+        obbDirectionZTuple = obbDirectionZArray.GetTuple(0)
+        if obbOriginTuple is not None and obbDirectionZTuple is not None:
+          obbDirectionZ = list(obbDirectionZTuple)
+          transformSegmentToRas.TransformVectorAtPoint(obbOriginTuple, obbDirectionZ, obbDirectionZ)
+          stats["obb_direction_ras_z"] = obbDirectionZ
+
+      if "obb_diameter_mm" in requestedKeys:
+        obbDiameterArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["obb_diameter_mm"])
+        obbDiameterMMTuple = obbDiameterArray.GetTuple(0)
+        if obbDiameterMMTuple is not None:
+          obbDiameterMM = list(obbDiameterMMTuple)
+          stats["obb_diameter_mm"] = obbDiameterMM
+
+      if "principal_moments" in requestedKeys:
+        principalMomentsArray = statTable.GetColumnByName(self.keyToShapeStatisticNames["principal_moments"])
+        principalMomentsTuple = principalMomentsArray.GetTuple(0)
+        if principalMomentsTuple is not None:
+          principalMoments = list(principalMomentsTuple)
+          stats["principal_moments"] = principalMoments
 
     return stats
 

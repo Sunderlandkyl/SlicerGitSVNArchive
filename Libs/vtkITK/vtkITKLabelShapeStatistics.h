@@ -60,6 +60,8 @@ public:
     Perimeter,
     Roundness,
     Flatness,
+    PrincipalMoments,
+    PrincipalAxes,
     ShapeStatistic_Last,
   };
 

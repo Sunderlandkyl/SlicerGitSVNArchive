@@ -84,6 +84,10 @@ std::string vtkITKLabelShapeStatistics::GetShapeStatisticAsString(ShapeStatistic
       return "Roundness";
     case Flatness:
       return "Flatness";
+    case PrincipalMoments:
+      return "PrincipalMoments";
+    case PrincipalAxes:
+      return "PrincipalAxes";
     default:
       vtkErrorWithObjectMacro(nullptr, "GetShapeStatisticFromString: Cannot determine string for statistic: " << statistic);
       return "";
@@ -322,6 +326,22 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
         obbDirectionYArray->InsertTuple3(rowIndex, boundingBoxDirections(1, 0), boundingBoxDirections(1, 1), boundingBoxDirections(1, 2));
         vtkDoubleArray* obbDirectionZArray = GetArray<vtkDoubleArray>(output, "OrientedBoundingBoxDirectionZ", 3);
         obbDirectionZArray->InsertTuple3(rowIndex, boundingBoxDirections(2, 0), boundingBoxDirections(2, 1), boundingBoxDirections(2, 2));
+        }
+      else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::PrincipalMoments))
+        {
+        typename ShapeLabelObjectType::VectorType principalMoments = shapeObject->GetPrincipalMoments();
+        vtkDoubleArray* principalMomentsArray = GetArray<vtkDoubleArray>(output, statisticName, 3);
+        principalMomentsArray->InsertTuple3(rowIndex, principalMoments[0], principalMoments[1], principalMoments[2]);
+        }
+      else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::PrincipalAxes))
+        {
+        typename ShapeLabelObjectType::MatrixType principalAxes = shapeObject->GetPrincipalAxes();
+        vtkDoubleArray* principalAxisXArray = GetArray<vtkDoubleArray>(output, "PrincipalAxesX", 3);
+        principalAxisXArray->InsertTuple3(rowIndex, principalAxes(0, 0), principalAxes(0, 1), principalAxes(0, 2));
+        vtkDoubleArray* principalAxisYArray = GetArray<vtkDoubleArray>(output, "PrincipalAxesY", 3);
+        principalAxisYArray->InsertTuple3(rowIndex, principalAxes(1, 0), principalAxes(1, 1), principalAxes(1, 2));
+        vtkDoubleArray* principalAxisZArray = GetArray<vtkDoubleArray>(output, "PrincipalAxesZ", 3);
+        principalAxisZArray->InsertTuple3(rowIndex, principalAxes(2, 0), principalAxes(2, 1), principalAxes(2, 2));
         }
       }
     }
