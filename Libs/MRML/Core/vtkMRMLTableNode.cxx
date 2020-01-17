@@ -51,7 +51,9 @@ static const char SCHEMA_COLUMN_NULL_VALUE[] = "nullValue";
 static const char SCHEMA_COLUMN_LONG_NAME[] = "longName";
 static const char SCHEMA_COLUMN_DESCRIPTION[] = "description";
 static const char SCHEMA_COLUMN_UNIT_LABEL[] = "unitLabel";
-static const char SCHEMA_COMPONENT_NAMES[] = "componentName";
+static const char SCHEMA_COMPONENT_NAMES[] = "componentNames";
+
+static const char COMPONENT_COUNT_PROPERTY[] = "componentCount";
 
 static const char SCHEMA_DEFAULT_COLUMN_NAME[] = "<default>";
 
@@ -757,6 +759,15 @@ std::string vtkMRMLTableNode::GetColumnProperty(const std::string& columnName, c
     {
     return vtkMRMLTableNode::GetComponentNamesAsString(this->GetComponentNames(columnName));
     }
+  if (propertyName == COMPONENT_COUNT_PROPERTY)
+    {
+    int numberOfComponents = 0;
+    if (this->Table && this->Table->GetColumnByName(columnName.c_str()))
+      {
+      numberOfComponents = this->Table->GetColumnByName(columnName.c_str())->GetNumberOfComponents();
+      }
+    return vtkVariant(numberOfComponents).ToString();
+    }
 
   return this->GetColumnPropertyInternal(columnName, propertyName);
 }
@@ -816,6 +827,11 @@ void vtkMRMLTableNode::SetColumnProperty(const std::string& columnName, const st
   if (propertyName == SCHEMA_COMPONENT_NAMES)
     {
     this->SetComponentNames(columnName, this->GetComponentNamesFromString(propertyValue));
+    }
+  if (propertyName == COMPONENT_COUNT_PROPERTY)
+    {
+    vtkErrorMacro("vtkMRMLTableNode::SetColumnProperty failed : property is read-only " << COMPONENT_COUNT_PROPERTY);
+    return;
     }
 
   if (propertyName.empty())
@@ -886,7 +902,8 @@ void vtkMRMLTableNode::SetColumnPropertyInternal(const std::string& columnName, 
 //----------------------------------------------------------------------------
 void vtkMRMLTableNode::RemoveColumnProperty(const std::string& propertyName)
 {
-  if (propertyName == SCHEMA_COLUMN_NAME || propertyName == SCHEMA_COLUMN_TYPE || propertyName == SCHEMA_COMPONENT_NAMES)
+  if (propertyName == SCHEMA_COLUMN_NAME || propertyName == SCHEMA_COLUMN_TYPE
+    || propertyName == SCHEMA_COMPONENT_NAMES || propertyName == COMPONENT_COUNT_PROPERTY)
     {
     vtkErrorMacro("vtkMRMLTableNode::RemoveColumnProperty failed: reserved propertyName: " << propertyName);
     return;
@@ -1254,7 +1271,6 @@ bool vtkMRMLTableNode::SetComponentNames(const std::string& columnName, const st
 
   return true;
 }
-
 
 //----------------------------------------------------------------------------
 std::vector<std::string> vtkMRMLTableNode::GetComponentNames(const std::string& columnName)

@@ -1,16 +1,22 @@
-/*=========================================================================
+/*==============================================================================
 
-  Copyright Brigham and Women's Hospital (BWH) All Rights Reserved.
+  Copyright (c) Laboratory for Percutaneous Surgery (PerkLab)
+  Queen's University, Kingston, ON, Canada. All Rights Reserved.
 
   See COPYRIGHT.txt
   or http://www.slicer.org/copyright/copyright.txt for details.
 
-  Program:   vtkITK
-  Module:    $HeadURL: http://svn.slicer.org/Slicer4/trunk/Libs/vtkITK/vtkITKLabelShapeStatistics.cxx $
-  Date:      $Date: 2006-12-21 07:21:52 -0500 (Thu, 21 Dec 2006) $
-  Version:   $Revision: 1900 $
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 
-==========================================================================*/
+  This file was originally developed by Kyle Sunderland, PerkLab, Queen's University
+  and was supported through CANARIE's Research Software Program, Cancer
+  Care Ontario, OpenAnatomy, and Brigham and Women’s Hospital through NIH grant R01MH112748.
+
+==============================================================================*/
 
 #include "vtkITKLabelShapeStatistics.h"
 

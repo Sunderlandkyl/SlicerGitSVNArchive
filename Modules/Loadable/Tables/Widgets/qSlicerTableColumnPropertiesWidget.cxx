@@ -222,6 +222,12 @@ void qSlicerTableColumnPropertiesWidget::updateWidget()
   d->NameLabel->setVisible(d->ColumnNameVisible);
   d->NameLineEdit->setVisible(d->ColumnNameVisible);
 
+  bool componentRowsVisible = vtkVariant(this->columnProperty("componentCount").toStdString()) > 1;
+  d->ComponentCountLabel->setVisible(componentRowsVisible);
+  d->ComponentCountLineEdit->setVisible(componentRowsVisible);
+  d->ComponentNamesLabel->setVisible(componentRowsVisible);
+  d->ComponentNamesLineEdit->setVisible(componentRowsVisible);
+
   if (d->CurrentTableNode == nullptr)
     {
     this->setEnabled(false);

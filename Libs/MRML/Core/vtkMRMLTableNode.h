@@ -293,7 +293,6 @@ public:
 
   /// TODO
   bool SetComponentNames(const std::string& columnName, const std::vector<std::string>& componentNames);
-
   /// TODO
   static const std::vector<std::string> GetComponentNamesFromString(const std::string& valueTypeStr);
   /// TODO
