@@ -84,6 +84,8 @@ std::string vtkITKLabelShapeStatistics::GetShapeStatisticAsString(ShapeStatistic
       return "Roundness";
     case Flatness:
       return "Flatness";
+    case Elongation:
+      return "Elongation";
     case PrincipalMoments:
       return "PrincipalMoments";
     case PrincipalAxes:
@@ -183,7 +185,7 @@ T* GetArray(vtkTable* table, std::string name, int numberOfComponents, std::vect
       {
       if (numberOfComponents != componentNames->size())
         {
-        vtkErrorWithObjectMacro(nullptr, "vtkITKLAbelSHapeStatistics: GetArray - Number of components and component names do not match!");
+        vtkErrorWithObjectMacro(nullptr, "vtkITKLabelShapeStatistics: GetArray - Number of components and component names do not match!");
         }
       else
         {
@@ -296,6 +298,12 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
         vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 1);
         array->InsertTuple1(rowIndex, flatness);
         }
+      else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::Elongation))
+        {
+        double elongation = shapeObject->GetElongation();
+        vtkDoubleArray* array = GetArray<vtkDoubleArray>(output, statisticName, 1);
+        array->InsertTuple1(rowIndex, elongation);
+        }
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::FeretDiameter))
         {
         double feretDiameter = shapeObject->GetFeretDiameter();
@@ -336,11 +344,11 @@ void vtkITKLabelShapeStatisticsExecute(vtkITKLabelShapeStatistics* self, vtkImag
       else if (statisticName == self->GetShapeStatisticAsString(vtkITKLabelShapeStatistics::PrincipalAxes))
         {
         typename ShapeLabelObjectType::MatrixType principalAxes = shapeObject->GetPrincipalAxes();
-        vtkDoubleArray* principalAxisXArray = GetArray<vtkDoubleArray>(output, "PrincipalAxesX", 3);
+        vtkDoubleArray* principalAxisXArray = GetArray<vtkDoubleArray>(output, "PrincipalAxisX", 3);
         principalAxisXArray->InsertTuple3(rowIndex, principalAxes(0, 0), principalAxes(0, 1), principalAxes(0, 2));
-        vtkDoubleArray* principalAxisYArray = GetArray<vtkDoubleArray>(output, "PrincipalAxesY", 3);
+        vtkDoubleArray* principalAxisYArray = GetArray<vtkDoubleArray>(output, "PrincipalAxisY", 3);
         principalAxisYArray->InsertTuple3(rowIndex, principalAxes(1, 0), principalAxes(1, 1), principalAxes(1, 2));
-        vtkDoubleArray* principalAxisZArray = GetArray<vtkDoubleArray>(output, "PrincipalAxesZ", 3);
+        vtkDoubleArray* principalAxisZArray = GetArray<vtkDoubleArray>(output, "PrincipalAxisZ", 3);
         principalAxisZArray->InsertTuple3(rowIndex, principalAxes(2, 0), principalAxes(2, 1), principalAxes(2, 2));
         }
       }
