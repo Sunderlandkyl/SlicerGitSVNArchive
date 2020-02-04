@@ -1,0 +1,324 @@
+/*==============================================================================
+
+  Copyright (c) Laboratory for Percutaneous Surgery (PerkLab)
+  Queen's University, Kingston, ON, Canada. All Rights Reserved.
+
+  See COPYRIGHT.txt
+  or http://www.slicer.org/copyright/copyright.txt for details.
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  This file was originally developed by Kyle Sunderland, PerkLab, Queen's University
+  and was supported through CANARIE's Research Software Program, Cancer
+  Care Ontario, OpenAnatomy, and Brigham and Women’s Hospital through NIH grant R01MH112748.
+
+==============================================================================*/
+
+// SegmentationCore includes
+#include "vtkOrientedImageData.h"
+#include "vtkOrientedImageDataResample.h"
+#include "vtkSegmentation.h"
+#include "vtkSegmentationConverter.h"
+#include "vtkSegmentationModifier.h"
+
+// VTK includes
+#include <vtkImageConstantPad.h>
+#include <vtkImageThreshold.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+
+vtkStandardNewMacro(vtkSegmentationModifier);
+
+//-----------------------------------------------------------------------------
+vtkSegmentationModifier::vtkSegmentationModifier()
+{
+}
+
+//-----------------------------------------------------------------------------
+vtkSegmentationModifier::~vtkSegmentationModifier()
+{
+}
+
+//-----------------------------------------------------------------------------
+bool vtkSegmentationModifier::ModifyBinaryLabelmap(
+  vtkOrientedImageData* labelmap, vtkSegmentation* segmentation, std::string segmentID, int mergeMode/*=MODE_REPLACE*/, const int extent[6]/*=0*/,
+  bool minimumOfAllSegments/*=false*/, bool masterRepresentationModifiedEnabled/*=false*/, std::vector<std::string> segmentIDsToOverwrite/*={}*/,
+  std::vector<std::string>* modifiedSegmentIDs/*=nullptr*/)
+{
+  if (!segmentation || segmentID.empty() || !labelmap)
+    {
+    vtkGenericWarningMacro("vtkSegmentationModifier::SetBinaryLabelmapToSegment: Invalid inputs");
+    return false;
+    }
+  if (labelmap->GetPointData()->GetScalars() == nullptr)
+    {
+    vtkErrorWithObjectMacro(segmentation, "vtkSegmentationModifier::SetBinaryLabelmapToSegment: Invalid input labelmap");
+    return false;
+    }
+
+  std::vector<std::string> sharedSegmentIDs;
+  segmentation->GetSegmentIDsSharingBinaryLabelmapRepresentation(segmentID, sharedSegmentIDs, false);
+
+  // Determine if there are any segments on the same layer that we should not overwrite
+  bool segmentsOnLayerShouldOverlap = false;
+  for (std::string sharedID : sharedSegmentIDs)
+    {
+    if (std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), sharedID) == segmentIDsToOverwrite.end())
+      {
+      segmentsOnLayerShouldOverlap = true;
+      break;
+      }
+    }
+
+  // If there are segments on the same layer that we should not overwrite, determine if there are any under the modifier labelmap
+  if (segmentsOnLayerShouldOverlap)
+    {
+    std::vector<std::string> sharedSegmentsUnderModifier;
+    vtkSegmentationModifier::GetSharedSegmentIDsInMask(segmentation, segmentID, labelmap,
+      extent, sharedSegmentsUnderModifier, 0.0, false);
+
+    bool separateSegmentID = false;
+    for (std::string sharedSegmentID : sharedSegmentsUnderModifier)
+      {
+      std::vector<std::string>::iterator foundOverwriteIDIt = std::find(segmentIDsToOverwrite.begin(), segmentIDsToOverwrite.end(), sharedSegmentID);
+      if (foundOverwriteIDIt == segmentIDsToOverwrite.end())
+        {
+        // TODO: Implement more robust handling of segment separation and layers.
+        // We would overwrite a segment that should not be. Separate the segment to a separate layer
+        segmentation->SeparateSegmentLabelmap(segmentID);
+        break;
+        }
+      }
+    }
+
+  modifiedSegmentIDs->clear();
+
+  // Get binary labelmap representation of selected segment
+  vtkSegment* selectedSegment = segmentation->GetSegment(segmentID);
+  if (!selectedSegment)
+    {
+    vtkGenericWarningMacro("vtkSegmentationModifier::SetBinaryLabelmapToSegment: Invalid selected segment");
+    return false;
+    }
+  vtkOrientedImageData* segmentLabelmap = vtkOrientedImageData::SafeDownCast(
+    selectedSegment->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()) );
+  if (!segmentLabelmap)
+    {
+    vtkErrorWithObjectMacro(segmentation, "vtkSegmentationModifier::SetBinaryLabelmapToSegment: Failed to get binary labelmap representation in "
+      << "segmentation");
+    return false;
+    }
+
+  bool wasMasterRepresentationModifiedEnabled = segmentation->SetMasterRepresentationModifiedEnabled(masterRepresentationModifiedEnabled);
+
+  // 1. Append input labelmap to the segment labelmap if requested
+  bool segmentLabelmapModified = true;
+
+  int* segmentLabelmapExtent = segmentLabelmap->GetExtent();
+  bool segmentLabelmapEmpty = (segmentLabelmapExtent[0] > segmentLabelmapExtent[1] ||
+    segmentLabelmapExtent[2] > segmentLabelmapExtent[3] ||
+    segmentLabelmapExtent[4] > segmentLabelmapExtent[5]);
+  if (segmentLabelmapEmpty)
+    {
+    if (mergeMode == MODE_MERGE_MIN)
+      {
+      // empty image is assumed to have minimum value everywhere, combining it with MAX operation
+      // results an empty image, so we don't need to do anything.
+      segmentation->SetMasterRepresentationModifiedEnabled(wasMasterRepresentationModifiedEnabled);
+      return true;
+      }
+    // Replace the empty image with the modifier image
+    mergeMode = MODE_REPLACE;
+    }
+
+  int labelValue = selectedSegment->GetLabelValue();
+  // Ensure that the value for the segment can be contained in the labelmap.
+  vtkOrientedImageDataResample::CastImageForValue(segmentLabelmap, labelValue);
+
+  if (mergeMode == MODE_REPLACE)
+    {
+    vtkSmartPointer<vtkOrientedImageData> modifierLabelmap = labelmap;
+    if (segmentation->GetMasterRepresentationName() == vtkSegmentationConverter::GetBinaryLabelmapRepresentationName() &&
+      labelValue != 1)
+      {
+      vtkNew<vtkImageThreshold> threshold;
+      threshold->SetInputData(labelmap);
+      threshold->ThresholdByLower(0);
+      threshold->SetInValue(0);
+      threshold->SetOutValue(labelValue);
+      threshold->Update();
+      modifierLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      modifierLabelmap->ShallowCopy(threshold->GetOutput());
+      modifierLabelmap->CopyDirections(labelmap);
+      }
+    modifiedSegmentIDs->push_back(segmentID);
+
+    if (!vtkOrientedImageDataResample::CopyImage(modifierLabelmap, segmentLabelmap, extent))
+      {
+      vtkErrorWithObjectMacro(segmentation, "vtkSegmentationModifier::SetBinaryLabelmapToSegment: Failed to copy labelmap");
+      segmentation->SetMasterRepresentationModifiedEnabled(wasMasterRepresentationModifiedEnabled);
+      return false;
+      }
+    }
+  else
+    {
+    int operation = vtkOrientedImageDataResample::OPERATION_MINIMUM;
+    switch (mergeMode)
+      {
+      case MODE_MERGE_MAX:
+        operation = vtkOrientedImageDataResample::OPERATION_MAXIMUM;
+        break;
+      case MODE_MERGE_MASK:
+        operation = vtkOrientedImageDataResample::OPERATION_MASKING;
+        break;
+      default:
+        operation = vtkOrientedImageDataResample::OPERATION_MINIMUM;
+      }
+
+    vtkSmartPointer<vtkOrientedImageData> modifierLabelmap = labelmap;
+    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM)
+      {
+      vtkNew<vtkImageThreshold> threshold;
+      threshold->SetInputData(labelmap);
+      threshold->ThresholdByLower(0);
+      threshold->SetInValue(0);
+      threshold->SetOutValue(segmentLabelmap->GetScalarTypeMax());
+      threshold->SetOutputScalarType(segmentLabelmap->GetScalarType());
+      threshold->Update();
+      modifierLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      modifierLabelmap->ShallowCopy(threshold->GetOutput());
+      modifierLabelmap->CopyDirections(labelmap);
+      }
+    else
+      {
+      vtkSegmentationModifier::GetSharedSegmentIDsInMask(segmentation, segmentID, labelmap, extent, *modifiedSegmentIDs);
+      }
+    modifiedSegmentIDs->push_back(segmentID);
+
+    vtkSmartPointer<vtkOrientedImageData> resampledSegmentLabelmap;
+    if (!vtkOrientedImageDataResample::DoGeometriesMatch(segmentLabelmap, modifierLabelmap))
+      {
+      // Make sure appended image has the same lattice as the input image
+      resampledSegmentLabelmap = vtkSmartPointer<vtkOrientedImageData>::New();
+      vtkOrientedImageDataResample::ResampleOrientedImageToReferenceOrientedImage(
+        segmentLabelmap, modifierLabelmap, resampledSegmentLabelmap, false /*interpolate*/, true /*pad*/);
+      }
+    else
+      {
+      resampledSegmentLabelmap = segmentLabelmap;
+      }
+
+    if (operation == vtkOrientedImageDataResample::OPERATION_MINIMUM && !minimumOfAllSegments)
+      {
+      vtkNew<vtkOrientedImageData> segmentMask;
+      vtkNew<vtkImageThreshold> thresholdSegment;
+      thresholdSegment->SetInputData(resampledSegmentLabelmap);
+      thresholdSegment->ThresholdBetween(labelValue, labelValue);
+      thresholdSegment->SetInValue(1);
+      thresholdSegment->SetOutValue(0);
+      thresholdSegment->SetOutputScalarTypeToUnsignedChar();
+      thresholdSegment->Update();
+      segmentMask->ShallowCopy(thresholdSegment->GetOutput());
+      segmentMask->CopyDirections(resampledSegmentLabelmap);
+      vtkOrientedImageDataResample::ApplyImageMask(modifierLabelmap, segmentMask, modifierLabelmap->GetScalarTypeMax());
+      }
+
+    if (!vtkOrientedImageDataResample::MergeImage(
+      resampledSegmentLabelmap, modifierLabelmap, segmentLabelmap, operation, extent, 0, labelValue, &segmentLabelmapModified))
+      {
+      vtkErrorWithObjectMacro(segmentation, "vtkSegmentationModifier::SetBinaryLabelmapToSegment: Failed to merge labelmap (max)");
+      segmentation->SetMasterRepresentationModifiedEnabled(wasMasterRepresentationModifiedEnabled);
+      return false;
+      }
+    }
+
+  // 2. Shrink the image data extent to only contain the effective data (extent of non-zero voxels)
+  int effectiveExtent[6] = {0,-1,0,-1,0,-1};
+  vtkOrientedImageDataResample::CalculateEffectiveExtent(segmentLabelmap, effectiveExtent); // TODO: use the update extent? maybe crop when changing segment?
+  if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
+    {
+    vtkDebugWithObjectMacro(segmentation,
+      "vtkSegmentationModifier::SetBinaryLabelmapToSegment: effective extent of the labelmap to set is invalid (labelmap is empty)");
+    }
+  else
+    {
+    bool isPaddingRequired = false;
+    int segmentExtent[6] = { 0 };
+    segmentLabelmap->GetExtent(segmentExtent);
+    for (int i = 0; i < 3; ++i)
+      {
+      if (effectiveExtent[2 * i] != segmentExtent[2 * i] || effectiveExtent[2 * i + 1] != segmentExtent[2 * i + 1])
+        {
+        isPaddingRequired = true;
+        break;
+        }
+      }
+    if (isPaddingRequired)
+      {
+      vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
+      padder->SetInputData(segmentLabelmap);
+      padder->SetOutputWholeExtent(effectiveExtent);
+      padder->Update();
+      segmentLabelmap->ShallowCopy(padder->GetOutput());
+      }
+    }
+
+  // Re-enable master representation modified event
+  segmentation->SetMasterRepresentationModifiedEnabled(wasMasterRepresentationModifiedEnabled);
+  if (segmentLabelmapModified)
+    {
+    const char* segmentIdChar = segmentID.c_str();
+    segmentation->InvokeEvent(vtkSegmentation::MasterRepresentationModified, (void*)segmentIdChar);
+    segmentation->InvokeEvent(vtkSegmentation::RepresentationModified, (void*)segmentIdChar);
+    }
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool vtkSegmentationModifier::GetSharedSegmentIDsInMask(
+  vtkSegmentation* segmentation, std::string sharedSegmentID, vtkOrientedImageData* maskLabelmap, const int extent[6],
+  std::vector<std::string>& segmentIDs, int maskThreshold/*=0*/, bool includeInputSegmentID/*=false*/)
+{
+  segmentIDs.clear();
+  if (!segmentation)
+    {
+    vtkErrorWithObjectMacro(nullptr, "Invalid segmentation!");
+    return false;
+    }
+
+  std::vector<std::string> sharedSegmentIDs;
+  segmentation->GetSegmentIDsSharingBinaryLabelmapRepresentation(sharedSegmentID, sharedSegmentIDs, includeInputSegmentID);
+  if (sharedSegmentIDs.empty())
+    {
+    // No shared segments to compare against, so there are no relevant IDs in the mask
+    return true;
+    }
+
+  std::map<int, std::string> segmentValues;
+  for (std::string currentSegmentID : sharedSegmentIDs)
+    {
+    vtkSegment* segment = segmentation->GetSegment(currentSegmentID);
+    segmentValues[segment->GetLabelValue()] = currentSegmentID;
+    }
+
+  vtkOrientedImageData* binaryLabelmap = vtkOrientedImageData::SafeDownCast(
+    segmentation->GetSegment(sharedSegmentID)->GetRepresentation(vtkSegmentationConverter::GetSegmentationBinaryLabelmapRepresentationName()));
+
+  std::vector<int> labelValuesInMask;
+  vtkOrientedImageDataResample::GetLabelValuesInMask(labelValuesInMask, binaryLabelmap, maskLabelmap, extent, maskThreshold);
+
+  for (int labelValue : labelValuesInMask)
+    {
+    if (labelValue == 0 || segmentValues.find(labelValue) == segmentValues.end())
+      {
+      continue;
+      }
+    segmentIDs.push_back(segmentValues[labelValue]);
+    }
+  return true;
+}
