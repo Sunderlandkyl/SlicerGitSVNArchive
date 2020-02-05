@@ -38,11 +38,10 @@ class vtkSegmentation;
 class vtkSegmentationCore_EXPORT vtkSegmentationModifier : public vtkObject
 {
 public:
-  static vtkSegmentationModifier *New();
-  vtkTypeMacro(vtkSegmentationModifier,vtkObject);
+  static vtkSegmentationModifier* New();
+  vtkTypeMacro(vtkSegmentationModifier, vtkObject);
 
 public:
-
   /// Set a labelmap image as binary labelmap representation into the segment defined by the segmentation node and segment ID.
   /// Master representation must be binary labelmap! Master representation changed event is disabled to prevent deletion of all
   /// other representation in all segments. The other representations in the given segment are re-converted. The extent of the
@@ -57,8 +56,8 @@ public:
     MODE_MERGE_MASK
   };
   static bool ModifyBinaryLabelmap(vtkOrientedImageData* labelmap, vtkSegmentation* segmentation, std::string segmentID,
-    int mergeMode = MODE_REPLACE, const int extent[6] = nullptr, bool minimumOfAllSegments = false, bool masterRepresentationModifiedEnabled=false,
-    std::vector<std::string> segmentIdsToOverwrite={}, std::vector<std::string>* modifiedSegmentIDs=nullptr);
+    int mergeMode = MODE_REPLACE, const int extent[6] = nullptr, bool minimumOfAllSegments = false, bool masterRepresentationModifiedEnabled = false,
+    const std::vector<std::string> segmentIdsToOverwrite = {}, std::vector<std::string>* modifiedSegmentIDs = nullptr);
 
   /// Get the list of segment IDs in the same shared labelmap that are contained within the mask
   /// \param segmentationNode Node containing the segmentation
@@ -68,6 +67,15 @@ public:
   /// \param includeInputSharedSegmentID If false, sharedSegmentID will not be added to the list of output segment IDs even if it is within the mask
   static bool GetSharedSegmentIDsInMask(vtkSegmentation* segmentation, std::string sharedSegmentID, vtkOrientedImageData* mask, const int extent[6],
     std::vector<std::string>& segmentIDs, int maskThreshold = 0.0, bool includeInputSharedSegmentID = false);
+
+protected:
+  static bool AppendLabelmapToSegment(vtkOrientedImageData* labelmap, vtkSegmentation* segmentation, std::string segmentID, int mergeMode, const int extent[6],
+    bool minimumOfAllSegments, std::vector<std::string>* modifiedSegmentIDs, bool& segmentLabelmapModified);
+
+  static bool SharedLabelmapShouldOverlap(vtkSegmentation* segmentation, std::string segmentID, std::vector<std::string>& segmentIDsToOverwrite);
+
+  static void SeparateModifiedSegmentFromSharedLabelmap(vtkOrientedImageData* labelmap, vtkSegmentation* segmentation, std::string segmentID,
+    const int extent[6], const std::vector<std::string>& segmentIDsToOverwrite);
 
 protected:
   vtkSegmentationModifier();
