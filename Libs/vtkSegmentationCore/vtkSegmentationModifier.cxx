@@ -34,14 +34,10 @@
 vtkStandardNewMacro(vtkSegmentationModifier);
 
 //-----------------------------------------------------------------------------
-vtkSegmentationModifier::vtkSegmentationModifier()
-{
-}
+vtkSegmentationModifier::vtkSegmentationModifier() = default;
 
 //-----------------------------------------------------------------------------
-vtkSegmentationModifier::~vtkSegmentationModifier()
-{
-}
+vtkSegmentationModifier::~vtkSegmentationModifier() = default;
 
 //-----------------------------------------------------------------------------
 bool vtkSegmentationModifier::ModifyBinaryLabelmap(
@@ -98,36 +94,8 @@ bool vtkSegmentationModifier::ModifyBinaryLabelmap(
     return false;
     }
 
-  // 2. Shrink the image data extent to only contain the effective data (extent of non-zero voxels)
-  int effectiveExtent[6] = {0,-1,0,-1,0,-1};
-  vtkOrientedImageDataResample::CalculateEffectiveExtent(segmentLabelmap, effectiveExtent); // TODO: use the update extent? maybe crop when changing segment?
-  if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
-    {
-    vtkDebugWithObjectMacro(segmentation,
-      "vtkSegmentationModifier::SetBinaryLabelmapToSegment: effective extent of the labelmap to set is invalid (labelmap is empty)");
-    }
-  else
-    {
-    bool isPaddingRequired = false;
-    int segmentExtent[6] = { 0 };
-    segmentLabelmap->GetExtent(segmentExtent);
-    for (int i = 0; i < 3; ++i)
-      {
-      if (effectiveExtent[2 * i] != segmentExtent[2 * i] || effectiveExtent[2 * i + 1] != segmentExtent[2 * i + 1])
-        {
-        isPaddingRequired = true;
-        break;
-        }
-      }
-    if (isPaddingRequired)
-      {
-      vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
-      padder->SetInputData(segmentLabelmap);
-      padder->SetOutputWholeExtent(effectiveExtent);
-      padder->Update();
-      segmentLabelmap->ShallowCopy(padder->GetOutput());
-      }
-    }
+  // Shrink the image data extent to only contain the effective data (extent of non-zero voxels)
+  vtkSegmentationModifier::ShrinkSegmentToEffectiveExtent(segmentLabelmap);
 
   // Re-enable master representation modified event
   segmentation->SetMasterRepresentationModifiedEnabled(wasMasterRepresentationModifiedEnabled);
@@ -201,6 +169,7 @@ bool vtkSegmentationModifier::SharedLabelmapShouldOverlap(vtkSegmentation* segme
       break;
       }
     }
+  return segmentsOnLayerShouldOverlap;
 }
 
 //-----------------------------------------------------------------------------
@@ -387,4 +356,38 @@ bool vtkSegmentationModifier::AppendLabelmapToSegment(vtkOrientedImageData* labe
       }
     }
     return true;
+}
+
+//-----------------------------------------------------------------------------
+void vtkSegmentationModifier::ShrinkSegmentToEffectiveExtent(vtkOrientedImageData* segmentLabelmap)
+{
+  int effectiveExtent[6] = {0,-1,0,-1,0,-1};
+  vtkOrientedImageDataResample::CalculateEffectiveExtent(segmentLabelmap, effectiveExtent); // TODO: use the update extent? maybe crop when changing segment?
+  if (effectiveExtent[0] > effectiveExtent[1] || effectiveExtent[2] > effectiveExtent[3] || effectiveExtent[4] > effectiveExtent[5])
+    {
+    vtkDebugWithObjectMacro(segmentLabelmap,
+      "vtkSegmentationModifier::SetBinaryLabelmapToSegment: effective extent of the labelmap to set is invalid (labelmap is empty)");
+    }
+  else
+    {
+    bool isPaddingRequired = false;
+    int segmentExtent[6] = { 0 };
+    segmentLabelmap->GetExtent(segmentExtent);
+    for (int i = 0; i < 3; ++i)
+      {
+      if (effectiveExtent[2 * i] != segmentExtent[2 * i] || effectiveExtent[2 * i + 1] != segmentExtent[2 * i + 1])
+        {
+        isPaddingRequired = true;
+        break;
+        }
+      }
+    if (isPaddingRequired)
+      {
+      vtkSmartPointer<vtkImageConstantPad> padder = vtkSmartPointer<vtkImageConstantPad>::New();
+      padder->SetInputData(segmentLabelmap);
+      padder->SetOutputWholeExtent(effectiveExtent);
+      padder->Update();
+      segmentLabelmap->ShallowCopy(padder->GetOutput());
+      }
+    }
 }

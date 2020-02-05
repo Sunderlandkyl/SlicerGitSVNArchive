@@ -193,14 +193,14 @@ QString qSlicerTableColumnPropertiesWidget::columnProperty(QString propertyName)
 {
   Q_D(const qSlicerTableColumnPropertiesWidget);
   if (d->CurrentTableNode == nullptr)
-  {
+    {
     qWarning() << Q_FUNC_INFO << " failed: table node is not selected";
     return "";
-  }
+    }
   if (d->ColumnNames.empty())
-  {
+    {
     return "";
-  }
+    }
   std::string commonPropertyValue = d->CurrentTableNode->GetColumnProperty(d->ColumnNames[0].toLatin1().constData(), propertyName.toLatin1().constData());
   foreach(const QString& columnName, d->ColumnNames)
     {
@@ -222,17 +222,17 @@ void qSlicerTableColumnPropertiesWidget::updateWidget()
   d->NameLabel->setVisible(d->ColumnNameVisible);
   d->NameLineEdit->setVisible(d->ColumnNameVisible);
 
-  bool componentRowsVisible = vtkVariant(this->columnProperty("componentCount").toStdString()) > 1;
-  d->ComponentCountLabel->setVisible(componentRowsVisible);
-  d->ComponentCountLineEdit->setVisible(componentRowsVisible);
-  d->ComponentNamesLabel->setVisible(componentRowsVisible);
-  d->ComponentNamesLineEdit->setVisible(componentRowsVisible);
-
   if (d->CurrentTableNode == nullptr)
     {
     this->setEnabled(false);
     return;
     }
+
+  bool componentRowsVisible = vtkVariant(this->columnProperty("componentCount").toStdString()) > 1;
+  d->ComponentCountLabel->setVisible(componentRowsVisible);
+  d->ComponentCountLineEdit->setVisible(componentRowsVisible);
+  d->ComponentNamesLabel->setVisible(componentRowsVisible);
+  d->ComponentNamesLineEdit->setVisible(componentRowsVisible);
 
   d->NameLineEdit->setText(d->ColumnNames.join(", "));
 

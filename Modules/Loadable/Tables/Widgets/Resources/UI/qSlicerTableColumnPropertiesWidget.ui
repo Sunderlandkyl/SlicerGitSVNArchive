@@ -105,6 +105,11 @@
        </item>
        <item>
         <property name="text">
+         <string>long</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
          <string>long long</string>
         </property>
        </item>

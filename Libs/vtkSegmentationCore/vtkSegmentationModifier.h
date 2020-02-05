@@ -72,6 +72,8 @@ protected:
   static bool AppendLabelmapToSegment(vtkOrientedImageData* labelmap, vtkSegmentation* segmentation, std::string segmentID, int mergeMode, const int extent[6],
     bool minimumOfAllSegments, std::vector<std::string>* modifiedSegmentIDs, bool& segmentLabelmapModified);
 
+  static void ShrinkSegmentToEffectiveExtent(vtkOrientedImageData* segmentLabelmap);
+
   static bool SharedLabelmapShouldOverlap(vtkSegmentation* segmentation, std::string segmentID, std::vector<std::string>& segmentIDsToOverwrite);
 
   static void SeparateModifiedSegmentFromSharedLabelmap(vtkOrientedImageData* labelmap, vtkSegmentation* segmentation, std::string segmentID,
