@@ -17,17 +17,25 @@
 
 ==============================================================================*/
 
+// Markups MRML includes
 #include "vtkCurveGenerator.h"
 #include "vtkLinearSpline.h"
 
+// VTK includes
 #include <vtkCardinalSpline.h>
+#include <vtkDijkstraGraphGeodesicPath.h>
 #include <vtkDoubleArray.h>
 #include <vtkKochanekSpline.h>
 #include <vtkParametricSpline.h>
 #include <vtkParametricFunction.h>
 #include "vtkParametricPolynomialApproximation.h"
 #include <vtkPoints.h>
+#include <vtkPointLocator.h>
+#include <vtkPolyData.h>
 
+#include <vtkLine.h>
+
+// std includes
 #include <list>
 
 //------------------------------------------------------------------------------
@@ -37,7 +45,6 @@ vtkStandardNewMacro(vtkCurveGenerator);
 vtkCurveGenerator::vtkCurveGenerator()
 {
   this->InputPoints = nullptr;
-  this->InputParameters = nullptr;
   this->SetCurveTypeToLinearSpline();
   this->CurveIsLoop = false;
   this->NumberOfPointsPerInterpolatingSegment = 5;
@@ -52,11 +59,14 @@ vtkCurveGenerator::vtkCurveGenerator()
   this->PolynomialSampleWidth = 0.5;
   this->OutputPoints = nullptr;
   this->OutputCurveLength = 0.0;
+  this->SurfacePolyData = nullptr;
 
   // timestamps for input and output are the same, initially
   this->Modified();
 
   // local storage variables
+  this->PointLocator = vtkSmartPointer<vtkPointLocator>::New();
+  this->InputParameters = nullptr;
   this->ParametricFunction = nullptr;
 }
 
@@ -102,6 +112,10 @@ const char* vtkCurveGenerator::GetCurveTypeAsString(int curveType)
     case vtkCurveGenerator::CURVE_TYPE_POLYNOMIAL:
       {
       return "polynomial";
+      }
+    case vtkCurveGenerator::CURVE_TYPE_SURFACE:
+      {
+      return "surface";
       }
     default:
       {
@@ -323,11 +337,6 @@ void vtkCurveGenerator::Update()
     return;
     }
 
-  if (!this->UpdateNeeded())
-    {
-    return;
-    }
-
   switch (this->CurveType)
     {
     case vtkCurveGenerator::CURVE_TYPE_LINEAR_SPLINE:
@@ -350,6 +359,8 @@ void vtkCurveGenerator::Update()
       this->SetParametricFunctionToPolynomial();
       break;
       }
+    case vtkCurveGenerator::CURVE_TYPE_SURFACE:
+      break;
     default:
       {
       vtkErrorMacro("Error: Unrecognized curve type: " << this->CurveType << ".");
@@ -357,35 +368,6 @@ void vtkCurveGenerator::Update()
       }
     }
   this->GeneratePoints();
-}
-
-//------------------------------------------------------------------------------
-bool vtkCurveGenerator::UpdateNeeded()
-{
-  // assume that if any of these is null, then the user intends for everything to be computed
-  // in normal use, none of these should be null
-  if (this->OutputPoints == nullptr || this->InputPoints == nullptr)
-    {
-    return true;
-    }
-
-  // If this->InputParameters ever become modifiable by the user,
-  // then that modified time will need to be checked here too.
-
-  vtkMTimeType outputModifiedTime = this->OutputPoints->GetMTime();
-  vtkMTimeType curveGeneratorModifiedTime = this->GetMTime();
-  if (curveGeneratorModifiedTime > outputModifiedTime)
-    {
-    return true;
-    }
-
-  vtkMTimeType inputPointsModifiedTime = this->InputPoints->GetMTime();
-  if (inputPointsModifiedTime > outputModifiedTime)
-    {
-    return true;
-    }
-
-  return false;
 }
 
 //------------------------------------------------------------------------------
@@ -590,6 +572,58 @@ void vtkCurveGenerator::GeneratePoints()
   else
     {
     numberOfSegments = (numberOfInputPoints - 1);
+    }
+
+  if (this->CurveType == CURVE_TYPE_SURFACE && this->SurfacePolyData != nullptr)
+    {
+    vtkNew<vtkDijkstraGraphGeodesicPath> pathFilter;
+    pathFilter->SetInputData(this->SurfacePolyData);
+
+    if (vtkPolyData::SafeDownCast(this->PointLocator->GetDataSet()) != this->SurfacePolyData)
+      {
+      this->PointLocator->SetDataSet(this->SurfacePolyData);
+      this->PointLocator->BuildLocator();
+      }
+
+    for (vtkIdType controlPointIndex = 0; controlPointIndex < this->InputPoints->GetNumberOfPoints()-1; ++controlPointIndex)
+      {
+      double controlPoint1[3] = { 0 };
+      this->InputPoints->GetPoint(controlPointIndex, controlPoint1);
+      vtkIdType id1 = this->PointLocator->FindClosestPoint(controlPoint1);
+
+      double controlPoint2[3] = { 0 };
+      this->InputPoints->GetPoint(controlPointIndex+1, controlPoint2);
+      vtkIdType id2 = this->PointLocator->FindClosestPoint(controlPoint2);
+
+      // Path is traced backward, so start vertex should be controlPoint2, and end should be controlPoint1.
+      pathFilter->SetStartVertex(id2);
+      pathFilter->SetEndVertex(id1);
+      pathFilter->SetUseScalarWeights(true);
+      //pathFilter->StopWhenEndReachedOn();
+      pathFilter->Update();
+
+      vtkPolyData* outputPath = pathFilter->GetOutput();
+      double previousPoint[3];
+      for (vtkIdType pointIndex = 0; pointIndex < outputPath->GetNumberOfPoints(); ++pointIndex)
+        {
+        double curvePoint[3] = { 0 };
+        outputPath->GetPoint(pointIndex, curvePoint);
+
+        if (controlPointIndex == 0 || pointIndex > 0)
+          {
+          this->OutputPoints->InsertNextPoint(curvePoint);
+          if (pointIndex > 0)
+            {
+            double segmentLength = sqrt(vtkMath::Distance2BetweenPoints(previousPoint, curvePoint));
+            this->OutputCurveLength += segmentLength;
+            }
+          }
+        previousPoint[0] = curvePoint[0];
+        previousPoint[1] = curvePoint[1];
+        previousPoint[2] = curvePoint[2];
+        }
+      }
+    return;
     }
 
   int totalNumberOfPoints = this->NumberOfPointsPerInterpolatingSegment * numberOfSegments + 1;

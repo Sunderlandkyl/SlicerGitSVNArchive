@@ -27,6 +27,7 @@
 
 // VTK includes
 #include <vtkBoundingBox.h>
+#include <vtkCellLocator.h>
 #include <vtkCutter.h>
 #include <vtkDoubleArray.h>
 #include <vtkFrenetSerretFrame.h>
@@ -48,8 +49,6 @@
 
 // STD includes
 #include <sstream>
-
-class vtkMRMLModelNode;
 
 //----------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLMarkupsCurveNode);
@@ -199,6 +198,7 @@ bool vtkMRMLMarkupsCurveNode::SetControlPointLabels(vtkStringArray* labels, vtkP
 {
   return this->SetControlPointLabelsWorld(labels, points);
 }
+
 //---------------------------------------------------------------------------
 bool vtkMRMLMarkupsCurveNode::ResampleCurveSurface(double controlPointDistance, vtkMRMLModelNode* modelNode, double maximumSearchRadiusTolerance)
 {
@@ -346,6 +346,7 @@ bool vtkMRMLMarkupsCurveNode::ResampleCurveSurface(double controlPointDistance, 
   this->SetControlPointLabelsWorld(originalLabels, originalControlPoints);
   return true;
 }
+
 //---------------------------------------------------------------------------
 bool vtkMRMLMarkupsCurveNode::ConstrainPointsToSurface(vtkPoints* originalPoints, vtkPoints* normalVectors, vtkPolyData* surfacePolydata,
   vtkPoints* surfacePoints, double maximumSearchRadiusTolerance)
@@ -977,6 +978,13 @@ void vtkMRMLMarkupsCurveNode::SetCurveTypeToPolynomial()
 }
 
 //---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::SetCurveTypeToSurface(vtkMRMLModelNode* modelNode)
+{
+  this->CurveGenerator->SetCurveTypeToSurface();
+  this->SetAndObserveModelNode(modelNode);
+}
+
+//---------------------------------------------------------------------------
 int vtkMRMLMarkupsCurveNode::GetNumberOfPointsPerInterpolatingSegment()
 {
   return this->CurveGenerator->GetNumberOfPointsPerInterpolatingSegment();
@@ -1071,4 +1079,25 @@ void vtkMRMLMarkupsCurveNode::UpdateMeasurements()
     this->SetNthMeasurement(0, "length", length, unit, printFormat);
     }
   this->WriteMeasurementsToDescription();
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::ProcessMRMLEvents(vtkObject* caller, unsigned long event, void* callData)
+{
+  this->Superclass::ProcessMRMLEvents(caller, event, callData);
+
+  vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(caller);
+  if (modelNode != nullptr && event == vtkMRMLModelNode::PolyDataModifiedEvent)
+    {
+    this->CurveGenerator->SetSurfacePolyData(modelNode->GetPolyData());
+    }
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::SetAndObserveModelNode(vtkMRMLModelNode* modelNode)
+{
+  vtkNew<vtkIntArray> events;
+  events->InsertNextTuple1(vtkMRMLModelNode::PolyDataModifiedEvent);
+  this->SetAndObserveNodeReferenceID(this->GetSurfaceModelReferenceRole(), modelNode->GetID(), events);
+  this->CurveGenerator->SetSurfacePolyData(modelNode->GetPolyData());
 }

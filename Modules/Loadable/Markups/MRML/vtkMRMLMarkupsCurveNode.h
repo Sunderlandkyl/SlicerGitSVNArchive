@@ -165,8 +165,15 @@ public:
   void SetCurveTypeToCardinalSpline();
   void SetCurveTypeToKochanekSpline();
   void SetCurveTypeToPolynomial();
+  void SetCurveTypeToSurface(vtkMRMLModelNode* modelNode=nullptr); // ShortestDistanceOnSurface
   const char* GetCurveTypeAsString(int id);
   int GetCurveTypeFromString(const char* name);
+
+  const char* GetSurfaceModelReferenceRole() { return "surfaceModelRef"; };
+  // TODO
+  void SetAndObserveModelNode(vtkMRMLModelNode* modelNode);
+
+  void ProcessMRMLEvents(vtkObject* caller, unsigned long event, void* callData) override;
 
   //@{
   /// Get/set how many curve points are inserted between control points.

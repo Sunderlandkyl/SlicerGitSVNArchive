@@ -23,6 +23,7 @@
 // vtk includes
 #include <vtkObject.h>
 #include <vtkParametricFunction.h>
+#include <vtkPolyData.h>
 #include <vtkSetGet.h>
 #include <vtkSmartPointer.h>
 
@@ -55,6 +56,7 @@ public:
     CURVE_TYPE_CARDINAL_SPLINE, // Curve interpolates between input points smoothly
     CURVE_TYPE_KOCHANEK_SPLINE, // Curve interpolates between input points smoothly, generalized
     CURVE_TYPE_POLYNOMIAL, // Curve approximates the input points with a polynomial fit
+    CURVE_TYPE_SURFACE, // TODO
     CURVE_TYPE_LAST // Valid types go above this line
     };
   vtkGetMacro(CurveType, int);
@@ -65,6 +67,7 @@ public:
   void SetCurveTypeToCardinalSpline() { this->SetCurveType(CURVE_TYPE_CARDINAL_SPLINE); }
   void SetCurveTypeToKochanekSpline() { this->SetCurveType(CURVE_TYPE_KOCHANEK_SPLINE); }
   void SetCurveTypeToPolynomial() { this->SetCurveType(CURVE_TYPE_POLYNOMIAL); }
+  void SetCurveTypeToSurface() { this->SetCurveType(CURVE_TYPE_SURFACE); }
 
   virtual bool IsInterpolatingCurve();
 
@@ -155,6 +158,9 @@ public:
   void SetPolynomialWeightFunctionToCosine() { this->SetPolynomialWeightFunction(vtkCurveGenerator::POLYNOMIAL_WEIGHT_FUNCTION_COSINE); }
   void SetPolynomialWeightFunctionToGaussian() { this->SetPolynomialWeightFunction(vtkCurveGenerator::POLYNOMIAL_WEIGHT_FUNCTION_GAUSSIAN); }
 
+  vtkGetObjectMacro(SurfacePolyData, vtkPolyData);
+  vtkSetObjectMacro(SurfacePolyData, vtkPolyData);
+
   // Set the points that the curve should be based on
   vtkPoints* GetInputPoints();
   void SetInputPoints(vtkPoints*);
@@ -193,8 +199,10 @@ private:
   int PolynomialFitMethod;
   double PolynomialSampleWidth;
   int PolynomialWeightFunction;
+  vtkPolyData* SurfacePolyData;
 
   // internal storage
+  vtkSmartPointer< vtkPointLocator> PointLocator;
   vtkSmartPointer< vtkDoubleArray > InputParameters;
   vtkSmartPointer< vtkParametricFunction > ParametricFunction;
 
