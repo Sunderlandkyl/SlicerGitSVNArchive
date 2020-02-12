@@ -70,26 +70,26 @@ vtkMRMLMarkupsNode::vtkMRMLMarkupsNode()
   vtkNew<vtkPoints> curveInputPoints;
   this->CurveInputPoly->SetPoints(curveInputPoints);
 
-  this->CurvePoly = vtkSmartPointer<vtkPolyData>::New();
-  vtkNew<vtkPoints> curvePoints;
-  this->CurvePoly->SetPoints(curvePoints);
-  vtkNew<vtkCellArray> lineCellArray;
-  this->CurvePoly->SetLines(lineCellArray);
+  //this->CurvePoly = vtkSmartPointer<vtkPolyData>::New();
+  //vtkNew<vtkPoints> curvePoints;
+  //this->CurvePoly->SetPoints(curvePoints);
+  //vtkNew<vtkCellArray> lineCellArray;
+  //this->CurvePoly->SetLines(lineCellArray);
 
   this->CurveGenerator = vtkSmartPointer<vtkCurveGenerator>::New();
-  this->CurveGenerator->SetInputPoints(curveInputPoints);
-  this->CurveGenerator->SetOutputPoints(curvePoints);
+  this->CurveGenerator->SetInputData(this->CurveInputPoly);
+  //this->CurveGenerator->SetOutput(this->CurvePoly);
   this->CurveGenerator->SetCurveTypeToLinearSpline();
   this->CurveGenerator->SetNumberOfPointsPerInterpolatingSegment(1);
   this->CurveGenerator->AddObserver(vtkCommand::ModifiedEvent, this->MRMLCallbackCommand);
 
-  vtkNew<vtkTrivialProducer> curvePointConnector; // allows connecting a data object to pipeline input
-  curvePointConnector->SetOutput(this->CurvePoly);
+  //vtkNew<vtkTrivialProducer> curvePointConnector; // allows connecting a data object to pipeline input
+  //curvePointConnector->SetOutput(this->CurvePoly);
 
   this->CurvePolyToWorldTransform = vtkSmartPointer<vtkGeneralTransform>::New();
 
   this->CurvePolyToWorldTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-  this->CurvePolyToWorldTransformer->SetInputConnection(curvePointConnector->GetOutputPort());
+  this->CurvePolyToWorldTransformer->SetInputConnection(this->CurveGenerator->GetOutputPort());
   this->CurvePolyToWorldTransformer->SetTransform(this->CurvePolyToWorldTransform);
 
   this->CurveCoordinateSystemGeneratorWorld = vtkSmartPointer<vtkFrenetSerretFrame>::New();
@@ -177,7 +177,6 @@ void vtkMRMLMarkupsNode::Copy(vtkMRMLNode *anode)
   this->TextList->DeepCopy(node->TextList);
 
   this->CurveInputPoly->GetPoints()->DeepCopy(node->CurveInputPoly->GetPoints());
-  this->UpdateCurvePolyFromCurveInputPoly();
 
   // set max number of markups after adding the new ones
   this->LastUsedControlPointNumber = node->LastUsedControlPointNumber;
@@ -228,7 +227,6 @@ void vtkMRMLMarkupsNode::ProcessMRMLEvents(vtkObject *caller,
     }
   else if (caller == this->CurveGenerator.GetPointer())
     {
-    this->UpdateCurvePolyFromCurveInputPoly();
     int n = -1;
     this->InvokeCustomModifiedEvent(vtkMRMLMarkupsNode::PointModifiedEvent, static_cast<void*>(&n));
     }
@@ -336,10 +334,6 @@ void vtkMRMLMarkupsNode::RemoveAllControlPoints()
 
   this->CurveInputPoly->GetPoints()->Reset();
   this->CurveInputPoly->GetPoints()->Squeeze();
-  this->CurvePoly->GetPoints()->Reset();
-  this->CurvePoly->GetPoints()->Squeeze();
-  this->CurvePoly->GetLines()->Reset();
-  this->CurvePoly->GetLines()->Squeeze();
 
   this->InvokeCustomModifiedEvent(vtkMRMLMarkupsNode::PointRemovedEvent);
   if (definedPointsExisted)
@@ -496,7 +490,6 @@ int vtkMRMLMarkupsNode::AddControlPoint(ControlPoint *controlPoint)
   // TODO: set point mask based on PositionStatus
   this->CurveInputPoly->GetPoints()->InsertNextPoint(controlPoint->Position);
   this->CurveInputPoly->GetPoints()->Modified();
-  this->UpdateCurvePolyFromCurveInputPoly();
 
   int controlPointIndex = this->GetNumberOfControlPoints() - 1;
   this->InvokeCustomModifiedEvent(vtkMRMLMarkupsNode::PointAddedEvent,  static_cast<void*>(&controlPointIndex));
@@ -728,57 +721,6 @@ void vtkMRMLMarkupsNode::UpdateCurvePolyFromControlPoints()
     }
   points->Modified();
 
-  this->UpdateCurvePolyFromCurveInputPoly();
-}
-
-//-----------------------------------------------------------
-void vtkMRMLMarkupsNode::UpdateCurvePolyFromCurveInputPoly()
-{
-  // curve generator is not a filter, it needs manual update
-  this->CurveGenerator->Update();
-
-  // Update lines: a single cell containing a line with point
-  // indices: 0, 1, ..., last point (and an extra 0 if closed curve).
-  vtkIdType numberOfPoints = this->CurvePoly->GetNumberOfPoints();
-  vtkCellArray* lines = this->CurvePoly->GetLines();
-  if (numberOfPoints > 1)
-    {
-    bool loop = (numberOfPoints > 2 && this->CurveClosed);
-    vtkIdType numberOfCellPoints = (loop ? numberOfPoints + 1 : numberOfPoints);
-
-    // Only regenerate indices if necessary
-    bool needToUpdateLines = true;
-    if (lines->GetNumberOfCells() == 1)
-      {
-      vtkIdType currentNumberOfCellPoints = 0;
-      vtkIdType* currentCellPoints = nullptr;
-      lines->GetCell(0, currentNumberOfCellPoints, currentCellPoints);
-
-      if (currentNumberOfCellPoints == numberOfCellPoints)
-        {
-        needToUpdateLines = false;
-        }
-      }
-
-    if (needToUpdateLines)
-      {
-      lines->Reset();
-      lines->InsertNextCell(numberOfCellPoints);
-      for (int i = 0; i < numberOfPoints; i++)
-        {
-        lines->InsertCellPoint(i);
-        }
-      if (loop)
-        {
-        lines->InsertCellPoint(0);
-        }
-      lines->Modified();
-      }
-    }
-  else
-    {
-    lines->Reset();
-    }
 }
 
 //-----------------------------------------------------------
@@ -847,7 +789,6 @@ void vtkMRMLMarkupsNode::SetNthControlPointPosition(const int pointIndex,
   vtkPoints* points = this->CurveInputPoly->GetPoints();
   points->SetPoint(pointIndex, x, y, z);
   points->Modified();
-  this->UpdateCurvePolyFromCurveInputPoly();
 
   // throw an event to let listeners know the position has changed
   int n = pointIndex;
@@ -919,7 +860,6 @@ void vtkMRMLMarkupsNode::SetNthControlPointPositionOrientationWorldFromArray(
   vtkPoints* points = this->CurveInputPoly->GetPoints();
   points->SetPoint(pointIndex, controlPoint->Position);
   points->Modified();
-  this->UpdateCurvePolyFromCurveInputPoly();
 
   // throw an event to let listeners know the position has changed
   int n = pointIndex;
@@ -1630,11 +1570,12 @@ void vtkMRMLMarkupsNode::ConvertOrientationWXYZToMatrix(double orientationWXYZ[4
 //----------------------------------------------------------------------
 vtkPoints* vtkMRMLMarkupsNode::GetCurvePoints()
 {
-  if (!this->CurvePoly)
+  this->CurveGenerator->Update();
+  if (!this->CurveGenerator->GetOutput())
     {
     return nullptr;
     }
-  return this->CurvePoly->GetPoints();
+  return this->CurveGenerator->GetOutput()->GetPoints();
 }
 
 //----------------------------------------------------------------------
@@ -1651,7 +1592,8 @@ vtkPoints* vtkMRMLMarkupsNode::GetCurvePointsWorld()
 //----------------------------------------------------------------------
 vtkPolyData* vtkMRMLMarkupsNode::GetCurve()
 {
-  return this->CurvePoly;
+  this->CurveGenerator->Update();
+  return this->CurveGenerator->GetOutput();
 }
 
 //----------------------------------------------------------------------
@@ -1684,6 +1626,36 @@ int vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex(vtkIdType
     {
     // If sorting is based on spanning tree then we can insert point anywhere (so we add to the end for simplicity).
     return this->GetNumberOfControlPoints();
+    }
+  if (this->CurveGenerator->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SURFACE)
+    {
+    vtkPolyData* output = this->CurveGenerator->GetOutput();
+    if (output)
+      {
+      double point[3] = { 0 };
+      output->GetPoint(interpolatedPointIndex, point);
+      vtkNew<vtkPointLocator> pointLocator;
+      pointLocator->SetDataSet(this->CurveInputPoly);
+      pointLocator->BuildLocator();
+      vtkIdType closestControlIndex = pointLocator->FindClosestPoint(point);
+      if (closestControlIndex > 0 && closestControlIndex < this->CurveInputPoly->GetNumberOfPoints() -1)
+        {
+        vtkIdType previousControlIndex = closestControlIndex - 1;
+        double previousControlPoint[3] = { 0 };
+        this->CurveInputPoly->GetPoint(previousControlIndex, previousControlPoint);
+
+        vtkIdType nextControlIndex = closestControlIndex + 1;
+        double nextControlPoint[3] = { 0 };
+        this->CurveInputPoly->GetPoint(nextControlIndex, nextControlPoint);
+
+        if (vtkMath::Dot(point, previousControlPoint) >
+            vtkMath::Dot(point, nextControlPoint))
+          {
+          return closestControlIndex - 1;
+          }
+        }
+      return closestControlIndex;
+      }
     }
   // In case of approximating curves, there is no clear assignment between control points and curve points.
   vtkWarningMacro("vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex for non-interpolated"

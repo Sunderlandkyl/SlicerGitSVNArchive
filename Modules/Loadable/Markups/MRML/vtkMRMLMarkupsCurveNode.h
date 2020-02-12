@@ -30,6 +30,8 @@
 // VTK includes
 #include <vtkStringArray.h>
 
+class vtkArrayCalculator;
+class vtkPassArrays;
 class vtkPlane;
 
 /// \brief MRML node to represent a curve markup
@@ -169,11 +171,11 @@ public:
   const char* GetCurveTypeAsString(int id);
   int GetCurveTypeFromString(const char* name);
 
+  const char* GetSurfaceScalarFunction();
+  void SetSurfaceScalarFunction(const char* function);
   const char* GetSurfaceModelReferenceRole() { return "surfaceModelRef"; };
   // TODO
   void SetAndObserveModelNode(vtkMRMLModelNode* modelNode);
-
-  void ProcessMRMLEvents(vtkObject* caller, unsigned long event, void* callData) override;
 
   //@{
   /// Get/set how many curve points are inserted between control points.
@@ -183,6 +185,15 @@ public:
   //@}
 
 protected:
+
+  vtkSmartPointer<vtkArrayCalculator> ScalarCalculator;
+  vtkSmartPointer<vtkPassArrays> PassArray;
+
+protected:
+
+  virtual void OnNodeReferenceAdded(vtkMRMLNodeReference* reference) override;
+  virtual void OnNodeReferenceRemoved(vtkMRMLNodeReference* reference) override;
+
   vtkMRMLMarkupsCurveNode();
   ~vtkMRMLMarkupsCurveNode() override;
   vtkMRMLMarkupsCurveNode(const vtkMRMLMarkupsCurveNode&);
