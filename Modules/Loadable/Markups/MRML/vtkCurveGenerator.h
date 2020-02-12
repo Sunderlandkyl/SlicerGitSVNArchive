@@ -58,7 +58,7 @@ public:
     CURVE_TYPE_CARDINAL_SPLINE, // Curve interpolates between input points smoothly
     CURVE_TYPE_KOCHANEK_SPLINE, // Curve interpolates between input points smoothly, generalized
     CURVE_TYPE_POLYNOMIAL, // Curve approximates the input points with a polynomial fit
-    CURVE_TYPE_SURFACE, // TODO
+    CURVE_TYPE_SHORTEST_SURFACE_DISTANCE, // TODO
     CURVE_TYPE_LAST // Valid types go above this line
   };
   vtkGetMacro(CurveType, int);
@@ -69,7 +69,7 @@ public:
   void SetCurveTypeToCardinalSpline() { this->SetCurveType(CURVE_TYPE_CARDINAL_SPLINE); }
   void SetCurveTypeToKochanekSpline() { this->SetCurveType(CURVE_TYPE_KOCHANEK_SPLINE); }
   void SetCurveTypeToPolynomial() { this->SetCurveType(CURVE_TYPE_POLYNOMIAL); }
-  void SetCurveTypeToSurface() { this->SetCurveType(CURVE_TYPE_SURFACE); }
+  void SetCurveTypeToShortestSurfaceDistance() { this->SetCurveType(CURVE_TYPE_SHORTEST_SURFACE_DISTANCE); }
 
   virtual bool IsInterpolatingCurve();
 
@@ -119,7 +119,8 @@ public:
   static const char* GetPolynomialPointSortingMethodAsString(int id);
   static int GetPolynomialPointSortingMethodFromString(const char* name);
   void SetPolynomialPointSortingMethodToIndex() { this->SetPolynomialPointSortingMethod(vtkCurveGenerator::SORTING_METHOD_INDEX); }
-  void SetPolynomialPointSortingMethodToMinimumSpanningTreePosition() {
+  void SetPolynomialPointSortingMethodToMinimumSpanningTreePosition()
+  {
     this->SetPolynomialPointSortingMethod(vtkCurveGenerator::SORTING_METHOD_MINIMUM_SPANNING_TREE_POSITION);
   }
 
@@ -162,9 +163,9 @@ public:
   void SetPolynomialWeightFunctionToGaussian() { this->SetPolynomialWeightFunction(vtkCurveGenerator::POLYNOMIAL_WEIGHT_FUNCTION_GAUSSIAN); }
 
   /// TODO
-  vtkGetMacro(UseSurfaceScalars, bool);
-  vtkSetMacro(UseSurfaceScalars, bool);
-  vtkBooleanMacro(UseSurfaceScalars, bool);
+  vtkGetMacro(UseSurfaceScalarWeights, bool);
+  vtkSetMacro(UseSurfaceScalarWeights, bool);
+  vtkBooleanMacro(UseSurfaceScalarWeights, bool);
 
   /// Get the list of curve point ids on the surface mesh
   vtkIdList* GetSurfacePointIds();
@@ -189,7 +190,7 @@ protected:
   int PolynomialFitMethod;
   double PolynomialSampleWidth;
   int PolynomialWeightFunction;
-  bool UseSurfaceScalars;
+  bool UseSurfaceScalarWeights;
 
   // internal storage
   vtkSmartPointer<vtkPointLocator> PointLocator;

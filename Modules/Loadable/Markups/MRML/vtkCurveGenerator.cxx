@@ -60,7 +60,7 @@ vtkCurveGenerator::vtkCurveGenerator()
   this->PolynomialFitMethod = vtkCurveGenerator::POLYNOMIAL_FIT_METHOD_GLOBAL_LEAST_SQUARES;
   this->PolynomialWeightFunction = vtkCurveGenerator::POLYNOMIAL_WEIGHT_FUNCTION_GAUSSIAN;
   this->PolynomialSampleWidth = 0.5;
-  this->UseSurfaceScalars = true;
+  this->UseSurfaceScalarWeights = true;
   this->OutputCurveLength = 0.0;
 
   // timestamps for input and output are the same, initially
@@ -90,6 +90,7 @@ void vtkCurveGenerator::PrintSelf(std::ostream &os, vtkIndent indent)
   os << indent << "KochanekTension: " << this->KochanekTension << std::endl;
   os << indent << "KochanekEndsCopyNearestDerivatives: " << this->KochanekEndsCopyNearestDerivatives << std::endl;
   os << indent << "PolynomialOrder: " << this->PolynomialOrder << std::endl;
+  os << indent << "UseSurfaceScalarWeights: " << this->UseSurfaceScalarWeights << std::endl;
 }
 
 //----------------------------------------------------------------------------
@@ -137,9 +138,9 @@ const char* vtkCurveGenerator::GetCurveTypeAsString(int curveType)
       {
       return "polynomial";
       }
-    case vtkCurveGenerator::CURVE_TYPE_SURFACE:
+    case vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE:
       {
-      return "surface";
+      return "shortestSurfaceDistance";
       }
     default:
       {
@@ -545,7 +546,7 @@ int vtkCurveGenerator::GeneratePoints(vtkPoints* inputPoints, vtkPolyData* input
       }
     break;
     }
-  case vtkCurveGenerator::CURVE_TYPE_SURFACE:
+  case vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE:
     if (!this->GeneratePointsFromSurface(inputPoints, inputSurface, outputPoints))
       {
       return 0;
@@ -671,7 +672,7 @@ int vtkCurveGenerator::GeneratePointsFromSurface(vtkPoints* inputPoints, vtkPoly
     // Path is traced backward, so start vertex should be controlPoint2, and end should be controlPoint1.
     this->PathFilter->SetStartVertex(id2);
     this->PathFilter->SetEndVertex(id1);
-    this->PathFilter->SetUseScalarWeights(this->UseSurfaceScalars);
+    this->PathFilter->SetUseScalarWeights(this->UseSurfaceScalarWeights);
     this->PathFilter->Update();
 
     vtkPolyData* outputPath = this->PathFilter->GetOutput();

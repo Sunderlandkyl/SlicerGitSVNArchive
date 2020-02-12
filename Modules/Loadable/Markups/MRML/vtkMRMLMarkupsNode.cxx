@@ -70,24 +70,13 @@ vtkMRMLMarkupsNode::vtkMRMLMarkupsNode()
   vtkNew<vtkPoints> curveInputPoints;
   this->CurveInputPoly->SetPoints(curveInputPoints);
 
-  //this->CurvePoly = vtkSmartPointer<vtkPolyData>::New();
-  //vtkNew<vtkPoints> curvePoints;
-  //this->CurvePoly->SetPoints(curvePoints);
-  //vtkNew<vtkCellArray> lineCellArray;
-  //this->CurvePoly->SetLines(lineCellArray);
-
   this->CurveGenerator = vtkSmartPointer<vtkCurveGenerator>::New();
   this->CurveGenerator->SetInputData(this->CurveInputPoly);
-  //this->CurveGenerator->SetOutput(this->CurvePoly);
   this->CurveGenerator->SetCurveTypeToLinearSpline();
   this->CurveGenerator->SetNumberOfPointsPerInterpolatingSegment(1);
   this->CurveGenerator->AddObserver(vtkCommand::ModifiedEvent, this->MRMLCallbackCommand);
 
-  //vtkNew<vtkTrivialProducer> curvePointConnector; // allows connecting a data object to pipeline input
-  //curvePointConnector->SetOutput(this->CurvePoly);
-
   this->CurvePolyToWorldTransform = vtkSmartPointer<vtkGeneralTransform>::New();
-
   this->CurvePolyToWorldTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
   this->CurvePolyToWorldTransformer->SetInputConnection(this->CurveGenerator->GetOutputPort());
   this->CurvePolyToWorldTransformer->SetTransform(this->CurvePolyToWorldTransform);
@@ -1627,7 +1616,7 @@ int vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex(vtkIdType
     // If sorting is based on spanning tree then we can insert point anywhere (so we add to the end for simplicity).
     return this->GetNumberOfControlPoints();
     }
-  if (this->CurveGenerator->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SURFACE)
+  if (this->CurveGenerator->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
     {
     vtkPolyData* output = this->CurveGenerator->GetOutput();
     if (output)

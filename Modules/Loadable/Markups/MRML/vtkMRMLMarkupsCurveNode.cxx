@@ -29,6 +29,7 @@
 #include <vtkArrayCalculator.h>
 #include <vtkBoundingBox.h>
 #include <vtkCellLocator.h>
+#include <vtkCommand.h>
 #include <vtkCutter.h>
 #include <vtkDoubleArray.h>
 #include <vtkFrenetSerretFrame.h>
@@ -64,8 +65,17 @@ vtkMRMLMarkupsCurveNode::vtkMRMLMarkupsCurveNode()
   this->CurveGenerator->SetCurveTypeToCardinalSpline();
   this->CurveGenerator->SetNumberOfPointsPerInterpolatingSegment(10);
 
+  this->PolyDataToWorldTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+  this->PolyDataToWorldTransformer->SetTransform(vtkNew<vtkGeneralTransform>());
+
   this->ScalarCalculator = vtkSmartPointer<vtkArrayCalculator>::New();
   this->PassArray = vtkSmartPointer<vtkPassArrays>::New();
+
+  vtkNew<vtkIntArray> events;
+  events->InsertNextTuple1(vtkCommand::ModifiedEvent);
+  events->InsertNextTuple1(vtkMRMLModelNode::MeshModifiedEvent);
+  events->InsertNextTuple1(vtkMRMLTransformableNode::TransformModifiedEvent);
+  this->AddNodeReferenceRole(this->GetSurfaceMeshNodeReferenceRole(), this->GetSurfaceMeshNodeReferenceMRMLAttributeName(), events);
 }
 
 //----------------------------------------------------------------------------
@@ -80,6 +90,7 @@ void vtkMRMLMarkupsCurveNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLBeginMacro(of);
   vtkMRMLWriteXMLEnumMacro(curveType, CurveType);
   vtkMRMLWriteXMLIntMacro(numberOfPointsPerInterpolatingSegment, NumberOfPointsPerInterpolatingSegment);
+  vtkMRMLWriteXMLBooleanMacro(useSurfaceScalarWeights, UseSurfaceScalarWeights);
   vtkMRMLWriteXMLEndMacro();
 }
 
@@ -92,6 +103,7 @@ void vtkMRMLMarkupsCurveNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLBeginMacro(atts);
   vtkMRMLReadXMLEnumMacro(curveType, CurveType);
   vtkMRMLReadXMLIntMacro(numberOfPointsPerInterpolatingSegment, NumberOfPointsPerInterpolatingSegment);
+  vtkMRMLReadXMLBooleanMacro(useSurfaceScalarWeights, UseSurfaceScalarWeights);
   vtkMRMLReadXMLEndMacro();
 
   this->EndModify(disabledModify);
@@ -107,6 +119,7 @@ void vtkMRMLMarkupsCurveNode::Copy(vtkMRMLNode *anode)
   vtkMRMLCopyBeginMacro(anode);
   vtkMRMLCopyEnumMacro(CurveType);
   vtkMRMLCopyIntMacro(NumberOfPointsPerInterpolatingSegment);
+  vtkMRMLCopyBooleanMacro(UseSurfaceScalarWeights);
   vtkMRMLCopyEndMacro();
 
   this->EndModify(disabledModify);
@@ -120,6 +133,7 @@ void vtkMRMLMarkupsCurveNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintBeginMacro(os, indent);
   vtkMRMLPrintEnumMacro(CurveType);
   vtkMRMLPrintIntMacro(NumberOfPointsPerInterpolatingSegment);
+  vtkMRMLPrintBooleanMacro(UseSurfaceScalarWeights);
   vtkMRMLPrintEndMacro();
 }
 
@@ -982,14 +996,13 @@ void vtkMRMLMarkupsCurveNode::SetCurveTypeToPolynomial()
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLMarkupsCurveNode::SetCurveTypeToSurface(vtkMRMLModelNode* modelNode)
+void vtkMRMLMarkupsCurveNode::SetCurveTypeToShortestSurfaceDistance(vtkMRMLModelNode* modelNode)
 {
-  this->CurveGenerator->SetCurveTypeToSurface();
+  this->CurveGenerator->SetCurveTypeToShortestSurfaceDistance();
   if (modelNode)
     {
     this->SetAndObserveModelNode(modelNode);
     }
-
 }
 
 //---------------------------------------------------------------------------
@@ -1090,24 +1103,54 @@ void vtkMRMLMarkupsCurveNode::UpdateMeasurements()
 }
 
 //---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::ProcessMRMLEvents(vtkObject* caller,
+                                             unsigned long event,
+                                             void* callData)
+{
+  if (caller == this->GetNodeReference(this->GetSurfaceMeshNodeReferenceRole()) && event == vtkMRMLTransformableNode::TransformModifiedEvent)
+    {
+    vtkMRMLTransformableNode* meshNode = vtkMRMLTransformableNode::SafeDownCast(caller);
+    if (meshNode)
+      {
+      vtkMRMLTransformNode* parentTransformNode = meshNode->GetParentTransformNode();
+      if (parentTransformNode)
+        {
+        vtkNew<vtkGeneralTransform> modelToWorldTransform;
+        modelToWorldTransform->Identity();
+        parentTransformNode->GetTransformToWorld(modelToWorldTransform);
+        this->PolyDataToWorldTransformer->SetTransform(modelToWorldTransform);
+        }
+      }
+    }
+
+  // TODO: Determine if/when the scalar values have been modified and update function in ScalarCalculator
+  Superclass::ProcessMRMLEvents(caller, event, callData);
+}
+
+//---------------------------------------------------------------------------
 void vtkMRMLMarkupsCurveNode::OnNodeReferenceAdded(vtkMRMLNodeReference* reference)
 {
-  if (strcmp(reference->GetReferenceRole(), this->GetSurfaceModelReferenceRole()) == 0)
+  if (strcmp(reference->GetReferenceRole(), this->GetSurfaceMeshNodeReferenceRole()) == 0)
     {
     vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(reference->GetReferencedNode());
     if (modelNode)
       {
       double scalarRange[2] = { 0 };
       modelNode->GetPolyData()->GetScalarRange(scalarRange);
-      std::stringstream functionSS; // Ensure that scalar range starts at zero
-      functionSS << std::fixed << modelNode->GetActivePointScalarName(vtkDataSetAttributes::SCALARS);
-      functionSS << " - (" << scalarRange[0] << ") + 1.0";
-      std::string function = functionSS.str();
 
-      this->ScalarCalculator->SetInputConnection(modelNode->GetPolyDataConnection());
+      this->PolyDataToWorldTransformer->SetInputConnection(modelNode->GetPolyDataConnection());
+
+      // TODO: Determine if/when the scalar values have been modified and update function in ScalarCalculator
+      std::stringstream functionSS;
+      functionSS << "input - (" << scalarRange[0] << ") + 1.0";
+      std::string function = functionSS.str();
       this->ScalarCalculator->SetFunction(function.c_str());
+
+      // TODO: Determine if/when to set the function input variables. Currently can only be the active scalar, and is set when node reference is added
+      this->ScalarCalculator->AddScalarVariable("input", modelNode->GetActivePointScalarName(vtkDataSetAttributes::SCALARS), 0);
+
+      this->ScalarCalculator->SetInputConnection(this->PolyDataToWorldTransformer->GetOutputPort());
       this->ScalarCalculator->SetAttributeTypeToPointData();
-      this->ScalarCalculator->AddScalarArrayName(modelNode->GetActivePointScalarName(vtkDataSetAttributes::SCALARS), 0);
       this->ScalarCalculator->SetResultArrayName("weights");
       this->ScalarCalculator->SetResultArrayType(VTK_FLOAT);
 
@@ -1127,13 +1170,19 @@ void vtkMRMLMarkupsCurveNode::OnNodeReferenceAdded(vtkMRMLNodeReference* referen
 //---------------------------------------------------------------------------
 void vtkMRMLMarkupsCurveNode::OnNodeReferenceRemoved(vtkMRMLNodeReference* reference)
 {
-  if (strcmp(reference->GetReferenceRole(), this->GetSurfaceModelReferenceRole()) == 0)
+  if (strcmp(reference->GetReferenceRole(), this->GetSurfaceMeshNodeReferenceRole()) == 0)
     {
     vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(reference->GetReferencedNode());
     if (modelNode)
       {
       this->ScalarCalculator->RemoveAllInputConnections(0);
       this->CurveGenerator->RemoveInputConnection(1, this->ScalarCalculator->GetOutputPort());
+      if (this->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
+        {
+        // Surface node has been removed.
+        // Revert back to default spline.
+        this->CurveGenerator->SetCurveTypeToCardinalSpline();
+        }
       }
     }
 
@@ -1145,22 +1194,22 @@ void vtkMRMLMarkupsCurveNode::SetAndObserveModelNode(vtkMRMLModelNode* modelNode
 {
   if (modelNode)
     {
-    this->SetAndObserveNodeReferenceID(this->GetSurfaceModelReferenceRole(), modelNode->GetID());
+    this->SetAndObserveNodeReferenceID(this->GetSurfaceMeshNodeReferenceRole(), modelNode->GetID());
     }
   else
     {
-    this->SetAndObserveNodeReferenceID(this->GetSurfaceModelReferenceRole(), ""); // TODO
+    this->RemoveNodeReferenceIDs(this->GetSurfaceMeshNodeReferenceRole());
     }
 }
 
 //---------------------------------------------------------------------------
-const char* vtkMRMLMarkupsCurveNode::GetSurfaceScalarFunction()
+bool vtkMRMLMarkupsCurveNode::GetUseSurfaceScalarWeights()
 {
-  return this->ScalarCalculator->GetFunction();
+  return this->CurveGenerator->GetUseSurfaceScalarWeights();
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLMarkupsCurveNode::SetSurfaceScalarFunction(const char* function)
+void vtkMRMLMarkupsCurveNode::SetUseSurfaceScalarWeights(bool useSurfaceScalarWeights)
 {
-  this->ScalarCalculator->SetFunction(function);
+  this->CurveGenerator->SetUseSurfaceScalarWeights(useSurfaceScalarWeights);
 }
