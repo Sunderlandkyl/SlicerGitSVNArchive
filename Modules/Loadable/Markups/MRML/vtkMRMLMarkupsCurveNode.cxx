@@ -28,6 +28,7 @@
 // VTK includes
 #include <vtkArrayCalculator.h>
 #include <vtkBoundingBox.h>
+#include <vtkCallbackCommand.h>
 #include <vtkCellLocator.h>
 #include <vtkCommand.h>
 #include <vtkCutter.h>
@@ -69,13 +70,19 @@ vtkMRMLMarkupsCurveNode::vtkMRMLMarkupsCurveNode()
   this->PolyDataToWorldTransformer->SetTransform(vtkNew<vtkGeneralTransform>());
 
   this->ScalarCalculator = vtkSmartPointer<vtkArrayCalculator>::New();
+  this->ScalarCalculator->AddObserver(vtkCommand::ModifiedEvent, this->MRMLCallbackCommand);
+  this->SetSurfaceScalarWeightFunction("activeScalar");
+
   this->PassArray = vtkSmartPointer<vtkPassArrays>::New();
+  this->PassArray->AddObserver(vtkCommand::ModifiedEvent, this->MRMLCallbackCommand);
 
   vtkNew<vtkIntArray> events;
   events->InsertNextTuple1(vtkCommand::ModifiedEvent);
   events->InsertNextTuple1(vtkMRMLModelNode::MeshModifiedEvent);
   events->InsertNextTuple1(vtkMRMLTransformableNode::TransformModifiedEvent);
   this->AddNodeReferenceRole(this->GetSurfaceMeshNodeReferenceRole(), this->GetSurfaceMeshNodeReferenceMRMLAttributeName(), events);
+
+  this->ActiveScalar = "";
 }
 
 //----------------------------------------------------------------------------
@@ -104,6 +111,7 @@ void vtkMRMLMarkupsCurveNode::ReadXMLAttributes(const char** atts)
   vtkMRMLReadXMLEnumMacro(curveType, CurveType);
   vtkMRMLReadXMLIntMacro(numberOfPointsPerInterpolatingSegment, NumberOfPointsPerInterpolatingSegment);
   vtkMRMLReadXMLBooleanMacro(useSurfaceScalarWeights, UseSurfaceScalarWeights);
+  vtkMRMLReadXMLStringMacro(surfaceScalarWeightFunction, SurfaceScalarWeightFunction);
   vtkMRMLReadXMLEndMacro();
 
   this->EndModify(disabledModify);
@@ -1107,20 +1115,29 @@ void vtkMRMLMarkupsCurveNode::ProcessMRMLEvents(vtkObject* caller,
                                              unsigned long event,
                                              void* callData)
 {
-  if (caller == this->GetNodeReference(this->GetSurfaceMeshNodeReferenceRole()) && event == vtkMRMLTransformableNode::TransformModifiedEvent)
+  if (caller == this->GetNodeReference(this->GetSurfaceMeshNodeReferenceRole()))
     {
-    vtkMRMLTransformableNode* meshNode = vtkMRMLTransformableNode::SafeDownCast(caller);
-    if (meshNode)
+    this->UpdateScalarVariables();
+    if (event == vtkMRMLTransformableNode::TransformModifiedEvent)
       {
-      vtkMRMLTransformNode* parentTransformNode = meshNode->GetParentTransformNode();
-      if (parentTransformNode)
+      vtkMRMLTransformableNode* meshNode = vtkMRMLTransformableNode::SafeDownCast(caller);
+      if (meshNode)
         {
-        vtkNew<vtkGeneralTransform> modelToWorldTransform;
-        modelToWorldTransform->Identity();
-        parentTransformNode->GetTransformToWorld(modelToWorldTransform);
-        this->PolyDataToWorldTransformer->SetTransform(modelToWorldTransform);
+        vtkMRMLTransformNode* parentTransformNode = meshNode->GetParentTransformNode();
+        if (parentTransformNode)
+          {
+          vtkNew<vtkGeneralTransform> modelToWorldTransform;
+          modelToWorldTransform->Identity();
+          parentTransformNode->GetTransformToWorld(modelToWorldTransform);
+          this->PolyDataToWorldTransformer->SetTransform(modelToWorldTransform);
+          }
         }
       }
+    }
+  else if (caller == this->ScalarCalculator.GetPointer())
+    {
+    int n = -1;
+    this->InvokeCustomModifiedEvent(vtkMRMLMarkupsNode::PointModifiedEvent, static_cast<void*>(&n));
     }
 
   // TODO: Determine if/when the scalar values have been modified and update function in ScalarCalculator
@@ -1132,39 +1149,21 @@ void vtkMRMLMarkupsCurveNode::OnNodeReferenceAdded(vtkMRMLNodeReference* referen
 {
   if (strcmp(reference->GetReferenceRole(), this->GetSurfaceMeshNodeReferenceRole()) == 0)
     {
-    vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(reference->GetReferencedNode());
-    if (modelNode)
-      {
-      double scalarRange[2] = { 0 };
-      modelNode->GetPolyData()->GetScalarRange(scalarRange);
-
-      this->PolyDataToWorldTransformer->SetInputConnection(modelNode->GetPolyDataConnection());
-
-      // TODO: Determine if/when the scalar values have been modified and update function in ScalarCalculator
-      std::stringstream functionSS;
-      functionSS << "input - (" << scalarRange[0] << ") + 1.0";
-      std::string function = functionSS.str();
-      this->ScalarCalculator->SetFunction(function.c_str());
-
-      // TODO: Determine if/when to set the function input variables. Currently can only be the active scalar, and is set when node reference is added
-      this->ScalarCalculator->AddScalarVariable("input", modelNode->GetActivePointScalarName(vtkDataSetAttributes::SCALARS), 0);
-
-      this->ScalarCalculator->SetInputConnection(this->PolyDataToWorldTransformer->GetOutputPort());
-      this->ScalarCalculator->SetAttributeTypeToPointData();
-      this->ScalarCalculator->SetResultArrayName("weights");
-      this->ScalarCalculator->SetResultArrayType(VTK_FLOAT);
-
-      this->PassArray->SetInputConnection(this->ScalarCalculator->GetOutputPort());
-      this->PassArray->AddArray(vtkDataObject::POINT, "weights");
-      this->PassArray->UseFieldTypesOn();
-      this->PassArray->AddFieldType(vtkDataObject::POINT);
-      this->PassArray->AddFieldType(vtkDataObject::CELL);
-
-      this->CurveGenerator->SetInputConnection(1, this->PassArray->GetOutputPort());
-      }
+    this->UpdateModelNode();
     }
 
   Superclass::OnNodeReferenceAdded(reference);
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::OnNodeReferenceModified(vtkMRMLNodeReference* reference)
+{
+  if (strcmp(reference->GetReferenceRole(), this->GetSurfaceMeshNodeReferenceRole()) == 0)
+    {
+    this->UpdateModelNode();
+    }
+
+  Superclass::OnNodeReferenceModified(reference);
 }
 
 //---------------------------------------------------------------------------
@@ -1172,34 +1171,21 @@ void vtkMRMLMarkupsCurveNode::OnNodeReferenceRemoved(vtkMRMLNodeReference* refer
 {
   if (strcmp(reference->GetReferenceRole(), this->GetSurfaceMeshNodeReferenceRole()) == 0)
     {
-    vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(reference->GetReferencedNode());
-    if (modelNode)
-      {
-      this->ScalarCalculator->RemoveAllInputConnections(0);
-      this->CurveGenerator->RemoveInputConnection(1, this->ScalarCalculator->GetOutputPort());
-      if (this->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
-        {
-        // Surface node has been removed.
-        // Revert back to default spline.
-        this->CurveGenerator->SetCurveTypeToCardinalSpline();
-        }
-      }
+    this->UpdateModelNode();
     }
-
   Superclass::OnNodeReferenceRemoved(reference);
 }
 
 //---------------------------------------------------------------------------
 void vtkMRMLMarkupsCurveNode::SetAndObserveModelNode(vtkMRMLModelNode* modelNode)
 {
-  if (modelNode)
-    {
-    this->SetAndObserveNodeReferenceID(this->GetSurfaceMeshNodeReferenceRole(), modelNode->GetID());
-    }
-  else
-    {
-    this->RemoveNodeReferenceIDs(this->GetSurfaceMeshNodeReferenceRole());
-    }
+  this->SetAndObserveNodeReferenceID(this->GetSurfaceMeshNodeReferenceRole(), modelNode ? modelNode->GetID() : nullptr);
+}
+
+//---------------------------------------------------------------------------
+vtkMRMLModelNode* vtkMRMLMarkupsCurveNode::GetModelNode()
+{
+  return vtkMRMLModelNode::SafeDownCast(this->GetNodeReference(this->GetSurfaceMeshNodeReferenceRole()));
 }
 
 //---------------------------------------------------------------------------
@@ -1212,4 +1198,119 @@ bool vtkMRMLMarkupsCurveNode::GetUseSurfaceScalarWeights()
 void vtkMRMLMarkupsCurveNode::SetUseSurfaceScalarWeights(bool useSurfaceScalarWeights)
 {
   this->CurveGenerator->SetUseSurfaceScalarWeights(useSurfaceScalarWeights);
+}
+
+//---------------------------------------------------------------------------
+const char* vtkMRMLMarkupsCurveNode::GetSurfaceScalarWeightFunction()
+{
+  return this->ScalarCalculator->GetFunction();
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::SetSurfaceScalarWeightFunction(const char* function)
+{
+  this->ScalarCalculator->SetFunction(function);
+  this->UpdateScalarVariables();
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::UpdateModelNode()
+{
+  this->UpdateScalarVariables();
+
+  vtkMRMLModelNode* modelNode = this->GetModelNode();
+  if (modelNode)
+    {
+    this->PolyDataToWorldTransformer->SetInputConnection(modelNode->GetPolyDataConnection());
+
+    this->ScalarCalculator->SetInputConnection(this->PolyDataToWorldTransformer->GetOutputPort());
+    this->ScalarCalculator->SetAttributeTypeToPointData();
+    this->ScalarCalculator->SetResultArrayName("weights");
+    this->ScalarCalculator->SetResultArrayType(VTK_FLOAT);
+
+    this->PassArray->SetInputConnection(this->ScalarCalculator->GetOutputPort());
+    this->PassArray->AddArray(vtkDataObject::POINT, "weights");
+    this->PassArray->UseFieldTypesOn();
+    this->PassArray->AddFieldType(vtkDataObject::POINT);
+    this->PassArray->AddFieldType(vtkDataObject::CELL);
+
+    this->CurveGenerator->SetInputConnection(1, this->ScalarCalculator->GetOutputPort());
+    }
+  else
+    {
+    this->ScalarCalculator->RemoveAllInputConnections(0);
+    this->CurveGenerator->RemoveInputConnection(1, this->ScalarCalculator->GetOutputPort());
+    }
+}
+
+//---------------------------------------------------------------------------
+void vtkMRMLMarkupsCurveNode::UpdateScalarVariables()
+{
+  vtkMRMLModelNode* modelNode = this->GetModelNode();
+  if (!modelNode)
+    {
+    return;
+    }
+
+  vtkPolyData* polyData = modelNode->GetPolyData();
+  if (!polyData)
+    {
+    return;
+    }
+
+  vtkPointData* pointData = polyData->GetPointData();
+  if (!pointData)
+    {
+    return;
+    }
+
+  const char* activeScalarName = modelNode->GetActivePointScalarName(vtkDataSetAttributes::SCALARS);
+  bool activeScalarChanged = strcmp(activeScalarName, this->ActiveScalar) != 0;
+  this->ActiveScalar = activeScalarName;
+
+  int numberOfArraysInMesh = pointData->GetNumberOfArrays();
+  int numberOfArraysInCalculator = this->ScalarCalculator->GetNumberOfScalarArrays() + this->ScalarCalculator->GetNumberOfVectorArrays();
+  if (!activeScalarChanged && numberOfArraysInMesh + 1 == numberOfArraysInCalculator)
+    {
+    return;
+    }
+
+  this->ScalarCalculator->RemoveAllVariables();
+  for (int i = -1; i < numberOfArraysInMesh; ++i)
+    {
+    const char* variableName = "activeScalar";
+    vtkDataArray* array = nullptr;
+    if (i >= 0)
+      {
+      array = pointData->GetArray(i);
+      variableName = array->GetName();
+      }
+    else
+      {
+      if (!activeScalarName)
+        {
+        continue;
+        }
+      array = pointData->GetArray(activeScalarName);
+      }
+
+    if (!array)
+      {
+      vtkWarningMacro("UpdateScalarVariables: Could not get array " << i);
+      continue;
+      }
+
+    if (array->GetNumberOfComponents() == 1)
+      {
+      this->ScalarCalculator->AddScalarVariable(variableName, array->GetName());
+      }
+    else
+      {
+      this->ScalarCalculator->AddVectorVariable(variableName, array->GetName());
+      }
+    }
+
+  // Changing the variables doesn't invoke modified, so we need to invoke it here.
+  this->ScalarCalculator->Modified();
+  this->Modified();
 }

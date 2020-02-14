@@ -634,15 +634,17 @@ int vtkCurveGenerator::GeneratePointsFromFunction(vtkPoints* inputPoints, vtkPoi
 //------------------------------------------------------------------------------
 int vtkCurveGenerator::GeneratePointsFromSurface(vtkPoints* inputPoints, vtkPolyData* inputSurface, vtkPoints* outputPoints)
 {
+  // If there is no surface, there are no points. Don't report as an error.
   if (!inputSurface)
     {
-    return 0;
+    return 1;
     }
 
+  // If there are no input points, there are output points. Don't report as an error.
   vtkIdType numberOfInputPoints = inputPoints->GetNumberOfPoints();
   if (numberOfInputPoints <= 1)
     {
-    return 0;
+    return 1;
     }
 
   vtkIdType numberOfSegments = 0;
@@ -672,7 +674,12 @@ int vtkCurveGenerator::GeneratePointsFromSurface(vtkPoints* inputPoints, vtkPoly
     // Path is traced backward, so start vertex should be controlPoint2, and end should be controlPoint1.
     this->PathFilter->SetStartVertex(id2);
     this->PathFilter->SetEndVertex(id1);
-    this->PathFilter->SetUseScalarWeights(this->UseSurfaceScalarWeights);
+    if (this->PathFilter->GetUseScalarWeights() != this->UseSurfaceScalarWeights)
+      {
+      this->PathFilter->SetUseScalarWeights(this->UseSurfaceScalarWeights);
+      inputSurface->Modified();
+      }
+
     this->PathFilter->Update();
 
     vtkPolyData* outputPath = this->PathFilter->GetOutput();

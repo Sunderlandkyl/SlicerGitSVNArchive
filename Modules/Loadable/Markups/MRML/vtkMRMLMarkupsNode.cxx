@@ -70,8 +70,13 @@ vtkMRMLMarkupsNode::vtkMRMLMarkupsNode()
   vtkNew<vtkPoints> curveInputPoints;
   this->CurveInputPoly->SetPoints(curveInputPoints);
 
+  this->CurveInputPolyToWorldTransform = vtkSmartPointer<vtkGeneralTransform>::New();
+  this->CurveInputPolyToWorldTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+  this->CurveInputPolyToWorldTransformer->SetInputData(this->CurveInputPoly);
+  this->CurveInputPolyToWorldTransformer->SetTransform(this->CurveInputPolyToWorldTransform);
+
   this->CurveGenerator = vtkSmartPointer<vtkCurveGenerator>::New();
-  this->CurveGenerator->SetInputData(this->CurveInputPoly);
+  this->CurveGenerator->SetInputConnection(this->CurveInputPolyToWorldTransformer->GetOutputPort());
   this->CurveGenerator->SetCurveTypeToLinearSpline();
   this->CurveGenerator->SetNumberOfPointsPerInterpolatingSegment(1);
   this->CurveGenerator->AddObserver(vtkCommand::ModifiedEvent, this->MRMLCallbackCommand);
@@ -79,7 +84,8 @@ vtkMRMLMarkupsNode::vtkMRMLMarkupsNode()
   this->CurvePolyToWorldTransform = vtkSmartPointer<vtkGeneralTransform>::New();
   this->CurvePolyToWorldTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
   this->CurvePolyToWorldTransformer->SetInputConnection(this->CurveGenerator->GetOutputPort());
-  this->CurvePolyToWorldTransformer->SetTransform(this->CurvePolyToWorldTransform);
+  //this->CurvePolyToWorldTransformer->SetTransform(this->CurvePolyToWorldTransform);
+  this->CurvePolyToWorldTransformer->SetTransform(vtkSmartPointer<vtkGeneralTransform>::New());
 
   this->CurveCoordinateSystemGeneratorWorld = vtkSmartPointer<vtkFrenetSerretFrame>::New();
   // Curve coordinate system is computed at the very end of the pipeline so that it is only computed
@@ -211,6 +217,7 @@ void vtkMRMLMarkupsNode::ProcessMRMLEvents(vtkObject *caller,
 {
   if (caller != nullptr && event == vtkMRMLTransformableNode::TransformModifiedEvent)
     {
+    vtkMRMLTransformNode::GetTransformBetweenNodes(this->GetParentTransformNode(), nullptr, this->CurveInputPolyToWorldTransform);
     vtkMRMLTransformNode::GetTransformBetweenNodes(this->GetParentTransformNode(), nullptr, this->CurvePolyToWorldTransform);
     this->UpdateMeasurements();
     }
@@ -1618,6 +1625,7 @@ int vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex(vtkIdType
     }
   if (this->CurveGenerator->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
     {
+    /// TODO: Need some reliable fallback that can always find the correct control point index
     vtkPolyData* output = this->CurveGenerator->GetOutput();
     if (output)
       {
