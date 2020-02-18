@@ -29,6 +29,7 @@
 #include <QSignalMapper>
 #include <QStringList>
 #include <QTableWidgetItem>
+#include <QTimer>
 
 // CTK includes
 #include "ctkMessageBox.h"
@@ -124,6 +125,8 @@ private:
   QAction*    cutAction;
   QAction*    copyAction;
   QAction*    pasteAction;
+
+  QTimer*     editScalarFunctionDelay;
 };
 
 //-----------------------------------------------------------------------------
@@ -151,6 +154,8 @@ qSlicerMarkupsModuleWidgetPrivate::qSlicerMarkupsModuleWidgetPrivate(qSlicerMark
   this->cutAction = nullptr;
   this->copyAction = nullptr;
   this->pasteAction = nullptr;
+
+  this->editScalarFunctionDelay = nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -444,6 +449,11 @@ void qSlicerMarkupsModuleWidgetPrivate::setupUi(qSlicerWidget* widget)
     this->curveTypeComboBox->addItem(vtkCurveGenerator::GetCurveTypeAsString(curveType), curveType);
     }
 
+  this->editScalarFunctionDelay = new QTimer(q);
+  this->editScalarFunctionDelay->setInterval(500);
+  this->editScalarFunctionDelay->setSingleShot(true);
+  QObject::connect(this->editScalarFunctionDelay, SIGNAL(timeout()),
+    q, SLOT(onCurveTypeParameterChanged()));
   QObject::connect(this->curveTypeComboBox, SIGNAL(currentIndexChanged(int)),
     q, SLOT(onCurveTypeParameterChanged()));
   QObject::connect(this->modelNodeSelector, SIGNAL(currentNodeChanged(vtkMRMLNode*)),
@@ -451,7 +461,7 @@ void qSlicerMarkupsModuleWidgetPrivate::setupUi(qSlicerWidget* widget)
   QObject::connect(this->useScalarsCheckBox, SIGNAL(stateChanged(int)),
     q, SLOT(onCurveTypeParameterChanged()));
   QObject::connect(this->scalarFunctionLineEdit, SIGNAL(textChanged(QString)),
-    q, SLOT(onCurveTypeParameterChanged()));
+    this->editScalarFunctionDelay, SLOT(start()));
 }
 
 //-----------------------------------------------------------------------------
@@ -878,9 +888,9 @@ void qSlicerMarkupsModuleWidget::updateWidgetFromMRML()
   d->useScalarsCheckBox->blockSignals(wasBlocked);
 
   wasBlocked = d->scalarFunctionLineEdit->blockSignals(true);
-  QPoint currentCursorPosition = d->scalarFunctionLineEdit->cursor().pos();
+  int currentCursorPosition = d->scalarFunctionLineEdit->cursorPosition();
   d->scalarFunctionLineEdit->setText(markupsCurveNode->GetSurfaceScalarWeightFunction());
-  d->scalarFunctionLineEdit->cursor().setPos(currentCursorPosition);
+  d->scalarFunctionLineEdit->setCursorPosition(currentCursorPosition);
   d->scalarFunctionLineEdit->blockSignals(wasBlocked);
 }
 

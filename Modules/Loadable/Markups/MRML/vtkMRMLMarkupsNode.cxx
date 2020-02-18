@@ -34,6 +34,7 @@
 #include <vtkBitArray.h>
 #include <vtkBoundingBox.h>
 #include <vtkCallbackCommand.h>
+#include <vtkCellLocator.h>
 #include <vtkFrenetSerretFrame.h>
 #include <vtkGeneralTransform.h>
 #include <vtkMatrix4x4.h>
@@ -1625,34 +1626,7 @@ int vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex(vtkIdType
     }
   if (this->CurveGenerator->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
     {
-    /// TODO: Need some reliable fallback that can always find the correct control point index
-    vtkPolyData* output = this->CurveGenerator->GetOutput();
-    if (output)
-      {
-      double point[3] = { 0 };
-      output->GetPoint(interpolatedPointIndex, point);
-      vtkNew<vtkPointLocator> pointLocator;
-      pointLocator->SetDataSet(this->CurveInputPoly);
-      pointLocator->BuildLocator();
-      vtkIdType closestControlIndex = pointLocator->FindClosestPoint(point);
-      if (closestControlIndex > 0 && closestControlIndex < this->CurveInputPoly->GetNumberOfPoints() -1)
-        {
-        vtkIdType previousControlIndex = closestControlIndex - 1;
-        double previousControlPoint[3] = { 0 };
-        this->CurveInputPoly->GetPoint(previousControlIndex, previousControlPoint);
-
-        vtkIdType nextControlIndex = closestControlIndex + 1;
-        double nextControlPoint[3] = { 0 };
-        this->CurveInputPoly->GetPoint(nextControlIndex, nextControlPoint);
-
-        if (vtkMath::Dot(point, previousControlPoint) >
-            vtkMath::Dot(point, nextControlPoint))
-          {
-          return closestControlIndex - 1;
-          }
-        }
-      return closestControlIndex;
-      }
+    return this->CurveGenerator->GetCorrespondingControlPoint(interpolatedPointIndex);
     }
   // In case of approximating curves, there is no clear assignment between control points and curve points.
   vtkWarningMacro("vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex for non-interpolated"

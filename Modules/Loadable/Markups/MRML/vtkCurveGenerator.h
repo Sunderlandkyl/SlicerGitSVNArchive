@@ -167,6 +167,8 @@ public:
   vtkSetMacro(UseSurfaceScalarWeights, bool);
   vtkBooleanMacro(UseSurfaceScalarWeights, bool);
 
+  vtkIdType GetCorrespondingControlPoint(vtkIdType outputPointId);
+
   /// Get the list of curve point ids on the surface mesh
   vtkIdList* GetSurfacePointIds();
 
@@ -191,6 +193,7 @@ protected:
   double PolynomialSampleWidth;
   int PolynomialWeightFunction;
   bool UseSurfaceScalarWeights;
+  std::vector<vtkIdType> CorrespondingControlPointIds;
 
   // internal storage
   vtkSmartPointer<vtkPointLocator> PointLocator;

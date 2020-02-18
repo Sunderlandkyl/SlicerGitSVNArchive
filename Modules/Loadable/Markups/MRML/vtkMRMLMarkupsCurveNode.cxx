@@ -98,6 +98,7 @@ void vtkMRMLMarkupsCurveNode::WriteXML(ostream& of, int nIndent)
   vtkMRMLWriteXMLEnumMacro(curveType, CurveType);
   vtkMRMLWriteXMLIntMacro(numberOfPointsPerInterpolatingSegment, NumberOfPointsPerInterpolatingSegment);
   vtkMRMLWriteXMLBooleanMacro(useSurfaceScalarWeights, UseSurfaceScalarWeights);
+  vtkMRMLWriteXMLStringMacro(surfaceScalarWeightFunction, SurfaceScalarWeightFunction);
   vtkMRMLWriteXMLEndMacro();
 }
 
@@ -128,6 +129,7 @@ void vtkMRMLMarkupsCurveNode::Copy(vtkMRMLNode *anode)
   vtkMRMLCopyEnumMacro(CurveType);
   vtkMRMLCopyIntMacro(NumberOfPointsPerInterpolatingSegment);
   vtkMRMLCopyBooleanMacro(UseSurfaceScalarWeights);
+  vtkMRMLCopyStringMacro(SurfaceScalarWeightFunction);
   vtkMRMLCopyEndMacro();
 
   this->EndModify(disabledModify);
@@ -142,6 +144,7 @@ void vtkMRMLMarkupsCurveNode::PrintSelf(ostream& os, vtkIndent indent)
   vtkMRMLPrintEnumMacro(CurveType);
   vtkMRMLPrintIntMacro(NumberOfPointsPerInterpolatingSegment);
   vtkMRMLPrintBooleanMacro(UseSurfaceScalarWeights);
+  vtkMRMLPrintStringMacro(SurfaceScalarWeightFunction);
   vtkMRMLPrintEndMacro();
 }
 
@@ -1265,7 +1268,15 @@ void vtkMRMLMarkupsCurveNode::UpdateScalarVariables()
     }
 
   const char* activeScalarName = modelNode->GetActivePointScalarName(vtkDataSetAttributes::SCALARS);
-  bool activeScalarChanged = strcmp(activeScalarName, this->ActiveScalar) != 0;
+  bool activeScalarChanged = false;
+  if (!activeScalarName && this->ActiveScalar)
+    {
+    activeScalarChanged = true;
+    }
+  if (activeScalarName && strcmp(activeScalarName, this->ActiveScalar) != 0)
+    {
+    activeScalarChanged = true;
+    }
   this->ActiveScalar = activeScalarName;
 
   int numberOfArraysInMesh = pointData->GetNumberOfArrays();
