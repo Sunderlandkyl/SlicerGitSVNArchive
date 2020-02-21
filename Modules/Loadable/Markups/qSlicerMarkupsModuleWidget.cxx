@@ -64,6 +64,7 @@
 #include "vtkMRMLMarkupsFiducialStorageNode.h"
 #include "vtkMRMLMarkupsNode.h"
 #include "vtkSlicerMarkupsLogic.h"
+#include "vtkSlicerDijkstraGraphGeodesicPath.h"
 
 // VTK includes
 #include <vtkMath.h>
@@ -446,7 +447,13 @@ void qSlicerMarkupsModuleWidgetPrivate::setupUi(qSlicerWidget* widget)
   this->curveTypeComboBox->clear();
   for (int curveType = 0; curveType < vtkCurveGenerator::CURVE_TYPE_LAST; ++curveType)
     {
-    this->curveTypeComboBox->addItem(vtkCurveGenerator::GetCurveTypeAsString(curveType), curveType);
+    this->curveTypeComboBox->addItem(vtkCurveGenerator::GetCurveTypeAsHumanReadableString(curveType), curveType);
+    }
+
+  this->costFunctionComboBox->clear();
+  for (int costFunction = 0; costFunction < vtkSlicerDijkstraGraphGeodesicPath::COST_FUNCTION_LAST; ++costFunction)
+    {
+    this->costFunctionComboBox->addItem(vtkSlicerDijkstraGraphGeodesicPath::GetCostFunctionAsHumanReadableString(costFunction), costFunction);
     }
 
   this->editScalarFunctionDelay = new QTimer(q);
@@ -458,7 +465,7 @@ void qSlicerMarkupsModuleWidgetPrivate::setupUi(qSlicerWidget* widget)
     q, SLOT(onCurveTypeParameterChanged()));
   QObject::connect(this->modelNodeSelector, SIGNAL(currentNodeChanged(vtkMRMLNode*)),
     q, SLOT(onCurveTypeParameterChanged()));
-  QObject::connect(this->useScalarsCheckBox, SIGNAL(stateChanged(int)),
+  QObject::connect(this->costFunctionComboBox, SIGNAL(currentIndexChanged(int)),
     q, SLOT(onCurveTypeParameterChanged()));
   QObject::connect(this->scalarFunctionLineEdit, SIGNAL(textChanged(QString)),
     this->editScalarFunctionDelay, SLOT(start()));
@@ -868,29 +875,58 @@ void qSlicerMarkupsModuleWidget::updateWidgetFromMRML()
     d->curveTypeComboBox->setCurrentIndex(d->curveTypeComboBox->findData(markupsCurveNode->GetCurveType()));
     d->curveTypeComboBox->blockSignals(wasBlocked);
 
-    vtkMRMLModelNode* modelNode = markupsCurveNode->GetModelNode();
+    vtkMRMLModelNode* modelNode = markupsCurveNode->GetShortestDistanceSurfaceNode();
     wasBlocked = d->modelNodeSelector->blockSignals(true);
     d->modelNodeSelector->setCurrentNode(modelNode);
     d->modelNodeSelector->blockSignals(wasBlocked);
 
-    wasBlocked = d->useScalarsCheckBox->blockSignals(true);
-    d->useScalarsCheckBox->setChecked(markupsCurveNode->GetUseSurfaceScalarWeights());
-    d->useScalarsCheckBox->blockSignals(wasBlocked);
+    wasBlocked = d->costFunctionComboBox->blockSignals(true);
+    int costFunction = markupsCurveNode->GetSurfaceCostFunction();
+    d->costFunctionComboBox->setCurrentIndex(d->costFunctionComboBox->findData(costFunction));
+    d->costFunctionComboBox->blockSignals(wasBlocked);
 
     wasBlocked = d->scalarFunctionLineEdit->blockSignals(true);
     int currentCursorPosition = d->scalarFunctionLineEdit->cursorPosition();
-    d->scalarFunctionLineEdit->setText(markupsCurveNode->GetSurfaceScalarWeightFunction());
+    d->scalarFunctionLineEdit->setText(markupsCurveNode->GetSurfaceDistanceWeightingFunction());
     d->scalarFunctionLineEdit->setCursorPosition(currentCursorPosition);
     d->scalarFunctionLineEdit->blockSignals(wasBlocked);
+
+    if (costFunction == vtkSlicerDijkstraGraphGeodesicPath::COST_FUNCTION_DISTANCE)
+      {
+      d->scalarFunctionLineEdit->setVisible(false);
+      }
+    else
+      {
+      d->scalarFunctionLineEdit->setVisible(true);
+      }
+
+    QString prefixString;
+    QString suffixString;
+    switch (costFunction)
+      {
+      case vtkSlicerDijkstraGraphGeodesicPath::COST_FUNCTION_ADDITIVE:
+        prefixString = "distance + ";
+        break;
+      case vtkSlicerDijkstraGraphGeodesicPath::COST_FUNCTION_INVERSE_SQUARED:
+        prefixString = "distance / (";
+        suffixString = "^2";
+        break;
+      default:
+      case vtkSlicerDijkstraGraphGeodesicPath::COST_FUNCTION_DISTANCE:
+        prefixString = "distance";
+        break;
+      }
+    d->scalarFunctionPrefixLabel->setText(prefixString);
+    d->scalarFunctionSuffixLabel->setText(suffixString);
     }
 
-  if (markupsCurveNode && markupsCurveNode->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
+  if (markupsCurveNode && markupsCurveNode->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE)
     {
-    d->surfaceCurveCollapsibleButton->setVisible(true);
+    d->surfaceCurveCollapsibleButton->setEnabled(true);
     }
   else
     {
-    d->surfaceCurveCollapsibleButton->setVisible(false);
+    d->surfaceCurveCollapsibleButton->setEnabled(false);
     }
 }
 
@@ -2531,8 +2567,8 @@ void qSlicerMarkupsModuleWidget::onCurveTypeParameterChanged()
 
   MRMLNodeModifyBlocker blocker(curveNode);
   curveNode->SetCurveType(d->curveTypeComboBox->currentData().toInt());
-  curveNode->SetAndObserveModelNode(vtkMRMLModelNode::SafeDownCast(d->modelNodeSelector->currentNode()));
-  curveNode->SetUseSurfaceScalarWeights(d->useScalarsCheckBox->isChecked());
+  curveNode->SetAndObserveShortestDistanceSurfaceNode(vtkMRMLModelNode::SafeDownCast(d->modelNodeSelector->currentNode()));
   std::string functionString = d->scalarFunctionLineEdit->text().toStdString();
-  curveNode->SetSurfaceScalarWeightFunction(functionString.c_str());
+  curveNode->SetSurfaceCostFunction(d->costFunctionComboBox->currentData().toInt());
+  curveNode->SetSurfaceDistanceWeightingFunction(functionString.c_str());
 }

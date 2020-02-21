@@ -27,7 +27,7 @@
 #include <vtkSetGet.h>
 #include <vtkSmartPointer.h>
 
-class vtkDijkstraGraphGeodesicPath;
+class vtkSlicerDijkstraGraphGeodesicPath;
 class vtkDoubleArray;
 class vtkPoints;
 class vtkSpline;
@@ -57,18 +57,19 @@ public:
     CURVE_TYPE_CARDINAL_SPLINE, // Curve interpolates between input points smoothly
     CURVE_TYPE_KOCHANEK_SPLINE, // Curve interpolates between input points smoothly, generalized
     CURVE_TYPE_POLYNOMIAL, // Curve approximates the input points with a polynomial fit
-    CURVE_TYPE_SHORTEST_SURFACE_DISTANCE, // Curve finds the closest path along a the edges of a surface mesh
+    CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE, // Curve finds the closest path along a the edges of a surface mesh
     CURVE_TYPE_LAST // Valid types go above this line
     };
   vtkGetMacro(CurveType, int);
   vtkSetMacro(CurveType, int);
   static const char* GetCurveTypeAsString(int id);
   static int GetCurveTypeFromString(const char* name);
+  static const char* GetCurveTypeAsHumanReadableString(int id);
   void SetCurveTypeToLinearSpline() { this->SetCurveType(CURVE_TYPE_LINEAR_SPLINE); }
   void SetCurveTypeToCardinalSpline() { this->SetCurveType(CURVE_TYPE_CARDINAL_SPLINE); }
   void SetCurveTypeToKochanekSpline() { this->SetCurveType(CURVE_TYPE_KOCHANEK_SPLINE); }
   void SetCurveTypeToPolynomial() { this->SetCurveType(CURVE_TYPE_POLYNOMIAL); }
-  void SetCurveTypeToShortestSurfaceDistance() { this->SetCurveType(CURVE_TYPE_SHORTEST_SURFACE_DISTANCE); }
+  void SetCurveTypeToShortestDistanceOnSurface() { this->SetCurveType(CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE); }
 
   virtual bool IsInterpolatingCurve();
 
@@ -162,9 +163,8 @@ public:
   void SetPolynomialWeightFunctionToGaussian() { this->SetPolynomialWeightFunction(vtkCurveGenerator::POLYNOMIAL_WEIGHT_FUNCTION_GAUSSIAN); }
 
   /// If the surface scalars should be used to weight the distances in the pathfinding algorithm
-  vtkGetMacro(UseSurfaceScalarWeights, bool);
-  vtkSetMacro(UseSurfaceScalarWeights, bool);
-  vtkBooleanMacro(UseSurfaceScalarWeights, bool);
+  int GetSurfaceCostFunction();
+  void SetSurfaceCostFunction(int surfaceCostFunction);
 
   /// Get the control point id from the interpolated point id
   /// Currently only works for shortest surface distance
@@ -193,12 +193,11 @@ protected:
   int PolynomialFitMethod;
   double PolynomialSampleWidth;
   int PolynomialWeightFunction;
-  bool UseSurfaceScalarWeights;
-  std::vector<vtkIdType> CorrespondingControlPointIds;
+  std::vector<vtkIdType> InterpolatedPointIdsForControlPoints;
 
   // internal storage
-  vtkSmartPointer<vtkPointLocator> PointLocator;
-  vtkSmartPointer<vtkDijkstraGraphGeodesicPath> PathFilter;
+  vtkSmartPointer<vtkPointLocator> SurfacePointLocator;
+  vtkSmartPointer<vtkSlicerDijkstraGraphGeodesicPath> SurfacePathFilter;
   vtkSmartPointer<vtkDoubleArray> InputParameters;
   vtkSmartPointer<vtkParametricFunction> ParametricFunction;
 

@@ -1522,46 +1522,46 @@ void vtkMRMLMarkupsNode::ConvertOrientationWXYZToMatrix(double orientationWXYZ[4
     return;
     }
 
-  // convert to radians
-  angle = vtkMath::RadiansFromDegrees(angle);
+// convert to radians
+angle = vtkMath::RadiansFromDegrees(angle);
 
-  // make a normalized quaternion
-  double w = cos(0.5*angle);
-  double f = sin(0.5*angle) / sqrt(x*x + y * y + z * z);
-  x *= f;
-  y *= f;
-  z *= f;
+// make a normalized quaternion
+double w = cos(0.5 * angle);
+double f = sin(0.5 * angle) / sqrt(x * x + y * y + z * z);
+x *= f;
+y *= f;
+z *= f;
 
-  // convert the quaternion to a matrix
-  double matrix[4][4];
-  vtkMatrix4x4::Identity(*matrix);
+// convert the quaternion to a matrix
+double matrix[4][4];
+vtkMatrix4x4::Identity(*matrix);
 
-  double ww = w * w;
-  double wx = w * x;
-  double wy = w * y;
-  double wz = w * z;
+double ww = w * w;
+double wx = w * x;
+double wy = w * y;
+double wz = w * z;
 
-  double xx = x * x;
-  double yy = y * y;
-  double zz = z * z;
+double xx = x * x;
+double yy = y * y;
+double zz = z * z;
 
-  double xy = x * y;
-  double xz = x * z;
-  double yz = y * z;
+double xy = x * y;
+double xz = x * z;
+double yz = y * z;
 
-  double s = ww - xx - yy - zz;
+double s = ww - xx - yy - zz;
 
-  orientationMatrix[0] = xx * 2 + s;    // (0,0)
-  orientationMatrix[3] = (xy + wz) * 2; // (1,0)
-  orientationMatrix[6] = (xz - wy) * 2; // (2,0)
+orientationMatrix[0] = xx * 2 + s;    // (0,0)
+orientationMatrix[3] = (xy + wz) * 2; // (1,0)
+orientationMatrix[6] = (xz - wy) * 2; // (2,0)
 
-  orientationMatrix[1] = (xy - wz) * 2; // (0,1)
-  orientationMatrix[4] = yy * 2 + s;    // (1,1)
-  orientationMatrix[7] = (yz + wx) * 2; // (2,1)
+orientationMatrix[1] = (xy - wz) * 2; // (0,1)
+orientationMatrix[4] = yy * 2 + s;    // (1,1)
+orientationMatrix[7] = (yz + wx) * 2; // (2,1)
 
-  orientationMatrix[2] = (xz + wy) * 2; // (0,2)
-  orientationMatrix[5] = (yz - wx) * 2; // (1,2)
-  orientationMatrix[8] = zz * 2 + s;    // (2,2)
+orientationMatrix[2] = (xz + wy) * 2; // (0,2)
+orientationMatrix[5] = (yz - wx) * 2; // (1,2)
+orientationMatrix[8] = zz * 2 + s;    // (2,2)
 }
 
 //----------------------------------------------------------------------
@@ -1569,9 +1569,9 @@ vtkPoints* vtkMRMLMarkupsNode::GetCurvePoints()
 {
   this->CurveGenerator->Update();
   if (!this->CurveGenerator->GetOutput())
-    {
+  {
     return nullptr;
-    }
+  }
   return this->CurveGenerator->GetOutput()->GetPoints();
 }
 
@@ -1580,9 +1580,9 @@ vtkPoints* vtkMRMLMarkupsNode::GetCurvePointsWorld()
 {
   vtkPolyData* curvePolyDataWorld = this->GetCurveWorld();
   if (!curvePolyDataWorld)
-    {
+  {
     return nullptr;
-    }
+  }
   return curvePolyDataWorld->GetPoints();
 }
 
@@ -1597,9 +1597,9 @@ vtkPolyData* vtkMRMLMarkupsNode::GetCurve()
 vtkPolyData* vtkMRMLMarkupsNode::GetCurveWorld()
 {
   if (this->GetNumberOfControlPoints() < 1)
-    {
+  {
     return nullptr;
-    }
+  }
   this->CurvePolyToWorldTransformer->Update();
   vtkPolyData* curvePolyDataWorld = this->CurvePolyToWorldTransformer->GetOutput();
   this->TransformedCurvePolyLocator->SetDataSet(curvePolyDataWorld);
@@ -1615,23 +1615,12 @@ vtkAlgorithmOutput* vtkMRMLMarkupsNode::GetCurveWorldConnection()
 //----------------------------------------------------------------------
 int vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex(vtkIdType interpolatedPointIndex)
 {
-  if (this->CurveGenerator->IsInterpolatingCurve())
+  vtkIdType controlPointId = this->CurveGenerator->GetControlPointIdFromInterpolatedPointId(interpolatedPointIndex);
+  if (controlPointId < 0)
     {
-    return int(floor(interpolatedPointIndex / this->CurveGenerator->GetNumberOfPointsPerInterpolatingSegment()));
+    controlPointId = this->GetNumberOfControlPoints();
     }
-  if (this->CurveGenerator->GetPolynomialPointSortingMethod() == vtkCurveGenerator::SORTING_METHOD_MINIMUM_SPANNING_TREE_POSITION)
-    {
-    // If sorting is based on spanning tree then we can insert point anywhere (so we add to the end for simplicity).
-    return this->GetNumberOfControlPoints();
-    }
-  if (this->CurveGenerator->GetCurveType() == vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE)
-    {
-    return this->CurveGenerator->GetControlPointIdFromInterpolatedPointId(interpolatedPointIndex);
-    }
-  // In case of approximating curves, there is no clear assignment between control points and curve points.
-  vtkWarningMacro("vtkMRMLMarkupsNode::GetControlPointIndexFromInterpolatedPointIndex for non-interpolated"
-    " curves, minimum spanning tree sorting is recommended");
-  return this->GetNumberOfControlPoints();
+  return controlPointId;
 }
 
 //---------------------------------------------------------------------------

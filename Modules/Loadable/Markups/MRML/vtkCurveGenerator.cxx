@@ -23,7 +23,6 @@
 
 // VTK includes
 #include <vtkCardinalSpline.h>
-#include <vtkDijkstraGraphGeodesicPath.h>
 #include <vtkDoubleArray.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -35,8 +34,10 @@
 #include <vtkPointData.h>
 #include <vtkPointLocator.h>
 #include <vtkPolyData.h>
+#include <vtkSlicerDijkstraGraphGeodesicPath.h>
 
 // std includes
+#include <algorithm>
 #include <list>
 
 //------------------------------------------------------------------------------
@@ -54,21 +55,20 @@ vtkCurveGenerator::vtkCurveGenerator()
   this->KochanekContinuity = 0.0;
   this->KochanekTension = 0.0;
   this->KochanekEndsCopyNearestDerivatives = false;
-  this->PolynomialOrder = 1; // linear
+  this->PolynomialOrder = 3; // cubic
   this->PolynomialPointSortingMethod = vtkCurveGenerator::SORTING_METHOD_INDEX;
   this->PolynomialFitMethod = vtkCurveGenerator::POLYNOMIAL_FIT_METHOD_GLOBAL_LEAST_SQUARES;
   this->PolynomialWeightFunction = vtkCurveGenerator::POLYNOMIAL_WEIGHT_FUNCTION_GAUSSIAN;
   this->PolynomialSampleWidth = 0.5;
-  this->UseSurfaceScalarWeights = true;
   this->OutputCurveLength = 0.0;
 
   // timestamps for input and output are the same, initially
   this->Modified();
 
   // local storage variables
-  this->PointLocator = vtkSmartPointer<vtkPointLocator>::New();
-  this->PathFilter = vtkSmartPointer<vtkDijkstraGraphGeodesicPath>::New();
-  this->PathFilter->StopWhenEndReachedOn();
+  this->SurfacePointLocator = vtkSmartPointer<vtkPointLocator>::New();
+  this->SurfacePathFilter = vtkSmartPointer<vtkSlicerDijkstraGraphGeodesicPath>::New();
+  this->SurfacePathFilter->StopWhenEndReachedOn();
   this->InputParameters = nullptr;
   this->ParametricFunction = nullptr;
 }
@@ -89,7 +89,7 @@ void vtkCurveGenerator::PrintSelf(std::ostream &os, vtkIndent indent)
   os << indent << "KochanekTension: " << this->KochanekTension << std::endl;
   os << indent << "KochanekEndsCopyNearestDerivatives: " << this->KochanekEndsCopyNearestDerivatives << std::endl;
   os << indent << "PolynomialOrder: " << this->PolynomialOrder << std::endl;
-  os << indent << "UseSurfaceScalarWeights: " << this->UseSurfaceScalarWeights << std::endl;
+  os << indent << "SurfaceCostFunction: " << vtkSlicerDijkstraGraphGeodesicPath::GetCostFunctionAsString(this->GetSurfaceCostFunction()) << std::endl;
 }
 
 //----------------------------------------------------------------------------
@@ -137,7 +137,7 @@ const char* vtkCurveGenerator::GetCurveTypeAsString(int curveType)
       {
       return "polynomial";
       }
-    case vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE:
+    case vtkCurveGenerator::CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE:
       {
       return "shortestSurfaceDistance";
       }
@@ -169,6 +169,40 @@ int vtkCurveGenerator::GetCurveTypeFromString(const char* name)
   vtkGenericWarningMacro("Unknown curve type: " << name);
   return -1;
 }
+
+//-----------------------------------------------------------
+const char* vtkCurveGenerator::GetCurveTypeAsHumanReadableString(int curveType)
+{
+  switch (curveType)
+    {
+    case vtkCurveGenerator::CURVE_TYPE_LINEAR_SPLINE:
+      {
+      return "Linear";
+      }
+    case vtkCurveGenerator::CURVE_TYPE_CARDINAL_SPLINE:
+      {
+      return "Spline";
+      }
+    case vtkCurveGenerator::CURVE_TYPE_KOCHANEK_SPLINE:
+      {
+      return "Kochanek spline";
+      }
+    case vtkCurveGenerator::CURVE_TYPE_POLYNOMIAL:
+      {
+      return "Polynomial";
+      }
+    case vtkCurveGenerator::CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE:
+      {
+      return "Shortest distance on surface";
+      }
+    default:
+      {
+      vtkGenericWarningMacro("Unknown curve type: " << curveType);
+      return "Unknown";
+      }
+    }
+}
+
 
 //------------------------------------------------------------------------------
 const char* vtkCurveGenerator::GetPolynomialPointSortingMethodAsString(int polynomialPointSortingMethod)
@@ -531,7 +565,7 @@ int vtkCurveGenerator::GeneratePoints(vtkPoints* inputPoints, vtkPolyData* input
 {
   vtkNew<vtkPoints> outputPoints;
   this->OutputCurveLength = 0.0;
-  this->CorrespondingControlPointIds.clear();
+  this->InterpolatedPointIdsForControlPoints.clear();
 
   switch (this->CurveType)
   {
@@ -546,7 +580,7 @@ int vtkCurveGenerator::GeneratePoints(vtkPoints* inputPoints, vtkPolyData* input
       }
     break;
     }
-  case vtkCurveGenerator::CURVE_TYPE_SHORTEST_SURFACE_DISTANCE:
+  case vtkCurveGenerator::CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE:
     if (!this->GeneratePointsFromSurface(inputPoints, inputSurface, outputPoints))
       {
       return 0;
@@ -657,43 +691,27 @@ int vtkCurveGenerator::GeneratePointsFromSurface(vtkPoints* inputPoints, vtkPoly
     numberOfSegments = (numberOfInputPoints - 1);
     }
 
-  this->PathFilter->SetInputData(inputSurface);
-  this->PointLocator->SetDataSet(inputSurface);
-  this->PointLocator->BuildLocator();
+  this->SurfacePathFilter->SetInputData(inputSurface);
+  this->SurfacePointLocator->SetDataSet(inputSurface);
+  this->SurfacePointLocator->BuildLocator();
 
   for (vtkIdType controlPointIndex = 0; controlPointIndex < numberOfSegments; ++controlPointIndex)
     {
     double controlPoint1[3] = { 0 };
     inputPoints->GetPoint(controlPointIndex, controlPoint1);
-    vtkIdType id1 = this->PointLocator->FindClosestPoint(controlPoint1);
+    vtkIdType id1 = this->SurfacePointLocator->FindClosestPoint(controlPoint1);
 
     double controlPoint2[3] = { 0 };
     inputPoints->GetPoint((controlPointIndex + 1) % numberOfInputPoints, controlPoint2);
-    vtkIdType id2 = this->PointLocator->FindClosestPoint(controlPoint2);
-
-    // If no scalar array is active on the points, and UseScalarWeights is enabled, the dijkstra filter will crash.
-    // To avoid this, UseScalarWeights is temporarily disabled.
-    bool useSurfaceScalarWeightsTemp = this->UseSurfaceScalarWeights;
-    if (!inputSurface->GetPointData() || !inputSurface->GetPointData()->GetScalars())
-      {
-      this->UseSurfaceScalarWeights = false;
-      }
+    vtkIdType id2 = this->SurfacePointLocator->FindClosestPoint(controlPoint2);
 
     // Path is traced backward, so start vertex should be point2, and end should be point1.
-    this->PathFilter->SetStartVertex(id2);
-    this->PathFilter->SetEndVertex(id1);
-    if (static_cast<bool>(this->PathFilter->GetUseScalarWeights()) != this->UseSurfaceScalarWeights)
-      {
-      this->PathFilter->SetUseScalarWeights(this->UseSurfaceScalarWeights);
-      // Edge weights are not recalculated unless the input surface is modified.
-      inputSurface->Modified();
-      }
+    this->SurfacePathFilter->SetStartVertex(id2);
+    this->SurfacePathFilter->SetEndVertex(id1);
+    this->SurfacePathFilter->Update();
 
-    this->PathFilter->Update();
-    this->UseSurfaceScalarWeights = useSurfaceScalarWeightsTemp;
-
-    vtkPolyData* outputPath = this->PathFilter->GetOutput();
-    double previousPoint[3];
+    vtkPolyData* outputPath = this->SurfacePathFilter->GetOutput();
+    double previousPoint[3] = { 0 };
     for (vtkIdType pointIndex = 0; pointIndex < outputPath->GetNumberOfPoints(); ++pointIndex)
       {
       double curvePoint[3] = { 0 };
@@ -702,9 +720,9 @@ int vtkCurveGenerator::GeneratePointsFromSurface(vtkPoints* inputPoints, vtkPoly
       if (controlPointIndex == 0 || pointIndex > 0)
         {
         vtkIdType outputPointId = outputPoints->InsertNextPoint(curvePoint);
-        if (this->CorrespondingControlPointIds.size() <= controlPointIndex)
+        if (this->InterpolatedPointIdsForControlPoints.size() <= controlPointIndex)
           {
-          this->CorrespondingControlPointIds.push_back(outputPointId);
+          this->InterpolatedPointIdsForControlPoints.push_back(outputPointId);
           }
 
         if (pointIndex > 0)
@@ -718,6 +736,8 @@ int vtkCurveGenerator::GeneratePointsFromSurface(vtkPoints* inputPoints, vtkPoly
       previousPoint[2] = curvePoint[2];
       }
     }
+  this->InterpolatedPointIdsForControlPoints.push_back(outputPoints->GetNumberOfPoints() - 1);
+
   return 1;
 }
 
@@ -998,20 +1018,38 @@ bool vtkCurveGenerator::IsInterpolatingCurve()
 //------------------------------------------------------------------------------
 vtkIdList* vtkCurveGenerator::GetSurfacePointIds()
 {
-  return this->PathFilter->GetIdList();
+  return this->SurfacePathFilter->GetIdList();
 }
 
 //------------------------------------------------------------------------------
-vtkIdType vtkCurveGenerator::GetControlPointIdFromInterpolatedPointId(vtkIdType outputPointId)
+vtkIdType vtkCurveGenerator::GetControlPointIdFromInterpolatedPointId(vtkIdType interpolatedPointId)
 {
   int controlId = -1;
-  for (vtkIdType id : this->CorrespondingControlPointIds)
+  if (this->CurveType == CURVE_TYPE_SHORTEST_DISTANCE_ON_SURFACE)
     {
-    if (outputPointId < id)
+    std::vector<vtkIdType>::iterator it = std::lower_bound(this->InterpolatedPointIdsForControlPoints.begin(),
+      this->InterpolatedPointIdsForControlPoints.end(), interpolatedPointId);
+    if (it != this->InterpolatedPointIdsForControlPoints.end())
       {
-      return controlId;
+      controlId = it - this->InterpolatedPointIdsForControlPoints.begin() - 1;
       }
-    ++controlId;
+    }
+  else if (this->IsInterpolatingCurve())
+    {
+    controlId = int(floor(interpolatedPointId / this->GetNumberOfPointsPerInterpolatingSegment()));
     }
   return controlId;
+}
+
+//------------------------------------------------------------------------------
+int vtkCurveGenerator::GetSurfaceCostFunction()
+{
+  return this->SurfacePathFilter->GetCostFunction();
+}
+
+//------------------------------------------------------------------------------
+void vtkCurveGenerator::SetSurfaceCostFunction(int setSurfaceCostFunction)
+{
+  this->SurfacePathFilter->SetCostFunction(setSurfaceCostFunction);
+  this->Modified();
 }
