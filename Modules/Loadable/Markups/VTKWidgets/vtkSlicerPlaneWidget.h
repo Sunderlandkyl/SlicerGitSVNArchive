@@ -17,15 +17,15 @@
 =========================================================================*/
 
 /**
- * @class   vtkSlicerAngleWidget
- * @brief   create an angle with a set of 3 points
+ * @class   vtkSlicerPlaneWidget
+ * @brief   create a plane with a set of 3 points
  *
- * The vtkSlicerAngleWidget is used to create an angle widget with a set of 3 points.
+ * The vtkSlicerPlaneWidget is used to create a plane widget with a set of 3 points.
  *
 */
 
-#ifndef vtkSlicerAngleWidget_h
-#define vtkSlicerAngleWidget_h
+#ifndef vtkSlicerPlaneWidget_h
+#define vtkSlicerPlaneWidget_h
 
 #include "vtkSlicerMarkupsModuleVTKWidgetsExport.h"
 #include "vtkSlicerMarkupsWidget.h"
@@ -34,25 +34,25 @@ class vtkSlicerMarkupsWidgetRepresentation;
 class vtkPolyData;
 class vtkIdList;
 
-class VTK_SLICER_MARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerAngleWidget : public vtkSlicerMarkupsWidget
+class VTK_SLICER_MARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerPlaneWidget : public vtkSlicerMarkupsWidget
 {
 public:
   /// Instantiate this class.
-  static vtkSlicerAngleWidget *New();
+  static vtkSlicerPlaneWidget *New();
 
   /// Standard methods for a VTK class.
-  vtkTypeMacro(vtkSlicerAngleWidget,vtkSlicerMarkupsWidget);
+  vtkTypeMacro(vtkSlicerPlaneWidget,vtkSlicerMarkupsWidget);
 
   /// Create the default widget representation and initializes the widget and representation.
   void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer) override;
 
 protected:
-  vtkSlicerAngleWidget();
-  ~vtkSlicerAngleWidget() override;
+  vtkSlicerPlaneWidget();
+  ~vtkSlicerPlaneWidget() override;
 
 private:
-  vtkSlicerAngleWidget(const vtkSlicerAngleWidget&) = delete;
-  void operator=(const vtkSlicerAngleWidget&) = delete;
+  vtkSlicerPlaneWidget(const vtkSlicerPlaneWidget&) = delete;
+  void operator=(const vtkSlicerPlaneWidget&) = delete;
 };
 
 #endif
