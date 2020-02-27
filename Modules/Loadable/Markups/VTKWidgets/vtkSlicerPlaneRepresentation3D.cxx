@@ -21,7 +21,8 @@
 #include <vtkArcSource.h>
 #include <vtkArrowSource.h>
 #include <vtkCellLocator.h>
-#include <vtkGlyph3D.h>
+#include <vtkDoubleArray.h>
+#include <vtkGlyph3DMapper.h>
 #include <vtkPlaneSource.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkPointData.h>
@@ -44,17 +45,24 @@ vtkStandardNewMacro(vtkSlicerPlaneRepresentation3D);
 vtkSlicerPlaneRepresentation3D::vtkSlicerPlaneRepresentation3D()
 {
   this->PlaneFilter = vtkSmartPointer<vtkPlaneSource>::New();
+
   this->PlaneMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-  this->PlaneMapper->SetInputConnection(this->PlaneFilter->GetOutputPort());
+  this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
+
   this->PlaneActor = vtkSmartPointer<vtkActor>::New();
   this->PlaneActor->SetMapper(this->PlaneMapper);
+  this->PlaneActor->PickableOff(); // TODO: Test. We may want disable/renable as the plane is being interacted with to prevent it from picking itself.
   this->PlaneActor->SetProperty(this->GetControlPointsPipeline(Unselected)->Property);
 
   this->ArrowFilter = vtkSmartPointer<vtkArrowSource>::New();
-  this->ArrowToWorldFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-  this->ArrowToWorldFilter->SetInputConnection(this->ArrowFilter->GetOutputPort());
-  this->ArrowMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-  this->ArrowMapper->SetInputConnection(this->ArrowToWorldFilter->GetOutputPort());
+  this->ArrowFilter->SetTipResolution(50);
+
+  this->ArrowMapper = vtkSmartPointer<vtkGlyph3DMapper>::New();
+  this->ArrowMapper->SetOrientationModeToDirection();
+  this->ArrowMapper->SetOrientationArray(vtkDataObject::FIELD_ASSOCIATION_POINTS);
+  this->ArrowMapper->SetSourceConnection(this->ArrowFilter->GetOutputPort());
+  this->ArrowMapper->SetScalarVisibility(false);
+
   this->ArrowActor = vtkSmartPointer<vtkActor>::New();
   this->ArrowActor->SetMapper(this->ArrowMapper);
   this->ArrowActor->SetProperty(this->GetControlPointsPipeline(Unselected)->Property);
@@ -82,37 +90,50 @@ bool vtkSlicerPlaneRepresentation3D::GetTransformationReferencePoint(double refe
 void vtkSlicerPlaneRepresentation3D::BuildPlane()
 {
   vtkMRMLMarkupsPlaneNode* markupsNode = vtkMRMLMarkupsPlaneNode::SafeDownCast(this->GetMarkupsNode());
-  if (!markupsNode)
+  if (!markupsNode || markupsNode->GetNumberOfControlPoints() != 3)
     {
-    return;
-    }
-  if (markupsNode->GetNumberOfControlPoints() != 3)
-    {
-    return;
-    }
-
-  double point1[3] = {0.0};
-  double origin[3] = {0.0};
-  double point2[3] = {0.0};
-  markupsNode->GetNthControlPointPositionWorld(0, origin);
-  markupsNode->GetNthControlPointPositionWorld(1, point1);
-  markupsNode->GetNthControlPointPositionWorld(2, point2);
-
-  // Compute the plane (only if necessary since we don't want
-  // fluctuations in plane value as the camera moves, etc.)
-  if (((fabs(point1[0] - origin[0]) < 0.001) &&
-       (fabs(point1[1] - origin[1]) < 0.001) &&
-       (fabs(point1[2] - origin[2]) < 0.001)) ||
-      ((fabs(point2[0] - origin[0]) < 0.001) &&
-       (fabs(point2[1] - origin[1]) < 0.001) &&
-       (fabs(point2[2] - origin[2]) < 0.001)))
-    {
+    this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
+    this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
     return;
     }
 
   double x[3], y[3], z[3] = { 0 };
   markupsNode->GetVectors(x, y, z);
 
+  if (vtkMath::Norm(x) <= 0.0001 || vtkMath::Norm(y) <= 0.0001 || vtkMath::Norm(z) <= 0.0001)
+    {
+    this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
+    this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
+    return;
+    }
+
+  this->PlaneMapper->SetInputConnection(this->PlaneFilter->GetOutputPort());
+
+  double origin[3] = { 0.0 };
+  double point1[3] = { 0.0 };
+  double point2[3] = { 0.0 };
+  markupsNode->GetNthControlPointPositionWorld(0, origin);
+  markupsNode->GetNthControlPointPositionWorld(1, point1);
+  markupsNode->GetNthControlPointPositionWorld(2, point2);
+
+  // Update the normal vector
+  vtkNew<vtkPoints> points;
+  points->InsertNextPoint(origin);
+
+  vtkNew<vtkDoubleArray> directionArray;
+  directionArray->SetNumberOfComponents(3);
+  directionArray->InsertNextTuple3(z[0], z[1], z[2]);
+  directionArray->SetName("direction");
+
+  vtkNew<vtkPolyData> polyData;
+  polyData->SetPoints(points);
+  polyData->GetPointData()->SetScalars(directionArray);
+
+  this->ArrowMapper->SetInputData(polyData);
+  this->ArrowMapper->SetScaleFactor(this->ControlPointSize * 3);
+  this->ArrowMapper->Update();
+
+  // Update the plane
   double vector1[3] = { 0 };
   vtkMath::Subtract(point1, origin, vector1);
 
@@ -147,45 +168,6 @@ void vtkSlicerPlaneRepresentation3D::BuildPlane()
   this->PlaneFilter->SetOrigin(planePoint1);
   this->PlaneFilter->SetPoint1(planePoint2);
   this->PlaneFilter->SetPoint2(planePoint3);
-
-}
-
-//----------------------------------------------------------------------
-void vtkSlicerPlaneRepresentation3D::UpdateAllPointsAndLabelsFromMRML()
-{
-  Superclass::UpdateAllPointsAndLabelsFromMRML();
-
-  vtkMRMLMarkupsPlaneNode* markupsNode = vtkMRMLMarkupsPlaneNode::SafeDownCast(this->GetMarkupsNode());
-  if (!markupsNode)
-    {
-    return;
-    }
-  if (markupsNode->GetNumberOfControlPoints() != 3)
-    {
-    return;
-    }
-
-  double x[3], y[3], z[3], origin[3] = { 0 };
-  markupsNode->GetVectors(x, y, z);
-  markupsNode->GetOrigin(origin);
-
-  // Setup normal arrow
-  vtkNew<vtkTransform> arrowToWorldTransform;
-  vtkNew<vtkMatrix4x4> matrix;
-  for (int i = 0; i < 3; ++i)
-    {
-    matrix->SetElement(i, 0, x[i]);
-    matrix->SetElement(i, 1, y[i]);
-    matrix->SetElement(i, 2, z[i]);
-    }
-  arrowToWorldTransform->SetMatrix(matrix);
-  double arrowScaleFactor = 10 * this->ControlPointSize;
-  arrowToWorldTransform->Scale(arrowScaleFactor, arrowScaleFactor, arrowScaleFactor);
-  arrowToWorldTransform->RotateY(90);
-  arrowToWorldTransform->PostMultiply();
-  arrowToWorldTransform->Translate(origin);
-  this->ArrowToWorldFilter->SetTransform(arrowToWorldTransform);
-  this->ArrowFilter->SetTipResolution(50);
 }
 
 //----------------------------------------------------------------------
@@ -257,15 +239,15 @@ int vtkSlicerPlaneRepresentation3D::RenderOverlay(vtkViewport *viewport)
   count = this->Superclass::RenderOverlay(viewport);
   if (this->PlaneActor->GetVisibility())
     {
-    count +=  this->PlaneActor->RenderOverlay(viewport);
+    count += this->PlaneActor->RenderOverlay(viewport);
     }
   if (this->ArrowActor->GetVisibility())
     {
-    count +=  this->ArrowActor->RenderOverlay(viewport);
+    count += this->ArrowActor->RenderOverlay(viewport);
     }
   if (this->TextActor->GetVisibility())
     {
-    count +=  this->TextActor->RenderOverlay(viewport);
+    count += this->TextActor->RenderOverlay(viewport);
     }
   return count;
 }
@@ -281,9 +263,11 @@ int vtkSlicerPlaneRepresentation3D::RenderOpaqueGeometry(
     count += this->PlaneActor->RenderOpaqueGeometry(viewport);
     }
   if (this->ArrowActor->GetVisibility())
-  {
+    {
+    this->ArrowMapper->SetScaleFactor(this->ControlPointSize * 3);
+    this->ArrowMapper->Update();
     count += this->ArrowActor->RenderOpaqueGeometry(viewport);
-  }
+    }
   if (this->TextActor->GetVisibility())
     {
     count += this->TextActor->RenderOpaqueGeometry(viewport);
@@ -362,9 +346,36 @@ void vtkSlicerPlaneRepresentation3D::CanInteract(
     return;
     }
 
-  this->CanInteractWithLine(interactionEventData, foundComponentType, foundComponentIndex, closestDistance2);
+  this->CanInteractWithPlane(interactionEventData, foundComponentType, foundComponentIndex, closestDistance2);
 }
 
+//-----------------------------------------------------------------------------
+void vtkSlicerPlaneRepresentation3D::CanInteractWithPlane(
+  vtkMRMLInteractionEventData* interactionEventData,
+  int& foundComponentType, int& foundComponentIndex, double& closestDistance2)
+{
+  // Create the tree
+  vtkSmartPointer<vtkCellLocator> cellLocator =
+    vtkSmartPointer<vtkCellLocator>::New();
+  this->PlaneFilter->Update();
+  cellLocator->SetDataSet(this->PlaneFilter->GetOutput());
+  cellLocator->BuildLocator();
+
+  const double* worldPosition = interactionEventData->GetWorldPosition();
+  double closestPoint[3];//the coordinates of the closest point will be returned here
+  double distance2; //the squared distance to the closest point will be returned here
+  vtkIdType cellId; //the cell id of the cell containing the closest point will be returned here
+  int subId; //this is rarely used (in triangle strips only, I believe)
+  cellLocator->FindClosestPoint(worldPosition, closestPoint, cellId, subId, distance2);
+
+  double toleranceWorld = this->ControlPointSize * this->ControlPointSize;
+  if (distance2 < toleranceWorld)
+    {
+    closestDistance2 = distance2;
+    foundComponentType = vtkMRMLMarkupsDisplayNode::ComponentLine; // TODO: Component plane?
+    foundComponentIndex = 0;
+    }
+}
 
 //-----------------------------------------------------------------------------
 void vtkSlicerPlaneRepresentation3D::PrintSelf(ostream& os, vtkIndent indent)

@@ -47,6 +47,13 @@ public:
   // MRMLNode methods
   //--------------------------------------------------------------------------
 
+  enum
+  {
+    SizeModeAuto,
+    SizeModeAbsolute,
+    SizeModeLast,
+  };
+
   vtkMRMLNode* CreateNodeInstance() override;
   /// Get node XML tag name (like Volume, Model)
   const char* GetNodeTagName() override {return "MarkupsPlane";}
@@ -60,12 +67,32 @@ public:
   /// Copy the node's attributes to this object
   void Copy(vtkMRMLNode *node) override;
 
+  // TODO
+  vtkSetMacro(SizeMode, int);
+  vtkGetMacro(SizeMode, int);
+
   /// TODO
   void GetNormal(double normal[3]);
+
+  /// TODO
   void GetOrigin(double origin[3]);
+
+  /// TODO
   void GetVectors(double x[3], double y[3], double z[3]);
 
+  // TODO
+  vtkGetMacro(AutoSizeScaling, double);
+  vtkSetMacro(AutoSizeScaling, double);
+
+  /// TODO
+  void GetSize(double size[3]);
+  vtkSetVector3Macro(Size, double);
+
 protected:
+  int SizeMode;
+  double AutoSizeScaling;
+  double Size[3];
+
   vtkMRMLMarkupsPlaneNode();
   ~vtkMRMLMarkupsPlaneNode() override;
   vtkMRMLMarkupsPlaneNode(const vtkMRMLMarkupsPlaneNode&);

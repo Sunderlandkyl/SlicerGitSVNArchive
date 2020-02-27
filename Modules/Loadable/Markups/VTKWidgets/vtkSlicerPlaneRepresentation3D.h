@@ -35,6 +35,7 @@
 
 class vtkActor;
 class vtkArrowSource;
+class vtkGlyph3DMapper;
 class vtkMRMLInteractionEventData;
 class vtkPlaneSource;
 class vtkPolyDataMapper;
@@ -73,20 +74,20 @@ public:
   void CanInteract(vtkMRMLInteractionEventData* interactionEventData,
     int &foundComponentType, int &foundComponentIndex, double &closestDistance2) override;
 
-protected:
-  virtual void UpdateAllPointsAndLabelsFromMRML() override;
+  void CanInteractWithPlane(vtkMRMLInteractionEventData* interactionEventData,
+    int& foundComponentType, int& foundComponentIndex, double& closestDistance2);
 
+protected:
   vtkSlicerPlaneRepresentation3D();
   ~vtkSlicerPlaneRepresentation3D() override;
 
-  vtkSmartPointer<vtkPlaneSource>             PlaneFilter;
-  vtkSmartPointer<vtkPolyDataMapper>          PlaneMapper;
-  vtkSmartPointer<vtkActor>                   PlaneActor;
+  vtkSmartPointer<vtkPlaneSource>    PlaneFilter;
+  vtkSmartPointer<vtkPolyDataMapper> PlaneMapper;
+  vtkSmartPointer<vtkActor>          PlaneActor;
 
-  vtkSmartPointer<vtkArrowSource>             ArrowFilter;
-  vtkSmartPointer<vtkTransformPolyDataFilter> ArrowToWorldFilter;
-  vtkSmartPointer<vtkPolyDataMapper>          ArrowMapper;
-  vtkSmartPointer<vtkActor>                   ArrowActor;
+  vtkSmartPointer<vtkArrowSource>    ArrowFilter;
+  vtkSmartPointer<vtkGlyph3DMapper>  ArrowMapper;
+  vtkSmartPointer<vtkActor>          ArrowActor;
 
   std::string LabelFormat;
 
