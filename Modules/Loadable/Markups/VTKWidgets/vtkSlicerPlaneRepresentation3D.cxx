@@ -134,21 +134,10 @@ void vtkSlicerPlaneRepresentation3D::BuildPlane()
   this->ArrowMapper->Update();
 
   // Update the plane
-  double vector1[3] = { 0 };
-  vtkMath::Subtract(point1, origin, vector1);
-
-  double vector2[3] = { 0 };
-  vtkMath::Subtract(point2, origin, vector2);
-
-  double point1X = std::abs(vtkMath::Dot(vector1, x));
-  double point2X = std::abs(vtkMath::Dot(vector2, x));
-  double xMax = std::max({ 0.0, point1X, point2X });
-  vtkMath::MultiplyScalar(x, xMax);
-
-  double point1Y = std::abs(vtkMath::Dot(vector1, y));
-  double point2Y = std::abs(vtkMath::Dot(vector2, y));
-  double yMax = std::max({ 0.0, point1Y, point2Y });
-  vtkMath::MultiplyScalar(y, yMax);
+  double size[2] = { 0 };
+  markupsNode->GetSize(size);
+  vtkMath::MultiplyScalar(x, size[0]/2);
+  vtkMath::MultiplyScalar(y, size[1]/2);
 
   double planePoint1[3] = { 0 };
   vtkMath::Subtract(origin, x, planePoint1);
@@ -161,9 +150,6 @@ void vtkSlicerPlaneRepresentation3D::BuildPlane()
   double planePoint3[3] = { 0 };
   vtkMath::Add(origin, x, planePoint3);
   vtkMath::Subtract(planePoint3, y, planePoint3);
-
-  vtkMath::Normalize(x);
-  vtkMath::Normalize(y);
 
   this->PlaneFilter->SetOrigin(planePoint1);
   this->PlaneFilter->SetPoint1(planePoint2);
@@ -358,6 +344,11 @@ void vtkSlicerPlaneRepresentation3D::CanInteractWithPlane(
   vtkSmartPointer<vtkCellLocator> cellLocator =
     vtkSmartPointer<vtkCellLocator>::New();
   this->PlaneFilter->Update();
+  if (this->PlaneFilter->GetOutput() && this->PlaneFilter->GetOutput()->GetNumberOfPoints() == 0)
+    {
+    return;
+    }
+
   cellLocator->SetDataSet(this->PlaneFilter->GetOutput());
   cellLocator->BuildLocator();
 

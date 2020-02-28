@@ -33,12 +33,14 @@
 #include "vtkSlicerMarkupsModuleVTKWidgetsExport.h"
 #include "vtkSlicerMarkupsWidgetRepresentation2D.h"
 
+class vtkAppendPolyData;
+class vtkClipPolyData;
+class vtkCompositeDataGeometryFilter;
 class vtkDiscretizableColorTransferFunction;
+class vtkMRMLInteractionEventData;
+class vtkPlaneCutter;
 class vtkPlaneSource;
 class vtkSampleImplicitFunctionFilter;
-class vtkPlaneSource;
-
-class vtkMRMLInteractionEventData;
 
 class VTK_SLICER_MARKUPS_MODULE_VTKWIDGETS_EXPORT vtkSlicerPlaneRepresentation2D : public vtkSlicerMarkupsWidgetRepresentation2D
 {
@@ -71,26 +73,30 @@ public:
 
   bool GetTransformationReferencePoint(double referencePointWorld[3]) override;
 
+  void BuildPlane();
+
 protected:
   vtkSlicerPlaneRepresentation2D();
   ~vtkSlicerPlaneRepresentation2D() override;
 
   void SetMarkupsNode(vtkMRMLMarkupsNode *markupsNode) override;
 
-  vtkSmartPointer<vtkPlaneSource> PlaneFilter;
-  vtkSmartPointer<vtkPolyDataMapper2D> PlaneMapper;
-  vtkSmartPointer<vtkActor2D> PlaneActor;
+  vtkNew<vtkPlaneSource> PlaneFilter;
+  vtkNew<vtkPlaneCutter> PlaneCutter;
+  vtkNew<vtkClipPolyData> PlaneClipper;
+  vtkNew<vtkCompositeDataGeometryFilter> PlaneCompositeFilter;
+  vtkNew<vtkAppendPolyData> PlaneAppend;
+  vtkNew<vtkTransformPolyDataFilter> PlaneWorldToSliceTransformer;
+  vtkNew<vtkPolyDataMapper2D> PlaneMapper;
+  vtkNew<vtkActor2D> PlaneActor;
 
-  //vtkSmartPointer<vtkArrowSource> ArrowFilter;
+  vtkNew<vtkTransformPolyDataFilter> ArrowWorldToSliceTransformer;
+  vtkNew<vtkMarkupsGlyphSource2D> ArrowFilter;
+  vtkNew<vtkPolyDataMapper2D> ArrowMapper;
+  vtkNew<vtkActor2D> ArrowActor;
 
-  vtkSmartPointer<vtkDiscretizableColorTransferFunction> ColorMap;
-
-
-
-  vtkSmartPointer<vtkTransformPolyDataFilter> PlaneWorldToSliceTransformer;
-
-  vtkSmartPointer<vtkSampleImplicitFunctionFilter> PlaneSliceDistance;
-
+  vtkNew<vtkDiscretizableColorTransferFunction> ColorMap;
+  vtkNew<vtkSampleImplicitFunctionFilter> PlaneSliceDistance;
   std::string LabelFormat;
 
 private:

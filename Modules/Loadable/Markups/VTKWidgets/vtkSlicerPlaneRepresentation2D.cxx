@@ -17,62 +17,84 @@
 =========================================================================*/
 
 // VTK includes
-#include "vtkActor2D.h"
-#include "vtkArcSource.h"
-#include "vtkCellLocator.h"
-#include "vtkDiscretizableColorTransferFunction.h"
-#include "vtkLine.h"
-#include "vtkMath.h"
-#include "vtkMatrix4x4.h"
-#include "vtkObjectFactory.h"
-#include "vtkPlane.h"
-#include "vtkPoints.h"
-#include "vtkPointData.h"
-#include "vtkPolyData.h"
-#include "vtkPolyDataMapper2D.h"
-#include "vtkProperty2D.h"
-#include "vtkRenderer.h"
-#include "vtkSampleImplicitFunctionFilter.h"
-#include "vtkSlicerPlaneRepresentation2D.h"
-#include "vtkTextActor.h"
-#include "vtkTextProperty.h"
-#include "vtkTransform.h"
-#include "vtkTransformPolyDataFilter.h"
-#include "vtkPlaneSource.h"
+#include <vtkActor2D.h>
+#include <vtkArcSource.h>
+#include <vtkAppendPolyData.h>
+#include <vtkCellLocator.h>
+#include <vtkClipPolyData.h>
+#include <vtkCompositeDataGeometryFilter.h>
+#include <vtkDiscretizableColorTransferFunction.h>
+#include <vtkDoubleArray.h>
+#include <vtkLine.h>
+#include <vtkMath.h>
+#include <vtkMatrix4x4.h>
+#include <vtkObjectFactory.h>
+#include <vtkPlane.h>
+#include <vtkPlaneCutter.h>
+#include <vtkPlaneSource.h>
+#include <vtkPoints.h>
+#include <vtkPointData.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataMapper2D.h>
+#include <vtkProperty2D.h>
+#include <vtkRenderer.h>
+#include <vtkSampleImplicitFunctionFilter.h>
+#include <vtkSlicerPlaneRepresentation2D.h>
+#include <vtkTextActor.h>
+#include <vtkTextProperty.h>
+#include <vtkTransform.h>
+#include <vtkTransformPolyDataFilter.h>
 
 // MRML includes
 #include "vtkMRMLInteractionEventData.h"
 #include "vtkMRMLMarkupsDisplayNode.h"
 #include "vtkMRMLProceduralColorNode.h"
 
+#include "vtkMRMLMarkupsPlaneNode.h"
+
+#include "vtkMarkupsGlyphSource2D.h"
 
 vtkStandardNewMacro(vtkSlicerPlaneRepresentation2D);
 
 //----------------------------------------------------------------------
 vtkSlicerPlaneRepresentation2D::vtkSlicerPlaneRepresentation2D()
 {
-  this->PlaneSliceDistance = vtkSmartPointer<vtkSampleImplicitFunctionFilter>::New();
-  this->PlaneSliceDistance->SetImplicitFunction(this->SlicePlane);
+  this->PlaneCutter->SetInputConnection(this->PlaneFilter->GetOutputPort());
+  this->PlaneCutter->SetPlane(this->SlicePlane);
 
-  this->PlaneWorldToSliceTransformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+  this->PlaneCompositeFilter->SetInputConnection(this->PlaneCutter->GetOutputPort());
+
+  this->PlaneClipper->SetInputConnection(this->PlaneFilter->GetOutputPort());
+  this->PlaneClipper->SetClipFunction(this->SlicePlane);
+  this->PlaneClipper->GenerateClippedOutputOn();
+
+  this->PlaneAppend->AddInputConnection(this->PlaneClipper->GetOutputPort(0));
+  this->PlaneAppend->AddInputConnection(this->PlaneClipper->GetOutputPort(1));
+  this->PlaneAppend->AddInputConnection(this->PlaneCompositeFilter->GetOutputPort());
+
+  this->PlaneSliceDistance->SetImplicitFunction(this->SlicePlane);
+  this->PlaneSliceDistance->SetInputConnection(this->PlaneAppend->GetOutputPort());
 
   this->PlaneWorldToSliceTransformer->SetTransform(this->WorldToSliceTransform);
-
   this->PlaneWorldToSliceTransformer->SetInputConnection(this->PlaneSliceDistance->GetOutputPort());
 
-  this->PlaneFilter = vtkSmartPointer<vtkPlaneSource>::New();
-  this->PlaneFilter->SetInputConnection(this->PlaneWorldToSliceTransformer->GetOutputPort());
-
-  this->ColorMap = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
-
-  this->PlaneMapper = vtkSmartPointer<vtkPolyDataMapper2D>::New();
-  this->PlaneMapper->SetInputConnection(this->PlaneFilter->GetOutputPort());
+  this->PlaneMapper->SetInputConnection(this->PlaneWorldToSliceTransformer->GetOutputPort());
   this->PlaneMapper->SetLookupTable(this->ColorMap);
   this->PlaneMapper->SetScalarVisibility(true);
 
-  this->PlaneActor = vtkSmartPointer<vtkActor2D>::New();
   this->PlaneActor->SetMapper(this->PlaneMapper);
   this->PlaneActor->SetProperty(this->GetControlPointsPipeline(Unselected)->Property);
+
+  this->ArrowWorldToSliceTransformer->SetTransform(this->WorldToSliceTransform);
+  this->ArrowWorldToSliceTransformer->SetInputData(vtkNew<vtkPolyData>());
+
+  this->ArrowFilter->SetInputConnection(this->ArrowWorldToSliceTransformer->GetOutputPort());
+
+  this->ArrowMapper->SetInputConnection(this->ArrowFilter->GetOutputPort());
+  this->ArrowMapper->SetScalarVisibility(true);
+
+  this->ArrowActor->SetMapper(this->ArrowMapper);
+  this->ArrowActor->SetProperty(this->GetControlPointsPipeline(Unselected)->Property);
 
   this->LabelFormat = "%s: %-#6.3g";
 }
@@ -100,7 +122,7 @@ void vtkSlicerPlaneRepresentation2D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
 
   this->NeedToRenderOn();
 
-  vtkMRMLMarkupsNode* markupsNode = this->GetMarkupsNode();
+  vtkMRMLMarkupsPlaneNode* markupsNode = vtkMRMLMarkupsPlaneNode::SafeDownCast(this->GetMarkupsNode());
   if (!markupsNode || !this->MarkupsDisplayNode
     || !this->MarkupsDisplayNode->GetVisibility()
     || !this->MarkupsDisplayNode->IsDisplayableInView(this->ViewNode->GetID())
@@ -111,6 +133,8 @@ void vtkSlicerPlaneRepresentation2D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
     }
 
   this->VisibilityOn();
+
+  this->BuildPlane();
 
   // Update plane display properties
   this->PlaneActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
@@ -146,6 +170,15 @@ void vtkSlicerPlaneRepresentation2D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
     this->UpdateDistanceColorMap(this->ColorMap, this->PlaneActor->GetProperty()->GetColor());
     this->PlaneMapper->SetLookupTable(this->ColorMap);
     }
+
+  double origin[3] = { 0 };
+  markupsNode->GetOrigin(origin);
+
+  vtkNew<vtkPoints> arrowPoints;
+  arrowPoints->InsertNextPoint(origin);
+
+  vtkNew<vtkPolyData> arrowPolyData;
+  arrowPolyData->SetPoints(arrowPoints);
 }
 
 //----------------------------------------------------------------------
@@ -308,14 +341,77 @@ void vtkSlicerPlaneRepresentation2D::SetMarkupsNode(vtkMRMLMarkupsNode *markupsN
 {
   if (this->MarkupsNode != markupsNode)
     {
-    if (markupsNode)
-      {
-      this->PlaneSliceDistance->SetInputConnection(markupsNode->GetCurveWorldConnection());
-      }
-    else
-      {
-      this->PlaneSliceDistance->SetInputData(vtkNew<vtkPolyData>());
-      }
+    // TODO
     }
   this->Superclass::SetMarkupsNode(markupsNode);
+}
+
+//----------------------------------------------------------------------
+void vtkSlicerPlaneRepresentation2D::BuildPlane()
+{
+  vtkMRMLMarkupsPlaneNode* markupsNode = vtkMRMLMarkupsPlaneNode::SafeDownCast(this->GetMarkupsNode());
+  if (!markupsNode || markupsNode->GetNumberOfControlPoints() != 3)
+  {
+    this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
+    //this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
+    return;
+  }
+
+  double x[3], y[3], z[3] = { 0 };
+  markupsNode->GetVectors(x, y, z);
+
+  if (vtkMath::Norm(x) <= 0.0001 || vtkMath::Norm(y) <= 0.0001 || vtkMath::Norm(z) <= 0.0001)
+  {
+    this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
+    //this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
+    return;
+  }
+
+  this->PlaneMapper->SetInputConnection(this->PlaneWorldToSliceTransformer->GetOutputPort());
+
+  double origin[3] = { 0.0 };
+  double point1[3] = { 0.0 };
+  double point2[3] = { 0.0 };
+  markupsNode->GetNthControlPointPositionWorld(0, origin);
+  markupsNode->GetNthControlPointPositionWorld(1, point1);
+  markupsNode->GetNthControlPointPositionWorld(2, point2);
+
+  // Update the normal vector
+  vtkNew<vtkPoints> points;
+  points->InsertNextPoint(origin);
+
+  vtkNew<vtkDoubleArray> directionArray;
+  directionArray->SetNumberOfComponents(3);
+  directionArray->InsertNextTuple3(z[0], z[1], z[2]);
+  directionArray->SetName("direction");
+
+  vtkNew<vtkPolyData> polyData;
+  polyData->SetPoints(points);
+  polyData->GetPointData()->SetScalars(directionArray);
+
+  //this->ArrowMapper->SetInputData(polyData);
+  //this->ArrowMapper->SetScaleFactor(this->ControlPointSize * 3);
+  //this->ArrowMapper->Update();
+
+  // Update the plane
+  double size[2] = { 0 };
+  markupsNode->GetSize(size);
+  vtkMath::MultiplyScalar(x, size[0] / 2);
+  vtkMath::MultiplyScalar(y, size[1] / 2);
+
+  double planePoint1[3] = { 0 };
+  vtkMath::Subtract(origin, x, planePoint1);
+  vtkMath::Subtract(planePoint1, y, planePoint1);
+
+  double planePoint2[3] = { 0 };
+  vtkMath::Subtract(origin, x, planePoint2);
+  vtkMath::Add(planePoint2, y, planePoint2);
+
+  double planePoint3[3] = { 0 };
+  vtkMath::Add(origin, x, planePoint3);
+  vtkMath::Subtract(planePoint3, y, planePoint3);
+
+  this->PlaneFilter->SetOrigin(planePoint1);
+  this->PlaneFilter->SetPoint1(planePoint2);
+  this->PlaneFilter->SetPoint2(planePoint3);
 }

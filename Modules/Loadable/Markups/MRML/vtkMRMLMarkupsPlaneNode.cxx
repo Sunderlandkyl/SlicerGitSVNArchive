@@ -172,8 +172,8 @@ void vtkMRMLMarkupsPlaneNode::GetSize(double size[3])
     double yMax = std::max({ 0.0, point1Y, point2Y });
 
     this->Size[0] = 2 * xMax * this->AutoSizeScaling;
-    this->Size[0] = 2 * yMax * this->AutoSizeScaling;
-    this->Size[3] = 0.0;
+    this->Size[1] = 2 * yMax * this->AutoSizeScaling;
+    this->Size[2] = 0.0;
     }
 
   for (int i = 0; i < 3; ++i)
