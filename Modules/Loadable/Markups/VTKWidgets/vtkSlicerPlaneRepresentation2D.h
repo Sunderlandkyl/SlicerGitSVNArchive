@@ -37,6 +37,7 @@ class vtkAppendPolyData;
 class vtkClipPolyData;
 class vtkCompositeDataGeometryFilter;
 class vtkDiscretizableColorTransferFunction;
+class vtkFeatureEdges;
 class vtkMRMLInteractionEventData;
 class vtkPlaneCutter;
 class vtkPlaneSource;
@@ -83,15 +84,26 @@ protected:
 
   vtkNew<vtkPlaneSource> PlaneFilter;
   vtkNew<vtkPlaneCutter> PlaneCutter;
-  vtkNew<vtkClipPolyData> PlaneClipper;
+
+  vtkNew<vtkClipPolyData> PlaneClipperSlicePlane;
+  vtkNew<vtkClipPolyData> PlaneClipperStartFadeNear;
+  vtkNew<vtkClipPolyData> PlaneClipperEndFadeNear;
+  vtkNew<vtkClipPolyData> PlaneClipperStartFadeFar;
+  vtkNew<vtkClipPolyData> PlaneClipperEndFadeFar;
+
   vtkNew<vtkCompositeDataGeometryFilter> PlaneCompositeFilter;
   vtkNew<vtkAppendPolyData> PlaneAppend;
   vtkNew<vtkTransformPolyDataFilter> PlaneWorldToSliceTransformer;
   vtkNew<vtkPolyDataMapper2D> PlaneMapper;
   vtkNew<vtkActor2D> PlaneActor;
 
-  vtkNew<vtkTransformPolyDataFilter> ArrowWorldToSliceTransformer;
+  vtkNew<vtkFeatureEdges> PlaneBorderFilter;
+  vtkNew<vtkTransformPolyDataFilter> PlaneBorderWorldToSliceTransformer;
+  vtkNew<vtkPolyDataMapper2D> PlaneBorderMapper;
+  vtkNew<vtkActor2D> PlaneBorderActor;
+
   vtkNew<vtkMarkupsGlyphSource2D> ArrowFilter;
+  vtkNew<vtkGlyph2D> ArrowGlypher;
   vtkNew<vtkPolyDataMapper2D> ArrowMapper;
   vtkNew<vtkActor2D> ArrowActor;
 
