@@ -114,7 +114,7 @@ vtkSlicerPlaneRepresentation2D::vtkSlicerPlaneRepresentation2D()
 
   this->PlaneBorderActor->SetProperty(this->GetControlPointsPipeline(Unselected)->Property);
 
-  this->ArrowFilter->SetGlyphTypeToArrow();
+  this->ArrowFilter->SetGlyphTypeToThickArrow();
   this->ArrowFilter->FilledOn();
 
   this->ArrowGlypher->SetSourceConnection(this->ArrowFilter->GetOutputPort());
@@ -167,8 +167,7 @@ void vtkSlicerPlaneRepresentation2D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
   this->BuildPlane();
 
   // Update plane display properties
-  //this->PlaneActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
-  this->PlaneActor->SetVisibility(false);
+  this->PlaneActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
   this->PlaneBorderActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
   this->ArrowActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
 
@@ -430,7 +429,7 @@ void vtkSlicerPlaneRepresentation2D::BuildPlane()
   if (!markupsNode || markupsNode->GetNumberOfControlPoints() != 3)
   {
     this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
-    //this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
+    this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
     return;
   }
 
@@ -440,11 +439,12 @@ void vtkSlicerPlaneRepresentation2D::BuildPlane()
   if (vtkMath::Norm(x) <= 0.0001 || vtkMath::Norm(y) <= 0.0001 || vtkMath::Norm(z) <= 0.0001)
   {
     this->PlaneMapper->SetInputData(vtkNew<vtkPolyData>());
-    //this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
+    this->ArrowMapper->SetInputData(vtkNew<vtkPolyData>());
     return;
   }
 
   this->PlaneMapper->SetInputConnection(this->PlaneWorldToSliceTransformer->GetOutputPort());
+  this->ArrowMapper->SetInputConnection(this->ArrowGlypher->GetOutputPort());
 
   double origin[3] = { 0.0 };
   double point1[3] = { 0.0 };
@@ -475,23 +475,50 @@ void vtkSlicerPlaneRepresentation2D::BuildPlane()
   this->PlaneFilter->SetPoint1(planePoint2);
   this->PlaneFilter->SetPoint2(planePoint3);
 
-  // Update the normal vector
   double* arrowVectorSlice = this->WorldToSliceTransform->TransformDoubleVector(z);
-  arrowVectorSlice[2] = 0.0;
-  vtkMath::Normalize(arrowVectorSlice);
 
-  vtkNew<vtkDoubleArray> directionArray;
-  directionArray->SetNumberOfComponents(3);
-  directionArray->InsertNextTuple3(arrowVectorSlice[0], arrowVectorSlice[1], arrowVectorSlice[2]);
-  directionArray->SetName("direction");
+  // Update the normal vector
+  double epsilon = 0.001;
+  if (vtkMath::Dot(this->SlicePlane->GetNormal(), z) > 1 - epsilon)
+    {
+    this->ArrowFilter->SetGlyphTypeToStarBurst();
+    this->ArrowFilter->SetRotationAngle(0);
+    }
+  else if (vtkMath::Dot(this->SlicePlane->GetNormal(), z) < -1 + epsilon)
+    {
+    this->ArrowFilter->SetGlyphTypeToCross();
+    this->ArrowFilter->SetRotationAngle(0);
+    }
+  else
+    {
+    arrowVectorSlice[2] = 0.0;
+
+    double xVector[3] = { 1,0,0 };
+    double yVector[3] = { 0, 1, 0 };
+    double angle = vtkMath::DegreesFromRadians(vtkMath::AngleBetweenVectors(arrowVectorSlice, xVector));
+    if (vtkMath::Dot(arrowVectorSlice, yVector) < 0)
+      {
+      angle = -angle;
+      }
+
+    this->ArrowFilter->SetGlyphTypeToThickArrow();
+    this->ArrowFilter->SetRotationAngle(angle);
+    }
+
+  double slicePos[2] = { 0 };
+  this->GetWorldToSliceCoordinates(origin, slicePos);
+  vtkMath::Normalize(arrowVectorSlice);
+  vtkMath::MultiplyScalar(arrowVectorSlice, this->ControlPointSize);
+  vtkMath::Add(slicePos, arrowVectorSlice, slicePos);
 
   vtkNew<vtkPoints> arrowPoints;
-  arrowPoints->InsertNextPoint(this->WorldToSliceTransform->TransformDoublePoint(origin));
+  arrowPoints->InsertNextPoint(slicePos);
 
   vtkNew<vtkPolyData> arrowPolyData;
   arrowPolyData->SetPoints(arrowPoints);
-  arrowPolyData->GetPointData()->SetScalars(directionArray);
+
   this->ArrowGlypher->SetInputData(arrowPolyData);
+  this->ArrowGlypher->SetScaleFactor(this->ControlPointSize*2);
 
   vtkMRMLMarkupsDisplayNode* displayNode = vtkMRMLMarkupsDisplayNode::SafeDownCast(markupsNode->GetDisplayNode());
   if (!displayNode)

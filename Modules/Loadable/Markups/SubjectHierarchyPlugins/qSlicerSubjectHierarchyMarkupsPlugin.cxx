@@ -176,8 +176,8 @@ double qSlicerSubjectHierarchyMarkupsPlugin::canOwnSubjectHierarchyItem(vtkIdTyp
        associatedNode->IsA("vtkMRMLMarkupsLineNode") ||
        associatedNode->IsA("vtkMRMLMarkupsAngleNode") ||
        associatedNode->IsA("vtkMRMLMarkupsCurveNode") ||
-       associatedNode->IsA("vtkMRMLMarkupsClosedCurveNode")) ||
-    associatedNode->IsA("vtkMRMLMarkupsPlaneNode")
+       associatedNode->IsA("vtkMRMLMarkupsClosedCurveNode") ||
+       associatedNode->IsA("vtkMRMLMarkupsPlaneNode"))
     )
     {
     // Item is a markup
