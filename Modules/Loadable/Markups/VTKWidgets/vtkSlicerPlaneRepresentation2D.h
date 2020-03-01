@@ -72,6 +72,9 @@ public:
   void CanInteract(vtkMRMLInteractionEventData* interactionEventData,
     int &foundComponentType, int &foundComponentIndex, double &closestDistance2) override;
 
+  void CanInteractWithPlane(vtkMRMLInteractionEventData* interactionEventData,
+    int& foundComponentType, int& foundComponentIndex, double& closestDistance2);
+
   bool GetTransformationReferencePoint(double referencePointWorld[3]) override;
 
   void BuildPlane();

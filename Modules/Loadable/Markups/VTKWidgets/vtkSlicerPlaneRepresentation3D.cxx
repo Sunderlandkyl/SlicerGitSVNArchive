@@ -51,7 +51,6 @@ vtkSlicerPlaneRepresentation3D::vtkSlicerPlaneRepresentation3D()
 
   this->PlaneActor = vtkSmartPointer<vtkActor>::New();
   this->PlaneActor->SetMapper(this->PlaneMapper);
-  this->PlaneActor->PickableOff(); // TODO: Test. We may want disable/renable as the plane is being interacted with to prevent it from picking itself.
   this->PlaneActor->SetProperty(this->GetControlPointsPipeline(Unselected)->Property);
 
   this->ArrowFilter = vtkSmartPointer<vtkArrowSource>::New();
@@ -190,7 +189,7 @@ void vtkSlicerPlaneRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
   this->TextActor->SetVisibility(lineVisibility && markupsNode->GetNumberOfControlPoints() == 3);
 
   int controlPointType = Active;
-  if (this->MarkupsDisplayNode->GetActiveComponentType() != vtkMRMLMarkupsDisplayNode::ComponentLine)
+  if (this->MarkupsDisplayNode->GetActiveComponentType() != vtkMRMLMarkupsDisplayNode::ComponentPlane)
     {
     controlPointType = this->GetAllControlPointsSelected() ? Selected : Unselected;
     }
@@ -363,7 +362,7 @@ void vtkSlicerPlaneRepresentation3D::CanInteractWithPlane(
   if (distance2 < toleranceWorld)
     {
     closestDistance2 = distance2;
-    foundComponentType = vtkMRMLMarkupsDisplayNode::ComponentLine; // TODO: Component plane?
+    foundComponentType = vtkMRMLMarkupsDisplayNode::ComponentPlane;
     foundComponentIndex = 0;
     }
 }

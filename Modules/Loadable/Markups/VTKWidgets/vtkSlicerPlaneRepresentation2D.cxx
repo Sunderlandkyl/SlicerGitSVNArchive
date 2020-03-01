@@ -172,7 +172,7 @@ void vtkSlicerPlaneRepresentation2D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
   this->ArrowActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
 
   int controlPointType = Unselected;
-  if (this->MarkupsDisplayNode->GetActiveComponentType() == vtkMRMLMarkupsDisplayNode::ComponentLine)
+  if (this->MarkupsDisplayNode->GetActiveComponentType() == vtkMRMLMarkupsDisplayNode::ComponentPlane)
     {
     controlPointType = Active;
     }
@@ -232,44 +232,39 @@ void vtkSlicerPlaneRepresentation2D::CanInteract(
     return;
     }
 
-  const int* displayPosition = interactionEventData->GetDisplayPosition();
-  double displayPosition3[3] = { static_cast<double>(displayPosition[0]), static_cast<double>(displayPosition[1]), 0.0 };
+  this->CanInteractWithPlane(interactionEventData, foundComponentType, foundComponentIndex, closestDistance2);
+}
 
-  double maxPickingDistanceFromControlPoint2 = this->GetMaximumControlPointPickingDistance2();
-
-  vtkIdType numberOfPoints = markupsNode->GetNumberOfControlPoints();
-
-  double pointDisplayPos1[4] = { 0.0, 0.0, 0.0, 1.0 };
-  double pointWorldPos1[4] = { 0.0, 0.0, 0.0, 1.0 };
-  double pointDisplayPos2[4] = { 0.0, 0.0, 0.0, 1.0 };
-  double pointWorldPos2[4] = { 0.0, 0.0, 0.0, 1.0 };
-
-  vtkNew<vtkMatrix4x4> rasToxyMatrix;
-  vtkMatrix4x4::Invert(this->GetSliceNode()->GetXYToRAS(), rasToxyMatrix.GetPointer());
-  for (int i = 0; i < numberOfPoints-1; i++)
+//-----------------------------------------------------------------------------
+void vtkSlicerPlaneRepresentation2D::CanInteractWithPlane(
+  vtkMRMLInteractionEventData* interactionEventData,
+  int& foundComponentType, int& foundComponentIndex, double& closestDistance2)
+{
+  // Create the tree
+  vtkSmartPointer<vtkCellLocator> cellLocator =
+    vtkSmartPointer<vtkCellLocator>::New();
+  this->PlaneFilter->Update();
+  if (this->PlaneFilter->GetOutput() && this->PlaneFilter->GetOutput()->GetNumberOfPoints() == 0)
     {
-    if (!this->PointsVisibilityOnSlice->GetValue(i))
-      {
-      continue;
-      }
-    if (!this->PointsVisibilityOnSlice->GetValue(i+1))
-      {
-      i++; // skip one more, as the next iteration would use (i+1)-th point
-      continue;
-      }
-    markupsNode->GetNthControlPointPositionWorld(i, pointWorldPos1);
-    rasToxyMatrix->MultiplyPoint(pointWorldPos1, pointDisplayPos1);
-    markupsNode->GetNthControlPointPositionWorld(i+1, pointWorldPos2);
-    rasToxyMatrix->MultiplyPoint(pointWorldPos2, pointDisplayPos2);
+    return;
+    }
 
-    double relativePositionAlongLine = -1.0; // between 0.0-1.0 if between the endpoints of the line segment
-    double distance2 = vtkLine::DistanceToLine(displayPosition3, pointDisplayPos1, pointDisplayPos2, relativePositionAlongLine);
-    if (distance2 < maxPickingDistanceFromControlPoint2 && distance2 < closestDistance2 && relativePositionAlongLine >= 0 && relativePositionAlongLine <= 1)
-      {
-      closestDistance2 = distance2;
-      foundComponentType = vtkMRMLMarkupsDisplayNode::ComponentLine;
-      foundComponentIndex = i;
-      }
+  cellLocator->SetDataSet(this->PlaneFilter->GetOutput());
+  cellLocator->BuildLocator();
+
+  const double* worldPosition = interactionEventData->GetWorldPosition();
+  double closestPoint[3];//the coordinates of the closest point will be returned here
+  double distance2; //the squared distance to the closest point will be returned here
+  vtkIdType cellId; //the cell id of the cell containing the closest point will be returned here
+  int subId; //this is rarely used (in triangle strips only, I believe)
+  cellLocator->FindClosestPoint(worldPosition, closestPoint, cellId, subId, distance2);
+
+  double toleranceWorld = this->ControlPointSize * this->ControlPointSize;
+  if (distance2 < toleranceWorld)
+    {
+    closestDistance2 = distance2;
+    foundComponentType = vtkMRMLMarkupsDisplayNode::ComponentPlane;
+    foundComponentIndex = 0;
     }
 }
 

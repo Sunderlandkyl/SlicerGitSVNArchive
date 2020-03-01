@@ -43,12 +43,35 @@ public:
   /// Standard methods for a VTK class.
   vtkTypeMacro(vtkSlicerPlaneWidget,vtkSlicerMarkupsWidget);
 
+  /// Widget states
+  enum
+  {
+    WidgetStateDefine = WidgetStateUser + 50, // click in empty area will place a new point
+    WidgetStateTranslatePlane, // translating the plane
+  };
+
+  /// Widget events
+  enum
+  {
+    WidgetEventControlPointPlace = WidgetEventUser + 50,
+    WidgetEventPlaneMoveStart,
+    WidgetEventPlaneTranslateOnNormal,
+    WidgetEventPlaneMoveEnd,
+  };
+
   /// Create the default widget representation and initializes the widget and representation.
   void CreateDefaultRepresentation(vtkMRMLMarkupsDisplayNode* markupsDisplayNode, vtkMRMLAbstractViewNode* viewNode, vtkRenderer* renderer) override;
 
 protected:
   vtkSlicerPlaneWidget();
   ~vtkSlicerPlaneWidget() override;
+
+  bool CanProcessInteractionEvent(vtkMRMLInteractionEventData* eventData, double& distance2) override;
+  bool ProcessInteractionEvent(vtkMRMLInteractionEventData* eventData) override;
+  bool ProcessPlaneMoveStart(vtkMRMLInteractionEventData* event);
+  bool ProcessPlaneMoveEnd(vtkMRMLInteractionEventData* event);
+  bool ProcessMouseMove(vtkMRMLInteractionEventData* eventData);
+  bool ProcessPlaneTranslate(vtkMRMLInteractionEventData* event);
 
 private:
   vtkSlicerPlaneWidget(const vtkSlicerPlaneWidget&) = delete;
