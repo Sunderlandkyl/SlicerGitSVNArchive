@@ -177,7 +177,9 @@ void vtkSlicerPlaneRepresentation3D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
   // Update plane geometry
   this->BuildPlane();
 
-  // Update lines display properties
+  // Update plane display properties
+  this->PlaneActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 3);
+  this->ArrowActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 3);
 
   this->TextActor->SetVisibility(this->MarkupsDisplayNode->GetPropertiesLabelVisibility());
 

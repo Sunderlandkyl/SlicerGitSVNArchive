@@ -203,11 +203,19 @@ bool vtkSlicerPlaneWidget::ProcessPlaneTranslate(vtkMRMLInteractionEventData* ev
   vector[1] = worldPos[1] - ref[1];
   vector[2] = worldPos[2] - ref[2];
 
-  double normal[3] = { 0 };
-  markupsNode->GetNormal(normal);
+  bool lockToNormal = false;
+  if (lockToNormal)
+    {
+    double normal[3] = { 0 };
+    markupsNode->GetNormal(normal);
 
-  double magnitude = vtkMath::Dot(vector, normal);
-  vtkMath::MultiplyScalar(normal, magnitude);
+    double magnitude = vtkMath::Dot(vector, normal);
+    vtkMath::MultiplyScalar(normal, magnitude);
+    for (int i = 0; i < 3; ++i)
+      {
+      vector[i] = normal[i];
+      }
+    }
 
   int wasModified = markupsNode->StartModify();
   for (int i = 0; i < markupsNode->GetNumberOfControlPoints(); i++)
@@ -215,7 +223,7 @@ bool vtkSlicerPlaneWidget::ProcessPlaneTranslate(vtkMRMLInteractionEventData* ev
     markupsNode->GetNthControlPointPositionWorld(i, ref);
     for (int j = 0; j < 3; j++)
       {
-      worldPos[j] = ref[j] + normal[j];
+      worldPos[j] = ref[j] + vector[j];
       }
     markupsNode->SetNthControlPointPositionWorldFromArray(i, worldPos);
     }

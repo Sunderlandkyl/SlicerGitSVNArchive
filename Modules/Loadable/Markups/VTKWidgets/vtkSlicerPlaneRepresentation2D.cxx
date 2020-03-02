@@ -167,9 +167,9 @@ void vtkSlicerPlaneRepresentation2D::UpdateFromMRML(vtkMRMLNode* caller, unsigne
   this->BuildPlane();
 
   // Update plane display properties
-  this->PlaneActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
-  this->PlaneBorderActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
-  this->ArrowActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 2);
+  this->PlaneActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 3);
+  this->PlaneBorderActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 3);
+  this->ArrowActor->SetVisibility(markupsNode->GetNumberOfControlPoints() >= 3);
 
   int controlPointType = Unselected;
   if (this->MarkupsDisplayNode->GetActiveComponentType() == vtkMRMLMarkupsDisplayNode::ComponentPlane)

@@ -132,7 +132,7 @@ void vtkMRMLMarkupsPlaneNode::GetVectors(double x[3], double y[3], double z[3])
   vtkMath::Normalize(z);
 
   vtkMath::Cross(z, x, y);
-  vtkMath::Normalize(z);
+  vtkMath::Normalize(y);
 }
 
 //----------------------------------------------------------------------------
