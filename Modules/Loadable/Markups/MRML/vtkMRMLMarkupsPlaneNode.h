@@ -26,6 +26,9 @@
 #include "vtkMRMLMarkupsDisplayNode.h"
 #include "vtkMRMLMarkupsNode.h"
 
+// VTK includes
+#include <vtkMatrix4x4.h>
+
 /// \brief MRML node to represent a plane markup
 /// Plane Markups nodes contain three control points.
 /// Visualization parameters are set in the vtkMRMLMarkupsDisplayNode class.
@@ -67,31 +70,63 @@ public:
   /// Copy the node's attributes to this object
   void Copy(vtkMRMLNode *node) override;
 
-  // TODO
+  /// Method for calculating the size of the plane along the direction vectors.
+  /// With size mode auto, the size of the plane is automatically calculated so that it ecompasses all of the points.
+  /// Size mode absolute will never be recalculated.
+  /// Default is SizeModeAuto.
   vtkSetMacro(SizeMode, int);
   vtkGetMacro(SizeMode, int);
+  const char* GetSizeModeAsString(int sizeMode);
+  int GetSizeModeFromString(const char* sizeMode);
 
-  /// TODO
-  void GetNormal(double normal[3]);
-
-  /// TODO
-  void GetOrigin(double origin[3]);
-
-  /// TODO
-  void GetVectors(double x[3], double y[3], double z[3]);
-
-  // TODO
+  /// The plane size multiplier used to calculate the size of the plane in auto size mode.
+  /// Default is 1.
   vtkGetMacro(AutoSizeScaling, double);
   vtkSetMacro(AutoSizeScaling, double);
 
-  /// TODO
+  /// The diameter of the plane along each of the direction vectors.
   void GetSize(double size[3]);
   vtkSetVector3Macro(Size, double);
+
+  /// The normal vector for the plane.
+  /// Calculated as the vector perpendicular to the plane containing the 3 markup points, and transformed by the offset matrix.
+  void GetNormal(double normal[3]);
+  void SetNormal(const double normal[3]);
+  void GetNormalWorld(double normal[3]);
+  void SetNormalWorld(const double normal[3]);
+
+  /// The normal vector of the plane.
+  /// Calculated as the location of the 0th markup point, and translated by the offset matrix.
+  void GetOrigin(double origin[3]);
+  void SetOrigin(const double origin[3]);
+  void GetOriginWorld(double origin[3]);
+  void SetOriginWorld(const double origin[3]);
+
+  /// The direction vectors defined by the markup points.
+  /// Calculated as follows and then transformed by the offset matrix:
+  /// X: Vector from 1st to 0th point.
+  /// Y: Cross product of the Z vector and X vectors.
+  /// Z: Cross product of the X vector and the vector from the 2nd to 0th point.
+  void GetPlaneAxes(double x[3], double y[3], double z[3]);
+  void SetPlaneAxes(const double x[3], const double y[3], const double z[3]);
+  void GetPlaneAxesWorld(double x[3], double y[3], double z[3]);
+  void SetPlaneAxesWorld(const double x[3], const double y[3], const double z[3]);
+
+  /// 4x4 matrix detailing the offset (rotation/translation) of the plane from the plane defined by the markup points.
+  /// Default is the identity matrix.
+  vtkGetObjectMacro(Offset, vtkMatrix4x4);
+  vtkSetObjectMacro(Offset, vtkMatrix4x4);
 
 protected:
   int SizeMode;
   double AutoSizeScaling;
   double Size[3];
+  vtkMatrix4x4* Offset;
+
+  /// Helper method for ensuring that the plane has enough points and that the points/vectors are not coincident.
+  /// Used when calling SetNormal(), SetVectors() to ensure that the plane is valid before transforming to the new
+  /// orientation.
+  void CreateValidPlane();
 
   vtkMRMLMarkupsPlaneNode();
   ~vtkMRMLMarkupsPlaneNode() override;

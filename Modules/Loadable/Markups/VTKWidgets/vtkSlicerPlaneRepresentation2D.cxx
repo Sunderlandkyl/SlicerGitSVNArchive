@@ -259,7 +259,7 @@ void vtkSlicerPlaneRepresentation2D::CanInteractWithPlane(
   int subId; //this is rarely used (in triangle strips only, I believe)
   cellLocator->FindClosestPoint(worldPosition, closestPoint, cellId, subId, distance2);
 
-  double toleranceWorld = this->ControlPointSize * this->ControlPointSize;
+  double toleranceWorld = this->ControlPointSize / 2;
   if (distance2 < toleranceWorld)
     {
     closestDistance2 = distance2;
@@ -429,7 +429,7 @@ void vtkSlicerPlaneRepresentation2D::BuildPlane()
   }
 
   double x[3], y[3], z[3] = { 0 };
-  markupsNode->GetVectors(x, y, z);
+  markupsNode->GetPlaneAxesWorld(x, y, z);
 
   if (vtkMath::Norm(x) <= 0.0001 || vtkMath::Norm(y) <= 0.0001 || vtkMath::Norm(z) <= 0.0001)
   {
@@ -442,11 +442,7 @@ void vtkSlicerPlaneRepresentation2D::BuildPlane()
   this->ArrowMapper->SetInputConnection(this->ArrowGlypher->GetOutputPort());
 
   double origin[3] = { 0.0 };
-  double point1[3] = { 0.0 };
-  double point2[3] = { 0.0 };
-  markupsNode->GetNthControlPointPositionWorld(0, origin);
-  markupsNode->GetNthControlPointPositionWorld(1, point1);
-  markupsNode->GetNthControlPointPositionWorld(2, point2);
+  markupsNode->GetOriginWorld(origin);
 
   // Update the plane
   double size[2] = { 0 };

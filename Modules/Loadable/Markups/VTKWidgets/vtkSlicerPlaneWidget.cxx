@@ -74,7 +74,19 @@ bool vtkSlicerPlaneWidget::CanProcessInteractionEvent(vtkMRMLInteractionEventDat
     {
     distance2 = 0.0;
     return true;
-  }
+    }
+  else if (eventData->GetType() == vtkCommand::LeftButtonPressEvent &&
+           !(eventData->GetModifiers() & vtkEvent::ShiftModifier))
+    {
+    // Because the plane widget is so large, we don't want to interrupt the mouse button down event if it is not neccesary,
+    // because we would interfere with the camera rotation function.
+    // If the shift modifier is not enabled, then return false when the active component is not a plane.
+    vtkMRMLMarkupsDisplayNode* displayNode = this->GetMarkupsDisplayNode();
+    if (displayNode && displayNode->GetActiveComponentType() == vtkMRMLMarkupsDisplayNode::ComponentPlane)
+      {
+      return false;
+      }
+    }
   return Superclass::CanProcessInteractionEvent(eventData, distance2);
 }
 
@@ -89,15 +101,15 @@ bool vtkSlicerPlaneWidget::ProcessInteractionEvent(vtkMRMLInteractionEventData* 
   case WidgetEventPlaneMoveStart:
     processedEvent = this->ProcessPlaneMoveStart(eventData);
     break;
-  case WidgetEventPlaneTranslateOnNormal:
-    processedEvent = this->ProcessPlaneTranslate(eventData);
+  case WidgetEventMouseMove:
+    processedEvent = this->ProcessMouseMove(eventData);
     break;
   case WidgetEventPlaneMoveEnd:
     processedEvent = this->ProcessPlaneMoveEnd(eventData);
     break;
   }
 
-  if (!processedEvent && widgetEvent != this->GetWidgetState() != WidgetStateTranslatePlane)
+  if (!processedEvent)
     {
     processedEvent = Superclass::ProcessInteractionEvent(eventData);
     }
@@ -176,7 +188,7 @@ bool vtkSlicerPlaneWidget::ProcessPlaneTranslate(vtkMRMLInteractionEventData* ev
   else if (rep3d)
     {
     // 3D view
-    int displayPos[2] = { 0. };
+    int displayPos[2] = { 0 };
 
     displayPos[0] = static_cast<int>(std::floor(this->LastEventPosition[0]));
     displayPos[1] = static_cast<int>(std::floor(this->LastEventPosition[1]));
@@ -217,17 +229,24 @@ bool vtkSlicerPlaneWidget::ProcessPlaneTranslate(vtkMRMLInteractionEventData* ev
       }
     }
 
-  int wasModified = markupsNode->StartModify();
-  for (int i = 0; i < markupsNode->GetNumberOfControlPoints(); i++)
+  MRMLNodeModifyBlocker blocker(markupsNode);
+  //for (int i = 0; i < markupsNode->GetNumberOfControlPoints(); i++)
+  //  {
+  //  markupsNode->GetNthControlPointPositionWorld(i, ref);
+  //  for (int j = 0; j < 3; j++)
+  //    {
+  //    worldPos[j] = ref[j] + vector[j];
+  //    }
+  //  markupsNode->SetNthControlPointPositionWorldFromArray(i, worldPos);
+  //  }
+
+  vtkMatrix4x4* offset = markupsNode->GetOffset();
+  for (int i = 0; i < 3; ++i)
     {
-    markupsNode->GetNthControlPointPositionWorld(i, ref);
-    for (int j = 0; j < 3; j++)
-      {
-      worldPos[j] = ref[j] + vector[j];
-      }
-    markupsNode->SetNthControlPointPositionWorldFromArray(i, worldPos);
+    double original = offset->GetElement(i, 3);
+    offset->SetElement(i, 3, original + vector[i]);
     }
-  markupsNode->EndModify(wasModified);
+  markupsNode->InvokeCustomModifiedEvent(vtkMRMLMarkupsNode::PointModifiedEvent);
 
   this->LastEventPosition[0] = eventPos[0];
   this->LastEventPosition[1] = eventPos[1];

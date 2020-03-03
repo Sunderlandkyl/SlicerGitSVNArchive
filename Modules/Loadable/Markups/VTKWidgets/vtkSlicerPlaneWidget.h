@@ -55,7 +55,6 @@ public:
   {
     WidgetEventControlPointPlace = WidgetEventUser + 50,
     WidgetEventPlaneMoveStart,
-    WidgetEventPlaneTranslateOnNormal,
     WidgetEventPlaneMoveEnd,
   };
 

@@ -432,9 +432,8 @@ void vtkMRMLMarkupsDisplayableManager::RemoveObserversFromInteractionNode()
   if (interactionNode)
     {
     vtkUnObserveMRMLNodeMacro(interactionNode);
-  }
+    }
 }
-
 
 //---------------------------------------------------------------------------
 void vtkMRMLMarkupsDisplayableManager::OnMRMLSceneNodeRemoved(vtkMRMLNode* node)
