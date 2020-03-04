@@ -37,11 +37,13 @@
 
 class vtkActor;
 class vtkArrowSource;
+class vtkEllipseArcSource;
 class vtkGlyph3DMapper;
 class vtkMRMLInteractionEventData;
 class vtkPlaneSource;
 class vtkPolyDataMapper;
 class vtkPolyData;
+class vtkRegularPolygonSource;
 class vtkTextActor;
 class vtkTransformPolyDataFilter;
 
@@ -76,6 +78,9 @@ public:
   void CanInteract(vtkMRMLInteractionEventData* interactionEventData,
     int &foundComponentType, int &foundComponentIndex, double &closestDistance2) override;
 
+  void CanInteractWithHandles(vtkMRMLInteractionEventData* interactionEventData,
+    int& foundComponentType, int& foundComponentIndex, double& closestDistance2);
+
   void CanInteractWithPlane(vtkMRMLInteractionEventData* interactionEventData,
     int& foundComponentType, int& foundComponentIndex, double& closestDistance2);
 
@@ -83,17 +88,30 @@ protected:
   vtkSlicerPlaneRepresentation3D();
   ~vtkSlicerPlaneRepresentation3D() override;
 
-  vtkSmartPointer<vtkPlaneSource>    PlaneFilter;
-  vtkSmartPointer<vtkPolyDataMapper> PlaneMapper;
-  vtkSmartPointer<vtkActor>          PlaneActor;
+  vtkNew<vtkPlaneSource>    PlaneFilter;
+  vtkNew<vtkPolyDataMapper> PlaneMapper;
+  vtkNew<vtkActor>          PlaneActor;
 
-  vtkSmartPointer<vtkArrowSource>    ArrowFilter;
-  vtkSmartPointer<vtkGlyph3DMapper>  ArrowMapper;
-  vtkSmartPointer<vtkActor>          ArrowActor;
+  vtkNew<vtkArrowSource>    ArrowFilter;
+  vtkNew<vtkGlyph3DMapper>  ArrowMapper;
+  vtkNew<vtkActor>          ArrowActor;
+
+  vtkNew<vtkRegularPolygonSource> XArcFilter;
+  vtkNew<vtkPolyDataMapper> XArcMapper;
+  vtkNew<vtkActor> XArcActor;
+
+  vtkNew<vtkRegularPolygonSource> YArcFilter;
+  vtkNew<vtkPolyDataMapper> YArcMapper;
+  vtkNew<vtkActor> YArcActor;
+
+  vtkNew<vtkRegularPolygonSource> ZArcFilter;
+  vtkNew<vtkPolyDataMapper> ZArcMapper;
+  vtkNew<vtkActor> ZArcActor;
 
   std::string LabelFormat;
 
   void BuildPlane();
+  void BuildArcs();
 
 private:
   vtkSlicerPlaneRepresentation3D(const vtkSlicerPlaneRepresentation3D&) = delete;
