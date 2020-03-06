@@ -292,7 +292,7 @@ void vtkSlicerPlaneRepresentation2D::ReleaseGraphicsResources(
 //----------------------------------------------------------------------
 int vtkSlicerPlaneRepresentation2D::RenderOverlay(vtkViewport *viewport)
 {
-  int count=0;
+  int count = Superclass::RenderOverlay(viewport);
   if (this->PlaneActor->GetVisibility())
     {
     count +=  this->PlaneActor->RenderOverlay(viewport);
@@ -314,7 +314,7 @@ int vtkSlicerPlaneRepresentation2D::RenderOverlay(vtkViewport *viewport)
 int vtkSlicerPlaneRepresentation2D::RenderOpaqueGeometry(
   vtkViewport *viewport)
 {
-  int count=0;
+  int count = Superclass::RenderOpaqueGeometry(viewport);
   if (this->PlaneActor->GetVisibility())
     {
     count += this->PlaneActor->RenderOpaqueGeometry(viewport);
@@ -336,7 +336,7 @@ int vtkSlicerPlaneRepresentation2D::RenderOpaqueGeometry(
 int vtkSlicerPlaneRepresentation2D::RenderTranslucentPolygonalGeometry(
   vtkViewport *viewport)
 {
-  int count=0;
+  int count = Superclass::RenderTranslucentPolygonalGeometry(viewport);
   if (this->PlaneActor->GetVisibility())
     {
     count += this->PlaneActor->RenderTranslucentPolygonalGeometry(viewport);
@@ -549,18 +549,19 @@ void vtkSlicerPlaneRepresentation2D::UpdateInteractionPipeline()
 
   vtkNew<vtkMatrix4x4> modelToWorldMatrix;
   for (int i = 0; i < 3; ++i)
-  {
+    {
     modelToWorldMatrix->SetElement(i, 0, x[i]);
     modelToWorldMatrix->SetElement(i, 1, y[i]);
     modelToWorldMatrix->SetElement(i, 2, z[i]);
-  }
+    }
 
   double origin[3] = { 0 };
   planeNode->GetOriginWorld(origin);
 
   vtkNew<vtkTransform> transform;
+  transform->Concatenate(this->WorldToSliceTransform);
   transform->Translate(origin);
   transform->Concatenate(modelToWorldMatrix);
-  transform->Concatenate(this->WorldToSliceTransform);
+  this->InteractionPipeline->Mapper->SetTransformCoordinate(nullptr);
   this->InteractionPipeline->ModelToWorldTransform->SetTransform(transform);
 }
