@@ -249,8 +249,7 @@ void vtkSlicerPlaneRepresentation3D::ReleaseGraphicsResources(
 //----------------------------------------------------------------------
 int vtkSlicerPlaneRepresentation3D::RenderOverlay(vtkViewport *viewport)
 {
-  int count=0;
-  count = this->Superclass::RenderOverlay(viewport);
+  int count = this->Superclass::RenderOverlay(viewport);
   if (this->PlaneActor->GetVisibility())
     {
     count += this->PlaneActor->RenderOverlay(viewport);
@@ -270,8 +269,7 @@ int vtkSlicerPlaneRepresentation3D::RenderOverlay(vtkViewport *viewport)
 int vtkSlicerPlaneRepresentation3D::RenderOpaqueGeometry(
   vtkViewport *viewport)
 {
-  int count=0;
-  count = this->Superclass::RenderOpaqueGeometry(viewport);
+  int count = this->Superclass::RenderOpaqueGeometry(viewport);
   if (this->PlaneActor->GetVisibility())
     {
     count += this->PlaneActor->RenderOpaqueGeometry(viewport);
@@ -293,8 +291,7 @@ int vtkSlicerPlaneRepresentation3D::RenderOpaqueGeometry(
 int vtkSlicerPlaneRepresentation3D::RenderTranslucentPolygonalGeometry(
   vtkViewport *viewport)
 {
-  int count=0;
-  count = this->Superclass::RenderTranslucentPolygonalGeometry(viewport);
+  int count = this->Superclass::RenderTranslucentPolygonalGeometry(viewport);
   if (this->PlaneActor->GetVisibility())
     {
     count += this->PlaneActor->RenderTranslucentPolygonalGeometry(viewport);
